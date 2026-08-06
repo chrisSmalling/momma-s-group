@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import MonthCalendar from "@/components/MonthCalendar";
 import GroupSwitcher from "@/components/GroupSwitcher";
-import AddEventForm from "@/components/AddEventForm";
 import EventCard from "@/components/EventCard";
 import Nav from "@/components/Nav";
 import type { Event, RsvpStatus } from "@/types";
@@ -148,11 +147,7 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
           nextHref={`/calendar?month=${monthParam(nextMonth)}${groupQuery}`}
         />
 
-        <div className="my-8">
-          <AddEventForm />
-        </div>
-
-        <div className="flex flex-col gap-4">
+        <div className="mt-8 flex flex-col gap-4">
           {eventList.length === 0 && (
             <p className="text-sm text-zinc-500">No outings yet this month.</p>
           )}
