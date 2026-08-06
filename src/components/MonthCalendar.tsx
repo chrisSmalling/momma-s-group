@@ -83,13 +83,14 @@ export default function MonthCalendar({
                   </span>
                   <div className="mt-1 flex flex-col gap-0.5">
                     {dayEvents.slice(0, 2).map((event) => (
-                      <span
+                      <Link
                         key={event.id}
-                        className="truncate rounded bg-zinc-100 px-1 py-0.5 text-[11px] text-zinc-700"
+                        href={`#event-${event.id}`}
+                        className="truncate rounded bg-zinc-100 px-1 py-0.5 text-left text-[11px] text-zinc-700 hover:bg-zinc-200"
                         title={event.title}
                       >
                         {event.title}
-                      </span>
+                      </Link>
                     ))}
                     {dayEvents.length > 2 && (
                       <span className="text-[11px] text-zinc-400">

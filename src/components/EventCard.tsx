@@ -64,7 +64,10 @@ export default function EventCard({
     .join(" · ");
 
   return (
-    <div className="rounded-md border border-zinc-200 p-4">
+    <div
+      id={`event-${event.id}`}
+      className="scroll-mt-4 rounded-md border border-zinc-200 p-4"
+    >
       <div className="mb-1 flex items-baseline justify-between gap-2">
         <h3 className="text-base font-semibold">{event.title}</h3>
         <span className="text-xs text-zinc-500">{formatWhen(event)}</span>
