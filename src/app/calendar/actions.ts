@@ -3,15 +3,15 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import type { RsvpStatus } from "@/types";
 
-export async function rsvp(formData: FormData) {
-  const eventId = String(formData.get("eventId") ?? "");
-  const status = String(formData.get("status") ?? "");
-
-  if (!eventId || (status !== "going" && status !== "maybe")) {
-    redirect("/calendar?error=Invalid%20RSVP");
-  }
-
+// Persistence layer for RsvpButtons' optimistic UI: the caller already knows
+// the intended end state (including null to clear), so this just writes it —
+// no server-side toggle detection needed.
+export async function rsvp(
+  eventId: string,
+  status: RsvpStatus | null,
+): Promise<{ error?: string }> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -20,31 +20,20 @@ export async function rsvp(formData: FormData) {
     redirect("/login");
   }
 
-  const { data: existing } = await supabase
-    .from("rsvps")
-    .select("status")
-    .eq("event_id", eventId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const { error } = status
+    ? await supabase
+        .from("rsvps")
+        .upsert({ event_id: eventId, user_id: user.id, status })
+    : await supabase
+        .from("rsvps")
+        .delete()
+        .eq("event_id", eventId)
+        .eq("user_id", user.id);
 
-  if (existing?.status === status) {
-    // Clicking the already-active status toggles the RSVP off.
-    const { error } = await supabase
-      .from("rsvps")
-      .delete()
-      .eq("event_id", eventId)
-      .eq("user_id", user.id);
-    if (error) {
-      redirect(`/calendar?error=${encodeURIComponent(error.message)}`);
-    }
-  } else {
-    const { error } = await supabase
-      .from("rsvps")
-      .upsert({ event_id: eventId, user_id: user.id, status });
-    if (error) {
-      redirect(`/calendar?error=${encodeURIComponent(error.message)}`);
-    }
+  if (error) {
+    return { error: error.message };
   }
 
   revalidatePath("/calendar");
+  return {};
 }
