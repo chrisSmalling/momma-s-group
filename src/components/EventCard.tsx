@@ -1,4 +1,4 @@
-import { rsvp } from "@/app/calendar/actions";
+import RsvpButtons from "@/components/RsvpButtons";
 import type { Event, RsvpStatus } from "@/types";
 
 type Attendee = {
@@ -86,36 +86,7 @@ export default function EventCard({
         </div>
       )}
 
-      <div className="mb-3 flex gap-2">
-        <form action={rsvp}>
-          <input type="hidden" name="eventId" value={event.id} />
-          <input type="hidden" name="status" value="going" />
-          <button
-            type="submit"
-            className={
-              currentStatus === "going"
-                ? "rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white"
-                : "rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:border-zinc-500"
-            }
-          >
-            {currentStatus === "going" ? "✓ Going" : "Going"}
-          </button>
-        </form>
-        <form action={rsvp}>
-          <input type="hidden" name="eventId" value={event.id} />
-          <input type="hidden" name="status" value="maybe" />
-          <button
-            type="submit"
-            className={
-              currentStatus === "maybe"
-                ? "rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white"
-                : "rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:border-zinc-500"
-            }
-          >
-            {currentStatus === "maybe" ? "✓ Maybe" : "Maybe"}
-          </button>
-        </form>
-      </div>
+      <RsvpButtons eventId={event.id} currentStatus={currentStatus} />
 
       {hasActiveGroup ? (
         <div className="flex flex-col gap-1 text-sm">
