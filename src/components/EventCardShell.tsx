@@ -1,15 +1,17 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition, type ReactNode } from "react";
 import { rsvp } from "@/app/calendar/actions";
 import type { RsvpStatus } from "@/types";
 
-export default function RsvpButtons({
+export default function EventCardShell({
   eventId,
   currentStatus,
+  children,
 }: {
   eventId: string;
   currentStatus: RsvpStatus | null;
+  children: ReactNode;
 }) {
   const [optimisticStatus, setOptimisticStatus] = useOptimistic(currentStatus);
   const [isPending, startTransition] = useTransition();
@@ -28,16 +30,25 @@ export default function RsvpButtons({
   }
 
   return (
-    <div className="mb-3 flex flex-col gap-1">
-      <div className="flex gap-2">
+    <div
+      id={`event-${eventId}`}
+      className={
+        optimisticStatus === "going"
+          ? "scroll-mt-4 rounded-2xl border border-rose-200 bg-rose-50/60 p-4 transition-colors"
+          : "scroll-mt-4 rounded-2xl border border-zinc-200 bg-white p-4 transition-colors"
+      }
+    >
+      {children}
+
+      <div className="mt-4 flex gap-2">
         <button
           type="button"
           disabled={isPending}
           onClick={() => handleClick("going")}
           className={
             optimisticStatus === "going"
-              ? "rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
-              : "rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:border-zinc-500 disabled:opacity-60"
+              ? "rounded-full bg-rose-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm disabled:opacity-60"
+              : "rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm text-zinc-700 hover:border-zinc-400 disabled:opacity-60"
           }
         >
           {optimisticStatus === "going" ? "✓ Going" : "Going"}
@@ -48,14 +59,14 @@ export default function RsvpButtons({
           onClick={() => handleClick("maybe")}
           className={
             optimisticStatus === "maybe"
-              ? "rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
-              : "rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:border-zinc-500 disabled:opacity-60"
+              ? "rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white shadow-sm disabled:opacity-60"
+              : "rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm text-zinc-700 hover:border-zinc-400 disabled:opacity-60"
           }
         >
           {optimisticStatus === "maybe" ? "✓ Maybe" : "Maybe"}
         </button>
       </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
     </div>
   );
 }
