@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Momma's Meetup — Offline</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial,
+          sans-serif;
+        background: #ffffff;
+        color: #27272a;
+        padding: 24px;
+      }
+      main {
+        max-width: 320px;
+        text-align: center;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        background: #c0356e;
+        color: #ffffff;
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 16px;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 8px;
+      }
+      p {
+        font-size: 14px;
+        color: #71717a;
+        line-height: 1.5;
+        margin: 0;
+      }
+      button {
+        margin-top: 20px;
+        border: none;
+        border-radius: 8px;
+        background: #18181b;
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: 500;
+        padding: 10px 16px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="badge">M</div>
+      <h1>You're offline</h1>
+      <p>
+        Momma's Meetup needs a connection to load your calendar and groups.
+        Reconnect and try again.
+      </p>
+      <button onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>
