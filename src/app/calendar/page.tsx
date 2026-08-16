@@ -55,6 +55,8 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
     (requestedGroup && groupList.some((g) => g.id === requestedGroup)
       ? requestedGroup
       : groupList[0]?.id) ?? null;
+  const activeGroupName =
+    groupList.find((g) => g.id === activeGroupId)?.name ?? null;
 
   let activeGroupMemberIds: string[] = [];
   if (activeGroupId) {
@@ -159,6 +161,7 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
               currentStatus={myRsvpByEvent[event.id] ?? null}
               attendees={rsvpsByEvent[event.id] ?? []}
               hasActiveGroup={Boolean(activeGroupId)}
+              activeGroupName={activeGroupName}
             />
           ))}
         </div>
