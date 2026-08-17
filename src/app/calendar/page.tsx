@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { monthParam } from "@/lib/date";
 import MonthCalendar from "@/components/MonthCalendar";
 import GroupSwitcher from "@/components/GroupSwitcher";
 import EventCard from "@/components/EventCard";
@@ -13,10 +14,6 @@ function parseMonthParam(month: string | undefined): Date {
   }
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), 1);
-}
-
-function monthParam(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 type AttendeeDisplay = {
@@ -67,7 +64,9 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
     activeGroupMemberIds = (members ?? []).map((m) => m.user_id);
   }
 
-  // Events in the visible month — shared calendar, visible to any signed-in user.
+  // Events in the visible month. RLS already limits proposed meetups
+  // (proposed_by_group set) to members of that group; curated/materialized
+  // events (proposed_by_group null) are visible to everyone.
   const monthStart = monthDate;
   const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
   const { data: events } = await supabase
@@ -85,43 +84,51 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
   const rsvpsByEvent: Record<string, AttendeeDisplay[]> = {};
   const myRsvpByEvent: Record<string, RsvpStatus> = {};
 
-  if (eventIds.length > 0) {
-    const { data: rsvps } = await supabase
-      .from("rsvps")
-      .select("event_id, user_id, status")
-      .in("event_id", eventIds);
-    const rsvpRows = rsvps ?? [];
+  const { data: rsvps } = eventIds.length
+    ? await supabase
+        .from("rsvps")
+        .select("event_id, user_id, status")
+        .in("event_id", eventIds)
+    : { data: [] };
+  const rsvpRows = rsvps ?? [];
 
-    for (const r of rsvpRows) {
-      if (r.user_id === user.id) {
-        myRsvpByEvent[r.event_id] = r.status as RsvpStatus;
-      }
+  for (const r of rsvpRows) {
+    if (r.user_id === user.id) {
+      myRsvpByEvent[r.event_id] = r.status as RsvpStatus;
     }
+  }
 
-    const scopedRows = rsvpRows.filter((r) =>
-      activeGroupMemberIds.includes(r.user_id),
-    );
-    const userIds = [...new Set(scopedRows.map((r) => r.user_id))];
+  const scopedRows = rsvpRows.filter((r) =>
+    activeGroupMemberIds.includes(r.user_id),
+  );
 
-    const { data: profiles } = userIds.length
-      ? await supabase
-          .from("profiles")
-          .select("id, display_name, avatar_color")
-          .in("id", userIds)
-      : { data: [] };
-    const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
+  // Also need the proposer's profile for any user-proposed meetups this
+  // month, so both queries below share one profiles fetch.
+  const proposerIds = eventList
+    .filter((e) => e.proposed_by_group && e.added_by)
+    .map((e) => e.added_by as string);
+  const profileIds = [
+    ...new Set([...scopedRows.map((r) => r.user_id), ...proposerIds]),
+  ];
 
-    for (const r of scopedRows) {
-      const profile = profileById.get(r.user_id);
-      const list = rsvpsByEvent[r.event_id] ?? [];
-      list.push({
-        user_id: r.user_id,
-        status: r.status as RsvpStatus,
-        display_name: profile?.display_name ?? "Unknown",
-        avatar_color: profile?.avatar_color ?? "#C0356E",
-      });
-      rsvpsByEvent[r.event_id] = list;
-    }
+  const { data: profiles } = profileIds.length
+    ? await supabase
+        .from("profiles")
+        .select("id, display_name, avatar_color")
+        .in("id", profileIds)
+    : { data: [] };
+  const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
+
+  for (const r of scopedRows) {
+    const profile = profileById.get(r.user_id);
+    const list = rsvpsByEvent[r.event_id] ?? [];
+    list.push({
+      user_id: r.user_id,
+      status: r.status as RsvpStatus,
+      display_name: profile?.display_name ?? "Unknown",
+      avatar_color: profile?.avatar_color ?? "#C0356E",
+    });
+    rsvpsByEvent[r.event_id] = list;
   }
 
   const prevMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1);
@@ -153,17 +160,30 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
           {eventList.length === 0 && (
             <p className="text-sm text-zinc-500">No outings yet this month.</p>
           )}
-          {eventList.map((event) => (
-            <EventCard
-              key={event.id}
-              event={event}
-              currentUserId={user.id}
-              currentStatus={myRsvpByEvent[event.id] ?? null}
-              attendees={rsvpsByEvent[event.id] ?? []}
-              hasActiveGroup={Boolean(activeGroupId)}
-              activeGroupName={activeGroupName}
-            />
-          ))}
+          {eventList.map((event) => {
+            const proposedBy =
+              event.proposed_by_group && event.added_by
+                ? {
+                    user_id: event.added_by,
+                    display_name:
+                      profileById.get(event.added_by)?.display_name ??
+                      "Someone",
+                  }
+                : null;
+
+            return (
+              <EventCard
+                key={event.id}
+                event={event}
+                currentUserId={user.id}
+                currentStatus={myRsvpByEvent[event.id] ?? null}
+                attendees={rsvpsByEvent[event.id] ?? []}
+                hasActiveGroup={Boolean(activeGroupId)}
+                activeGroupName={activeGroupName}
+                proposedBy={proposedBy}
+              />
+            );
+          })}
         </div>
       </div>
     </div>

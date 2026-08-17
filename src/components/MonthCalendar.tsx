@@ -86,7 +86,11 @@ export default function MonthCalendar({
                       <Link
                         key={event.id}
                         href={`#event-${event.id}`}
-                        className="truncate rounded bg-zinc-100 px-1 py-0.5 text-left text-[11px] text-zinc-700 hover:bg-zinc-200"
+                        className={
+                          event.status === "cancelled"
+                            ? "truncate rounded bg-zinc-100 px-1 py-0.5 text-left text-[11px] text-zinc-400 line-through hover:bg-zinc-200"
+                            : "truncate rounded bg-zinc-100 px-1 py-0.5 text-left text-[11px] text-zinc-700 hover:bg-zinc-200"
+                        }
                         title={event.title}
                       >
                         {event.title}

@@ -11,6 +11,9 @@ export default function Nav({ email }: { email: string }) {
         <Link href="/groups" className="text-zinc-700 hover:text-zinc-900">
           Groups
         </Link>
+        <Link href="/places" className="text-zinc-700 hover:text-zinc-900">
+          Places
+        </Link>
       </nav>
       <div className="flex items-center gap-4">
         <span className="text-sm text-zinc-500">{email}</span>
