@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { formatHours } from "@/lib/hours";
 import { formatDistance, formatDriveTime } from "@/lib/distance";
+import { isGoodAgeFit } from "@/lib/ageFit";
 import PracticalityIcons from "@/components/PracticalityIcons";
 import TipsSection from "@/components/TipsSection";
+import IndoorOutdoorTag from "@/components/IndoorOutdoorTag";
+import AgeFitBadge from "@/components/AgeFitBadge";
 import type { Place, PlaceTip } from "@/types";
 
 function NoteLine({ label, value }: { label: string; value: string | null }) {
@@ -24,6 +27,7 @@ export default function PlaceCard({
   currentUserId,
   tips,
   distance,
+  childAgeMonths,
 }: {
   place: Place;
   groupId: string | null;
@@ -36,8 +40,12 @@ export default function PlaceCard({
   // undefined-as-null) when the viewer hasn't set a home location, so no
   // distance line renders at all.
   distance?: { km: number; driveMinutes?: number };
+  // Viewer's profiles.child_age_months, when set — drives the "Good fit"
+  // badge. Omit when unknown so nothing renders (see isGoodAgeFit).
+  childAgeMonths?: number | null;
 }) {
   const hours = formatHours(place.hours);
+  const goodAgeFit = isGoodAgeFit(childAgeMonths, place.age_min_months, place.age_max_months);
 
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-4">
@@ -50,6 +58,11 @@ export default function PlaceCard({
               : formatDistance(distance.km)}
           </span>
         )}
+      </div>
+
+      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+        <IndoorOutdoorTag isOutdoor={place.is_outdoor} />
+        {goodAgeFit && <AgeFitBadge />}
       </div>
 
       {place.description && (
