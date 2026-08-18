@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Nav from "@/components/Nav";
 import PlaceCard from "@/components/PlaceCard";
-import type { Place } from "@/types";
+import type { Place, PlaceTip } from "@/types";
 
 export default async function PlacesPage() {
   const supabase = await createClient();
@@ -21,6 +21,40 @@ export default async function PlacesPage() {
     .order("name", { ascending: true });
   const placeList = (places ?? []) as Place[];
 
+  // Places has no group switcher of its own; tips default to the user's
+  // first group, same fallback /calendar uses before a group is chosen.
+  const { data: groups } = await supabase
+    .from("groups")
+    .select("id, name")
+    .order("created_at", { ascending: true });
+  const activeGroupId = groups?.[0]?.id ?? null;
+  const activeGroupName = groups?.[0]?.name ?? null;
+
+  const placeIds = placeList.map((p) => p.id);
+  const { data: tips } =
+    activeGroupId && placeIds.length
+      ? await supabase
+          .from("place_tips")
+          .select("*")
+          .eq("group_id", activeGroupId)
+          .in("place_id", placeIds)
+      : { data: [] };
+  const tipRows = (tips ?? []) as PlaceTip[];
+
+  const userIds = [...new Set(tipRows.map((t) => t.user_id))];
+  const { data: profiles } = userIds.length
+    ? await supabase.from("profiles").select("id, display_name").in("id", userIds)
+    : { data: [] };
+  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
+
+  const tipsByPlace: Record<string, (PlaceTip & { display_name: string })[]> = {};
+  for (const t of tipRows) {
+    if (!t.place_id) continue;
+    const list = tipsByPlace[t.place_id] ?? [];
+    list.push({ ...t, display_name: nameById.get(t.user_id) ?? "Someone" });
+    tipsByPlace[t.place_id] = list;
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center px-4 py-10">
       <div className="w-full max-w-2xl">
@@ -33,7 +67,14 @@ export default async function PlacesPage() {
             <p className="text-sm text-zinc-500">No places yet.</p>
           )}
           {placeList.map((place) => (
-            <PlaceCard key={place.id} place={place} />
+            <PlaceCard
+              key={place.id}
+              place={place}
+              groupId={activeGroupId}
+              groupName={activeGroupName}
+              currentUserId={user.id}
+              tips={tipsByPlace[place.id] ?? []}
+            />
           ))}
         </div>
       </div>

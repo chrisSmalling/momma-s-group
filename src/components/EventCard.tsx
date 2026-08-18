@@ -1,6 +1,9 @@
 import EventCardShell from "@/components/EventCardShell";
-import GoingAvatars from "@/components/GoingAvatars";
-import type { Event, RsvpStatus } from "@/types";
+import LiveAttendees from "@/components/LiveAttendees";
+import PracticalityIcons from "@/components/PracticalityIcons";
+import EventComments from "@/components/EventComments";
+import TipsSection from "@/components/TipsSection";
+import type { Event, Place, PlaceTip, RsvpStatus, EventComment } from "@/types";
 
 type Attendee = {
   user_id: string;
@@ -13,6 +16,23 @@ type ProposedBy = {
   user_id: string;
   display_name: string;
 };
+
+type PlaceContext = Pick<
+  Place,
+  | "is_enclosed"
+  | "has_changing_table"
+  | "nursing_friendly"
+  | "stroller_accessible"
+  | "food_onsite"
+  | "quiet_or_sensory_friendly"
+  | "parking_notes"
+  | "best_time_note"
+  | "typical_crowd_note"
+  | "what_to_bring"
+>;
+
+type CommentDisplay = EventComment & { display_name: string };
+type TipDisplay = PlaceTip & { display_name: string };
 
 function dateBadgeParts(event: Event) {
   const d = new Date(event.starts_at);
@@ -52,33 +72,59 @@ function CancelledPill() {
   );
 }
 
+function NoteLine({ label, value }: { label: string; value: string | null }) {
+  if (!value) return null;
+  return (
+    <p className="text-xs text-zinc-500">
+      <span className="font-medium text-zinc-600">{label}: </span>
+      {value}
+    </p>
+  );
+}
+
 export default function EventCard({
   event,
   currentUserId,
+  currentUserName,
   currentStatus,
   attendees,
   hasActiveGroup,
+  activeGroupId,
   activeGroupName,
+  activeGroupMemberIds,
+  roster,
   proposedBy,
+  place,
+  duringNap,
+  comments,
+  tips,
 }: {
   event: Event;
   currentUserId: string;
+  currentUserName: string;
   currentStatus: RsvpStatus | null;
   attendees: Attendee[];
   hasActiveGroup: boolean;
+  activeGroupId: string | null;
   activeGroupName: string | null;
+  activeGroupMemberIds: string[];
+  roster: Record<string, { display_name: string; avatar_color: string }>;
   proposedBy: ProposedBy | null;
+  place: PlaceContext | null;
+  duringNap: boolean;
+  comments: CommentDisplay[];
+  tips: TipDisplay[];
 }) {
-  const going = attendees.filter((a) => a.status === "going");
-  const maybe = attendees.filter((a) => a.status === "maybe");
   const { weekday, day } = dateBadgeParts(event);
   const cancelled = event.status === "cancelled";
+  const bring = event.what_to_bring.length > 0 ? event.what_to_bring : (place?.what_to_bring ?? []);
 
   return (
     <EventCardShell
       eventId={event.id}
       currentStatus={currentStatus}
       disabled={cancelled}
+      duringNap={duringNap}
     >
       <div className="flex gap-3">
         <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-rose-50 text-rose-700">
@@ -146,26 +192,66 @@ export default function EventCard({
         </div>
       )}
 
+      {bring.length > 0 && (
+        <p className="mt-3 text-sm font-semibold text-rose-700">
+          Bring: {bring.join(", ")}
+        </p>
+      )}
+
+      {place && (
+        <div className="mt-2 flex flex-col gap-1.5">
+          <PracticalityIcons practicalities={place} />
+          <NoteLine label="Parking" value={place.parking_notes} />
+          <NoteLine label="Best time" value={place.best_time_note} />
+          <NoteLine label="Typical crowd" value={place.typical_crowd_note} />
+        </div>
+      )}
+
       <div className="mt-4">
-        <GoingAvatars
-          going={going}
+        <LiveAttendees
+          eventId={event.id}
           currentUserId={currentUserId}
-          groupName={activeGroupName}
           hasActiveGroup={hasActiveGroup}
+          activeGroupName={activeGroupName}
+          activeGroupMemberIds={activeGroupMemberIds}
+          roster={roster}
+          initialAttendees={attendees}
         />
-        {maybe.length > 0 && (
-          <p className="mt-1.5 text-xs text-zinc-400">
-            Maybe:{" "}
-            {maybe
-              .map((p) =>
-                p.user_id === currentUserId
-                  ? `${p.display_name} (you)`
-                  : p.display_name,
-              )
-              .join(", ")}
-          </p>
-        )}
       </div>
+
+      <details className="mt-4 border-t border-zinc-100 pt-3">
+        <summary className="cursor-pointer text-xs font-semibold text-zinc-500">
+          Comments {comments.length > 0 ? `(${comments.length})` : ""}
+        </summary>
+        <div className="mt-3">
+          <EventComments
+            eventId={event.id}
+            groupId={activeGroupId}
+            currentUserId={currentUserId}
+            currentUserName={currentUserName}
+            initialComments={comments}
+            roster={Object.fromEntries(
+              Object.entries(roster).map(([id, p]) => [id, p.display_name]),
+            )}
+          />
+        </div>
+      </details>
+
+      <details className="mt-3 border-t border-zinc-100 pt-3">
+        <summary className="cursor-pointer text-xs font-semibold text-zinc-500">
+          Tips {tips.length > 0 ? `(${tips.length})` : ""}
+        </summary>
+        <div className="mt-3">
+          <TipsSection
+            placeId={event.place_id ?? undefined}
+            eventId={event.place_id ? undefined : event.id}
+            groupId={activeGroupId}
+            groupName={activeGroupName}
+            currentUserId={currentUserId}
+            tips={tips}
+          />
+        </div>
+      </details>
     </EventCardShell>
   );
 }

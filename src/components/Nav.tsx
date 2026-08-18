@@ -3,8 +3,8 @@ import SignOutButton from "./SignOutButton";
 
 export default function Nav({ email }: { email: string }) {
   return (
-    <div className="mb-6 flex items-center justify-between">
-      <nav className="flex gap-4 text-sm font-medium">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-y-2">
+      <nav className="flex flex-wrap gap-4 text-sm font-medium">
         <Link href="/calendar" className="text-zinc-700 hover:text-zinc-900">
           Calendar
         </Link>
@@ -13,6 +13,9 @@ export default function Nav({ email }: { email: string }) {
         </Link>
         <Link href="/places" className="text-zinc-700 hover:text-zinc-900">
           Places
+        </Link>
+        <Link href="/settings" className="text-zinc-700 hover:text-zinc-900">
+          Settings
         </Link>
       </nav>
       <div className="flex items-center gap-4">

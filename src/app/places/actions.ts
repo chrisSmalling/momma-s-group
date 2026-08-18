@@ -64,3 +64,47 @@ export async function proposeMeetup(formData: FormData) {
   revalidatePath("/calendar");
   redirect(`/calendar?month=${monthParam(startsAt)}#event-${event.id}`);
 }
+
+export async function addTip(formData: FormData) {
+  const placeId = String(formData.get("place_id") ?? "") || null;
+  const eventId = String(formData.get("event_id") ?? "") || null;
+  const groupId = String(formData.get("group_id") ?? "");
+  const category = String(formData.get("category") ?? "general");
+  const body = String(formData.get("body") ?? "").trim();
+  const redirectBack = eventId ? "/calendar" : "/places";
+
+  if (!groupId || !body) {
+    redirect(
+      `${redirectBack}?error=${encodeURIComponent("A group and a tip are required")}`,
+    );
+  }
+  if (body.length > 500) {
+    redirect(
+      `${redirectBack}?error=${encodeURIComponent("Tip is too long (500 characters max)")}`,
+    );
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  const { error } = await supabase.from("place_tips").insert({
+    place_id: placeId,
+    event_id: eventId,
+    group_id: groupId,
+    user_id: user.id,
+    body,
+    category,
+  });
+
+  if (error) {
+    redirect(`${redirectBack}?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath("/calendar");
+  revalidatePath("/places");
+}
