@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Nav from "@/components/Nav";
-import { updateNapSettings } from "./actions";
+import { updateNapSettings, updateHomeLocation } from "./actions";
 
 export default async function SettingsPage(props: PageProps<"/settings">) {
   const searchParams = await props.searchParams;
@@ -19,7 +19,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("nap_start, nap_end, child_age_months")
+    .select("nap_start, nap_end, child_age_months, home_lat, home_lng")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -76,6 +76,54 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
               className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500"
             />
           </label>
+
+          <button
+            type="submit"
+            className="self-start rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            Save
+          </button>
+        </form>
+
+        <h1 className="mb-1 mt-10 text-xl font-bold text-zinc-900">
+          Home location
+        </h1>
+        <p className="mb-6 text-sm text-zinc-500">
+          Used to show roughly how far places and events are from you on the
+          Today screen — straight-line distance, not drive time. Find your
+          coordinates by right-clicking your location in Google Maps and
+          copying the numbers shown.
+        </p>
+
+        <form action={updateHomeLocation} className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-sm text-zinc-600">
+              Latitude
+              <input
+                type="number"
+                name="home_lat"
+                step="any"
+                min={-90}
+                max={90}
+                defaultValue={profile?.home_lat ?? ""}
+                placeholder="28.2397"
+                className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-zinc-600">
+              Longitude
+              <input
+                type="number"
+                name="home_lng"
+                step="any"
+                min={-180}
+                max={180}
+                defaultValue={profile?.home_lng ?? ""}
+                placeholder="-82.3279"
+                className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500"
+              />
+            </label>
+          </div>
 
           <button
             type="submit"

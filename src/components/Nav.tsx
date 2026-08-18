@@ -5,6 +5,9 @@ export default function Nav({ email }: { email: string }) {
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-y-2">
       <nav className="flex flex-wrap gap-4 text-sm font-medium">
+        <Link href="/today" className="text-zinc-700 hover:text-zinc-900">
+          Today
+        </Link>
         <Link href="/calendar" className="text-zinc-700 hover:text-zinc-900">
           Calendar
         </Link>

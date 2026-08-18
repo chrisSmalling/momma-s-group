@@ -36,3 +36,40 @@ export async function updateNapSettings(formData: FormData) {
 
   redirect("/settings?saved=1");
 }
+
+export async function updateHomeLocation(formData: FormData) {
+  const latRaw = String(formData.get("home_lat") ?? "").trim();
+  const lngRaw = String(formData.get("home_lng") ?? "").trim();
+
+  const homeLat = latRaw ? Number(latRaw) : null;
+  const homeLng = lngRaw ? Number(lngRaw) : null;
+
+  if (latRaw && (Number.isNaN(homeLat) || homeLat! < -90 || homeLat! > 90)) {
+    redirect("/settings?error=Latitude%20must%20be%20between%20-90%20and%2090");
+  }
+  if (lngRaw && (Number.isNaN(homeLng) || homeLng! < -180 || homeLng! > 180)) {
+    redirect("/settings?error=Longitude%20must%20be%20between%20-180%20and%20180");
+  }
+  if ((homeLat === null) !== (homeLng === null)) {
+    redirect("/settings?error=Enter%20both%20latitude%20and%20longitude%2C%20or%20neither");
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ home_lat: homeLat, home_lng: homeLng })
+    .eq("id", user.id);
+
+  if (error) {
+    redirect(`/settings?error=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect("/settings?saved=1");
+}
