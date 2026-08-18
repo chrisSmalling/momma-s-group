@@ -25,3 +25,10 @@ export function formatDistance(km: number): string {
   const rounded = miles < 10 ? miles.toFixed(1) : Math.round(miles).toString();
   return `~${rounded} mi away`;
 }
+
+// Only call this with a real routing-provider result (src/lib/routing) —
+// never derive "minutes" from straight-line km, that's a different and
+// much less honest number.
+export function formatDriveTime(minutes: number): string {
+  return `~${Math.round(minutes)} min drive`;
+}

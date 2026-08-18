@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { formatHours } from "@/lib/hours";
-import { formatDistance } from "@/lib/distance";
+import { formatDistance, formatDriveTime } from "@/lib/distance";
 import PracticalityIcons from "@/components/PracticalityIcons";
 import TipsSection from "@/components/TipsSection";
 import type { Place, PlaceTip } from "@/types";
@@ -23,17 +23,19 @@ export default function PlaceCard({
   groupName,
   currentUserId,
   tips,
-  distanceKm,
+  distance,
 }: {
   place: Place;
   groupId: string | null;
   groupName: string | null;
   currentUserId: string;
   tips: TipDisplay[];
-  // Straight-line distance from the viewer's home_lat/home_lng, when set.
-  // Omit entirely (rather than pass undefined-as-null) when the viewer
-  // hasn't set a home location, so no distance line renders.
-  distanceKm?: number;
+  // From the viewer's home_lat/home_lng, when set. `driveMinutes` is only
+  // present when a real routing provider (src/lib/routing) answered — show
+  // it in preference to straight-line km. Omit entirely (rather than pass
+  // undefined-as-null) when the viewer hasn't set a home location, so no
+  // distance line renders at all.
+  distance?: { km: number; driveMinutes?: number };
 }) {
   const hours = formatHours(place.hours);
 
@@ -41,9 +43,11 @@ export default function PlaceCard({
     <div className="rounded-2xl border border-zinc-200 bg-white p-4">
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-lg font-bold text-zinc-900">{place.name}</h3>
-        {distanceKm !== undefined && (
+        {distance !== undefined && (
           <span className="shrink-0 text-xs text-zinc-400">
-            {formatDistance(distanceKm)}
+            {distance.driveMinutes !== undefined
+              ? formatDriveTime(distance.driveMinutes)
+              : formatDistance(distance.km)}
           </span>
         )}
       </div>

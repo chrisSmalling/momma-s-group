@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { overlapsNapWindow } from "@/lib/nap";
 import { distanceKm } from "@/lib/distance";
+import { getRoutingProvider, type DriveTimeResult } from "@/lib/routing";
 import { createClient } from "@/lib/supabase/server";
 import EventCard from "@/components/EventCard";
 import PlaceCard from "@/components/PlaceCard";
@@ -236,14 +237,44 @@ export default async function TodayPage(props: PageProps<"/today">) {
     .eq("active", true)
     .order("name", { ascending: true });
   let placeList = (places ?? []) as Place[];
+
+  // Straight-line distance always available (no network call) as the
+  // baseline/fallback. Real drive time layers on top when a routing
+  // provider is configured — see src/lib/routing for the swap point.
+  const straightLineByPlaceId = new Map<string, number>();
+  if (home) {
+    for (const p of placeList) {
+      if (p.lat != null && p.lng != null) {
+        straightLineByPlaceId.set(p.id, distanceKm(home.lat, home.lng, p.lat, p.lng));
+      }
+    }
+  }
+
+  const driveTimeByPlaceId = new Map<string, DriveTimeResult>();
+  if (home) {
+    const routingProvider = getRoutingProvider();
+    if (routingProvider) {
+      const geolocated = placeList.filter((p) => p.lat != null && p.lng != null);
+      const results = await routingProvider.getDriveTimes(
+        home,
+        geolocated.map((p) => ({ lat: p.lat as number, lng: p.lng as number })),
+      );
+      if (results) {
+        geolocated.forEach((p, i) => {
+          const result = results[i];
+          if (result) driveTimeByPlaceId.set(p.id, result);
+        });
+      }
+    }
+  }
+
   if (home) {
     placeList = [...placeList].sort((a, b) => {
-      if (a.lat == null || a.lng == null) return 1;
-      if (b.lat == null || b.lng == null) return -1;
-      return (
-        distanceKm(home.lat, home.lng, a.lat, a.lng) -
-        distanceKm(home.lat, home.lng, b.lat, b.lng)
-      );
+      const aKey = driveTimeByPlaceId.get(a.id)?.durationMinutes ?? straightLineByPlaceId.get(a.id);
+      const bKey = driveTimeByPlaceId.get(b.id)?.durationMinutes ?? straightLineByPlaceId.get(b.id);
+      if (aKey == null) return 1;
+      if (bKey == null) return -1;
+      return aKey - bKey;
     });
   }
 
@@ -389,9 +420,12 @@ export default async function TodayPage(props: PageProps<"/today">) {
                   groupName={activeGroupName}
                   currentUserId={user.id}
                   tips={placeTipsByPlaceId[place.id] ?? []}
-                  distanceKm={
-                    home && place.lat != null && place.lng != null
-                      ? distanceKm(home.lat, home.lng, place.lat, place.lng)
+                  distance={
+                    straightLineByPlaceId.has(place.id)
+                      ? {
+                          km: straightLineByPlaceId.get(place.id)!,
+                          driveMinutes: driveTimeByPlaceId.get(place.id)?.durationMinutes,
+                        }
                       : undefined
                   }
                 />
