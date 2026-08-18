@@ -212,6 +212,48 @@ export interface OutingFeedback {
   created_at: string;
 }
 
+// Activity/source foundation (v6) — external activity aggregation
+// infrastructure. RLS blocks the anon key entirely on both tables (no
+// policies at all), so nothing in this app queries them today; these
+// types exist for the future ingestion pipeline (a service-role context),
+// not for use in any client/server component.
+export type SourceType = "communico" | "libcal" | "rss" | "ical" | "manual" | "other";
+
+export interface ActivitySource {
+  id: string;
+  name: string;
+  source_type: SourceType;
+  base_url: string | null;
+  metro_area: string;
+  active: boolean;
+  fetch_frequency_minutes: number | null;
+  last_fetch_at: string | null;
+  last_fetch_status: "success" | "partial" | "error" | null;
+  last_fetch_error: string | null;
+  last_success_at: string | null;
+  created_at: string;
+}
+
+export type VerificationStatus = "needs_review" | "verified" | "stale" | "cancelled";
+
+export interface ActivitySourceRecord {
+  id: string;
+  source_id: string;
+  external_id: string;
+  external_url: string | null;
+  // Raw fetched payload for debugging — shape varies per source_type,
+  // deliberately untyped beyond "some JSON object."
+  raw_payload: Record<string, unknown> | null;
+  dedup_key: string;
+  resolved_event_id: string | null;
+  resolved_place_id: string | null;
+  resolved_program_id: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  verification_status: VerificationStatus;
+  created_at: string;
+}
+
 // From the my_cancelled_upcoming view. IMPORTANT: this view is not
 // self-scoping — see the note in db/schema.sql. Always filter to the
 // current user (`.eq("user_id", user.id)`) when querying it.
