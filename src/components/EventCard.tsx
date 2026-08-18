@@ -9,6 +9,11 @@ type Attendee = {
   avatar_color: string;
 };
 
+type ProposedBy = {
+  user_id: string;
+  display_name: string;
+};
+
 function dateBadgeParts(event: Event) {
   const d = new Date(event.starts_at);
   return {
@@ -39,6 +44,14 @@ function CostPill({ cost }: { cost: string | null }) {
   );
 }
 
+function CancelledPill() {
+  return (
+    <span className="shrink-0 rounded-full bg-zinc-200 px-2.5 py-0.5 text-xs font-semibold text-zinc-600">
+      Cancelled
+    </span>
+  );
+}
+
 export default function EventCard({
   event,
   currentUserId,
@@ -46,6 +59,7 @@ export default function EventCard({
   attendees,
   hasActiveGroup,
   activeGroupName,
+  proposedBy,
 }: {
   event: Event;
   currentUserId: string;
@@ -53,13 +67,19 @@ export default function EventCard({
   attendees: Attendee[];
   hasActiveGroup: boolean;
   activeGroupName: string | null;
+  proposedBy: ProposedBy | null;
 }) {
   const going = attendees.filter((a) => a.status === "going");
   const maybe = attendees.filter((a) => a.status === "maybe");
   const { weekday, day } = dateBadgeParts(event);
+  const cancelled = event.status === "cancelled";
 
   return (
-    <EventCardShell eventId={event.id} currentStatus={currentStatus}>
+    <EventCardShell
+      eventId={event.id}
+      currentStatus={currentStatus}
+      disabled={cancelled}
+    >
       <div className="flex gap-3">
         <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-rose-50 text-rose-700">
           <span className="text-[10px] font-semibold uppercase tracking-wide">
@@ -70,10 +90,16 @@ export default function EventCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="truncate text-lg font-bold text-zinc-900">
+            <h3
+              className={
+                cancelled
+                  ? "truncate text-lg font-bold text-zinc-400 line-through"
+                  : "truncate text-lg font-bold text-zinc-900"
+              }
+            >
               {event.title}
             </h3>
-            <CostPill cost={event.cost} />
+            {cancelled ? <CancelledPill /> : <CostPill cost={event.cost} />}
           </div>
           <p className="text-sm font-semibold text-zinc-600">
             {formatTime(event)}
@@ -93,8 +119,32 @@ export default function EventCard({
               {event.description}
             </p>
           )}
+          {proposedBy && (
+            <p className="mt-1.5 text-xs italic text-zinc-400">
+              Proposed by{" "}
+              {proposedBy.user_id === currentUserId
+                ? "you"
+                : proposedBy.display_name}
+            </p>
+          )}
         </div>
       </div>
+
+      {event.registration_required && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
+          <span>Registration required</span>
+          {event.registration_url && (
+            <a
+              href={event.registration_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              Register →
+            </a>
+          )}
+        </div>
+      )}
 
       <div className="mt-4">
         <GoingAvatars
