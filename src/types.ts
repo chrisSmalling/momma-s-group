@@ -5,6 +5,11 @@ export interface Profile {
   display_name: string;
   avatar_color: string;
   created_at: string;
+  nap_start: string | null;
+  nap_end: string | null;
+  child_age_months: number | null;
+  home_lat: number | null;
+  home_lng: number | null;
 }
 
 export interface Group {
@@ -28,7 +33,19 @@ export type PlaceHours = Partial<
   Record<"mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun", string>
 >;
 
-export interface Place {
+// The six venue-practicality flags shown as icons on place/event cards.
+// Each is a nullable boolean: null/false both mean "don't show the icon" —
+// there's no "no" icon, only affirmative highlights.
+export interface VenuePracticalities {
+  is_enclosed: boolean | null;
+  has_changing_table: boolean | null;
+  nursing_friendly: boolean | null;
+  stroller_accessible: boolean | null;
+  food_onsite: boolean | null;
+  quiet_or_sensory_friendly: boolean | null;
+}
+
+export interface Place extends VenuePracticalities {
   id: string;
   name: string;
   address: string | null;
@@ -48,6 +65,13 @@ export interface Place {
   last_verified_at: string | null;
   active: boolean;
   created_at: string;
+  is_outdoor: boolean;
+  food_allowed: boolean | null;
+  restrooms: boolean | null;
+  parking_notes: string | null;
+  what_to_bring: string[];
+  typical_crowd_note: string | null;
+  best_time_note: string | null;
 }
 
 export interface RecurringProgram {
@@ -106,6 +130,8 @@ export interface Event {
   // Set only on user-proposed meetups; null for curated/materialized events.
   proposed_by_group: string | null;
   last_verified_at: string | null;
+  is_outdoor: boolean;
+  what_to_bring: string[];
 }
 
 export type RsvpStatus = "going" | "maybe";
@@ -115,4 +141,54 @@ export interface Rsvp {
   user_id: string;
   status: RsvpStatus;
   created_at: string;
+}
+
+export type TipCategory =
+  | "general"
+  | "parking"
+  | "timing"
+  | "facilities"
+  | "cost"
+  | "accessibility";
+
+export interface PlaceTip {
+  id: string;
+  place_id: string | null;
+  event_id: string | null;
+  group_id: string;
+  user_id: string;
+  body: string;
+  category: TipCategory;
+  helpful_count: number;
+  created_at: string;
+}
+
+export interface EventComment {
+  id: string;
+  event_id: string;
+  group_id: string;
+  user_id: string;
+  body: string;
+  promoted_tip_id: string | null;
+  edited_at: string | null;
+  created_at: string;
+}
+
+export interface OutingFeedback {
+  event_id: string;
+  user_id: string;
+  would_repeat: boolean;
+  note: string | null;
+  created_at: string;
+}
+
+// From the my_cancelled_upcoming view. IMPORTANT: this view is not
+// self-scoping — see the note in db/schema.sql. Always filter to the
+// current user (`.eq("user_id", user.id)`) when querying it.
+export interface CancelledUpcoming {
+  event_id: string;
+  title: string;
+  starts_at: string;
+  venue_name: string | null;
+  user_id: string;
 }

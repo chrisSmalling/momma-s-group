@@ -1,8 +1,34 @@
 import Link from "next/link";
 import { formatHours } from "@/lib/hours";
-import type { Place } from "@/types";
+import PracticalityIcons from "@/components/PracticalityIcons";
+import TipsSection from "@/components/TipsSection";
+import type { Place, PlaceTip } from "@/types";
 
-export default function PlaceCard({ place }: { place: Place }) {
+function NoteLine({ label, value }: { label: string; value: string | null }) {
+  if (!value) return null;
+  return (
+    <p className="text-xs text-zinc-500">
+      <span className="font-medium text-zinc-600">{label}: </span>
+      {value}
+    </p>
+  );
+}
+
+type TipDisplay = PlaceTip & { display_name: string };
+
+export default function PlaceCard({
+  place,
+  groupId,
+  groupName,
+  currentUserId,
+  tips,
+}: {
+  place: Place;
+  groupId: string | null;
+  groupName: string | null;
+  currentUserId: string;
+  tips: TipDisplay[];
+}) {
   const hours = formatHours(place.hours);
 
   return (
@@ -25,6 +51,19 @@ export default function PlaceCard({ place }: { place: Place }) {
         </p>
       )}
 
+      {place.what_to_bring.length > 0 && (
+        <p className="mt-2 text-sm font-semibold text-rose-700">
+          Bring: {place.what_to_bring.join(", ")}
+        </p>
+      )}
+
+      <div className="mt-2 flex flex-col gap-1.5">
+        <PracticalityIcons practicalities={place} />
+        <NoteLine label="Parking" value={place.parking_notes} />
+        <NoteLine label="Best time" value={place.best_time_note} />
+        <NoteLine label="Typical crowd" value={place.typical_crowd_note} />
+      </div>
+
       {hours.length > 0 && (
         <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-zinc-500 sm:grid-cols-3">
           {hours.map(({ day, range }) => (
@@ -42,6 +81,21 @@ export default function PlaceCard({ place }: { place: Place }) {
       >
         Propose a meetup
       </Link>
+
+      <details className="mt-3 border-t border-zinc-100 pt-3">
+        <summary className="cursor-pointer text-xs font-semibold text-zinc-500">
+          Tips {tips.length > 0 ? `(${tips.length})` : ""}
+        </summary>
+        <div className="mt-3">
+          <TipsSection
+            placeId={place.id}
+            groupId={groupId}
+            groupName={groupName}
+            currentUserId={currentUserId}
+            tips={tips}
+          />
+        </div>
+      </details>
     </div>
   );
 }

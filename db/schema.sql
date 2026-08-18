@@ -1,24 +1,44 @@
 -- ============================================================
--- Momma's Meetup — Postgres schema for Supabase (v2)
+-- Momma's Meetup — Postgres schema for Supabase (v3)
 -- Run this in the Supabase SQL Editor.
 -- Auth users are managed by Supabase in auth.users; we reference them.
 --
--- v2 adds `places` (curated venues with open hours — nothing to RSVP to
+-- v2 added `places` (curated venues with open hours — nothing to RSVP to
 -- directly) and `recurring_programs` (a recurring class/open-play slot at a
 -- place, expanded into real `events` rows by materialize_programs()), plus
 -- new columns on `events` for that: place_id, program_id, status,
 -- registration_required/url, age_min/max_months, and proposed_by_group for
--- user-proposed meetups. This file mirrors the live schema; it is not
--- re-run against the existing project.
+-- user-proposed meetups.
+--
+-- v3 adds: venue-practicalities columns on `places` (is_enclosed,
+-- has_changing_table, nursing_friendly, stroller_accessible, food_onsite,
+-- quiet_or_sensory_friendly, parking_notes, best_time_note,
+-- typical_crowd_note, what_to_bring) plus is_outdoor/what_to_bring on
+-- `events`; `event_comments` (a flat, group-scoped comment thread per
+-- event, realtime-enabled); `place_tips` (durable group tips, either
+-- place-scoped or event-scoped, promoted from a comment via
+-- promote_comment_to_tip()); `outing_feedback` (post-outing "would
+-- repeat" + note, one row per person per event); nap_start/nap_end/
+-- child_age_months/home_lat/home_lng on `profiles`; the my_cancelled_upcoming
+-- view; and cancel_event(). rsvps and event_comments are added to the
+-- supabase_realtime publication.
+--
+-- This file mirrors the live schema; it is not re-run against the existing
+-- project.
 -- ============================================================
 
 -- ---------- Tables ------------------------------------------
 
 create table profiles (
-  id            uuid primary key references auth.users(id) on delete cascade,
-  display_name  text not null,
-  avatar_color  text not null default '#C0356E',
-  created_at    timestamptz not null default now()
+  id                uuid primary key references auth.users(id) on delete cascade,
+  display_name      text not null,
+  avatar_color      text not null default '#C0356E',
+  created_at        timestamptz not null default now(),
+  nap_start         time,
+  nap_end           time,
+  child_age_months  int,
+  home_lat          double precision,
+  home_lng          double precision
 );
 
 create table groups (
@@ -39,25 +59,38 @@ create table group_members (
 -- A venue with open hours — nothing scheduled, nothing to RSVP to. Curated
 -- (fed in by hand or a scraper), not user-generated.
 create table places (
-  id              uuid primary key default gen_random_uuid(),
-  name            text not null,
-  address         text,
-  lat             double precision,
-  lng             double precision,
-  metro_area      text not null default 'tampa_bay',
-  hours           jsonb,                     -- e.g. {"mon": "10:00-21:00", ...}
-  description     text,
-  toddler_notes   text,
-  price_note      text,
-  age_min_months  int,
-  age_max_months  int,
-  website         text,
-  booking_url     text,
-  phone           text,
-  source_url      text,
-  last_verified_at timestamptz,
-  active          boolean not null default true,
-  created_at      timestamptz not null default now()
+  id                          uuid primary key default gen_random_uuid(),
+  name                        text not null,
+  address                     text,
+  lat                         double precision,
+  lng                         double precision,
+  metro_area                  text not null default 'tampa_bay',
+  hours                       jsonb,                     -- e.g. {"mon": "10:00-21:00", ...}
+  description                 text,
+  toddler_notes               text,
+  price_note                  text,
+  age_min_months              int,
+  age_max_months              int,
+  website                     text,
+  booking_url                 text,
+  phone                       text,
+  source_url                  text,
+  last_verified_at            timestamptz,
+  active                      boolean not null default true,
+  created_at                  timestamptz not null default now(),
+  is_enclosed                 boolean,
+  is_outdoor                  boolean not null default false,
+  has_changing_table          boolean,
+  nursing_friendly            boolean,
+  stroller_accessible         boolean,
+  food_allowed                boolean,
+  food_onsite                 boolean,
+  restrooms                   boolean,
+  parking_notes               text,
+  what_to_bring                text[] not null default '{}',
+  quiet_or_sensory_friendly   boolean,
+  typical_crowd_note          text,
+  best_time_note              text
 );
 
 create index idx_places_metro on places (metro_area) where active;
@@ -122,7 +155,9 @@ create table events (
   -- for curated/materialized events, which is what makes them visible to
   -- everyone rather than just one group.
   proposed_by_group      uuid references groups(id) on delete cascade,
-  last_verified_at       timestamptz
+  last_verified_at       timestamptz,
+  is_outdoor             boolean not null default false,
+  what_to_bring          text[] not null default '{}'
 );
 
 create index idx_events_starts_at on events (starts_at);
@@ -146,6 +181,67 @@ create table rsvps (
 
 create index idx_rsvps_user on rsvps (user_id);
 create index idx_group_members_user on group_members (user_id);
+
+-- A durable tip, scoped to a group, attached to either a place or a specific
+-- event (never both — see promote_comment_to_tip()).
+create table place_tips (
+  id             uuid primary key default gen_random_uuid(),
+  place_id       uuid references places(id) on delete cascade,
+  event_id       uuid references events(id) on delete cascade,
+  group_id       uuid not null references groups(id) on delete cascade,
+  user_id        uuid not null references auth.users(id) on delete cascade,
+  body           text not null check (length(trim(body)) > 0 and length(body) <= 500),
+  category       text not null default 'general'
+                   check (category in ('general', 'parking', 'timing', 'facilities', 'cost', 'accessibility')),
+  helpful_count  int not null default 0,
+  created_at     timestamptz not null default now()
+);
+
+create index idx_place_tips_place on place_tips (place_id);
+create index idx_place_tips_event on place_tips (event_id);
+create index idx_place_tips_group on place_tips (group_id);
+
+-- A flat, group-scoped comment thread on an event. Any group a commenter
+-- picks (not necessarily tied to the event's own proposed_by_group) — the
+-- app scopes reads/writes to whichever group is "active" in the UI.
+create table event_comments (
+  id               uuid primary key default gen_random_uuid(),
+  event_id         uuid not null references events(id) on delete cascade,
+  group_id         uuid not null references groups(id) on delete cascade,
+  user_id          uuid not null references auth.users(id) on delete cascade,
+  body             text not null check (length(trim(body)) > 0 and length(body) <= 1000),
+  -- Set by promote_comment_to_tip() when a group member turns this comment
+  -- into a durable place_tips row.
+  promoted_tip_id  uuid references place_tips(id),
+  edited_at        timestamptz,
+  created_at       timestamptz not null default now()
+);
+
+create index idx_event_comments_event on event_comments (event_id, created_at);
+
+-- Post-outing "would you do this again" — one row per person per event.
+create table outing_feedback (
+  event_id     uuid not null references events(id) on delete cascade,
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  would_repeat boolean not null,
+  note         text check (note is null or length(note) <= 300),
+  created_at   timestamptz not null default now(),
+  primary key (event_id, user_id)
+);
+
+-- ---------- Views --------------------------------------------
+
+-- NOTE: this view is a plain (non security_invoker) view owned by the
+-- `postgres` role, which bypasses RLS on `events`/`rsvps` when the view is
+-- queried — verified empirically: it returns EVERY user's cancelled RSVPs,
+-- not just the caller's own, regardless of group membership. The app must
+-- always add an explicit `.eq('user_id', <current user>)` filter when
+-- querying this view; do not rely on it being self-scoping.
+create view my_cancelled_upcoming as
+select e.id as event_id, e.title, e.starts_at, e.venue_name, r.user_id
+from events e
+join rsvps r on r.event_id = e.id
+where e.status = 'cancelled' and e.starts_at >= now();
 
 -- ---------- Helper functions --------------------------------
 
@@ -249,6 +345,57 @@ begin
 end;
 $$;
 
+-- Marks an event cancelled (appending `reason` to its description) and
+-- returns everyone who'd RSVP'd, for notification purposes. Not exposed in
+-- the app UI — a curator/admin tool.
+create or replace function cancel_event(target_event uuid, reason text default null)
+returns table(user_id uuid, display_name text, event_title text, starts_at timestamptz)
+language plpgsql security definer set search_path = public as $$
+begin
+  update public.events
+     set status = 'cancelled',
+         description = case
+           when reason is null then description
+           else coalesce(description,'') || E'\n\nCANCELLED: ' || reason
+         end
+   where id = target_event;
+
+  return query
+    select r.user_id, p.display_name, e.title, e.starts_at
+    from public.rsvps r
+    join public.events e on e.id = r.event_id
+    left join public.profiles p on p.id = r.user_id
+    where r.event_id = target_event;
+end;
+$$;
+
+-- Turns a comment into a durable place_tips row: place-scoped if the
+-- comment's event has a place_id, otherwise event-scoped. Callable by any
+-- member of the comment's group (not just the comment's author) — that's
+-- the point of "promote to tip" being a shared, group-level curation action.
+create or replace function promote_comment_to_tip(comment_id uuid, tip_category text default 'general')
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  c        record;
+  target   uuid;
+  new_tip  uuid;
+begin
+  select * into c from public.event_comments where id = comment_id;
+  if c is null then raise exception 'Comment not found'; end if;
+  if not is_member(c.group_id) then raise exception 'Not a member of this group'; end if;
+
+  select place_id into target from public.events where id = c.event_id;
+
+  insert into public.place_tips (place_id, event_id, group_id, user_id, body, category)
+  values (target, case when target is null then c.event_id else null end,
+          c.group_id, c.user_id, left(c.body, 500), tip_category)
+  returning id into new_tip;
+
+  update public.event_comments set promoted_tip_id = new_tip where id = comment_id;
+  return new_tip;
+end;
+$$;
+
 -- ---------- Row-Level Security ------------------------------
 
 alter table profiles           enable row level security;
@@ -258,6 +405,9 @@ alter table places             enable row level security;
 alter table recurring_programs enable row level security;
 alter table events             enable row level security;
 alter table rsvps              enable row level security;
+alter table event_comments     enable row level security;
+alter table place_tips         enable row level security;
+alter table outing_feedback    enable row level security;
 
 -- profiles: see your own, and anyone you share a group with (to render names/avatars)
 create policy "read self or shared" on profiles for select
@@ -307,6 +457,45 @@ create policy "read own or shared rsvps" on rsvps for select
 create policy "insert own rsvp" on rsvps for insert with check (user_id = auth.uid());
 create policy "update own rsvp" on rsvps for update using (user_id = auth.uid());
 create policy "delete own rsvp" on rsvps for delete using (user_id = auth.uid());
+
+-- event_comments: flat thread, scoped to a group. Anyone can read/write
+-- within a group they belong to; edit/delete stay author-only. There's no
+-- policy requiring group_id to relate to the event's own proposed_by_group —
+-- the app decides which group's thread it's posting/reading.
+create policy "read comments in my groups" on event_comments for select
+  using (is_member(group_id));
+create policy "write own comments" on event_comments for insert
+  with check (user_id = auth.uid() and is_member(group_id));
+create policy "edit own comments" on event_comments for update
+  using (user_id = auth.uid());
+create policy "delete own comments" on event_comments for delete
+  using (user_id = auth.uid());
+
+-- place_tips: same group-scoped read/write shape as comments. Rows are
+-- normally created via promote_comment_to_tip() (SECURITY DEFINER, so it
+-- bypasses this insert policy), but the policy also allows direct inserts
+-- from the app's "Add a tip" form.
+create policy "read group tips" on place_tips for select
+  using (is_member(group_id));
+create policy "write own tips" on place_tips for insert
+  with check (user_id = auth.uid() and is_member(group_id));
+create policy "edit own tips" on place_tips for update
+  using (user_id = auth.uid());
+create policy "delete own tips" on place_tips for delete
+  using (user_id = auth.uid());
+
+-- outing_feedback: same shared-visibility shape as rsvps.
+create policy "read shared feedback" on outing_feedback for select
+  using (user_id = auth.uid() or shares_group_with(user_id));
+create policy "write own feedback" on outing_feedback for insert
+  with check (user_id = auth.uid());
+create policy "update own feedback" on outing_feedback for update
+  using (user_id = auth.uid());
+
+-- ---------- Realtime ------------------------------------------
+
+alter publication supabase_realtime add table rsvps;
+alter publication supabase_realtime add table event_comments;
 
 -- ---------- Auto-create a profile row on signup ------------
 

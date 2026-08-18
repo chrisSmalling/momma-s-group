@@ -8,11 +8,13 @@ export default function EventCardShell({
   eventId,
   currentStatus,
   disabled = false,
+  duringNap = false,
   children,
 }: {
   eventId: string;
   currentStatus: RsvpStatus | null;
   disabled?: boolean;
+  duringNap?: boolean;
   children: ReactNode;
 }) {
   const [optimisticStatus, setOptimisticStatus] = useOptimistic(currentStatus);
@@ -31,14 +33,21 @@ export default function EventCardShell({
     });
   }
 
-  const cardClass = disabled
-    ? "scroll-mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4"
+  const baseClass = disabled
+    ? "border-zinc-200 bg-zinc-50"
     : optimisticStatus === "going"
-      ? "scroll-mt-4 rounded-2xl border border-rose-200 bg-rose-50/60 p-4 transition-colors"
-      : "scroll-mt-4 rounded-2xl border border-zinc-200 bg-white p-4 transition-colors";
+      ? "border-rose-200 bg-rose-50/60"
+      : "border-zinc-200 bg-white";
+  const cardClass = `scroll-mt-4 rounded-2xl border p-4 transition-colors ${baseClass} ${duringNap ? "opacity-70" : ""}`;
 
   return (
     <div id={`event-${eventId}`} className={cardClass}>
+      {duringNap && (
+        <p className="mb-2 text-xs font-medium text-zinc-500">
+          🌙 During nap window
+        </p>
+      )}
+
       {children}
 
       {disabled ? (

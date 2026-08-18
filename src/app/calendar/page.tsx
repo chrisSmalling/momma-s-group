@@ -1,11 +1,19 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { monthParam } from "@/lib/date";
+import { overlapsNapWindow } from "@/lib/nap";
 import MonthCalendar from "@/components/MonthCalendar";
 import GroupSwitcher from "@/components/GroupSwitcher";
 import EventCard from "@/components/EventCard";
 import Nav from "@/components/Nav";
-import type { Event, RsvpStatus } from "@/types";
+import type {
+  CancelledUpcoming,
+  Event,
+  EventComment,
+  Place,
+  PlaceTip,
+  RsvpStatus,
+} from "@/types";
 
 function parseMonthParam(month: string | undefined): Date {
   if (month && /^\d{4}-\d{2}$/.test(month)) {
@@ -22,6 +30,9 @@ type AttendeeDisplay = {
   display_name: string;
   avatar_color: string;
 };
+
+const PLACE_CONTEXT_COLUMNS =
+  "id, is_enclosed, has_changing_table, nursing_friendly, stroller_accessible, food_onsite, quiet_or_sensory_friendly, parking_notes, best_time_note, typical_crowd_note, what_to_bring";
 
 export default async function CalendarPage(props: PageProps<"/calendar">) {
   const params = await props.searchParams;
@@ -40,6 +51,13 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
   if (!user) {
     redirect("/login");
   }
+
+  const { data: myProfile } = await supabase
+    .from("profiles")
+    .select("display_name, nap_start, nap_end")
+    .eq("id", user.id)
+    .maybeSingle();
+  const currentUserName = myProfile?.display_name ?? "You";
 
   // Groups this user belongs to (RLS: is_member(id) or created_by = auth.uid()).
   const { data: groups } = await supabase
@@ -76,14 +94,11 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
     .lt("starts_at", monthEnd.toISOString())
     .order("starts_at", { ascending: true });
   const eventList = (events ?? []) as Event[];
+  const eventIds = eventList.map((e) => e.id);
 
   // RSVPs for those events: RLS already limits rows to mine + anyone I share
   // a group with. Filter further to the active group's members so switching
   // groups scopes "who's going" correctly, per the README's documented pattern.
-  const eventIds = eventList.map((e) => e.id);
-  const rsvpsByEvent: Record<string, AttendeeDisplay[]> = {};
-  const myRsvpByEvent: Record<string, RsvpStatus> = {};
-
   const { data: rsvps } = eventIds.length
     ? await supabase
         .from("rsvps")
@@ -92,23 +107,73 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
     : { data: [] };
   const rsvpRows = rsvps ?? [];
 
+  const myRsvpByEvent: Record<string, RsvpStatus> = {};
   for (const r of rsvpRows) {
     if (r.user_id === user.id) {
       myRsvpByEvent[r.event_id] = r.status as RsvpStatus;
     }
   }
-
-  const scopedRows = rsvpRows.filter((r) =>
+  const scopedRsvpRows = rsvpRows.filter((r) =>
     activeGroupMemberIds.includes(r.user_id),
   );
 
-  // Also need the proposer's profile for any user-proposed meetups this
-  // month, so both queries below share one profiles fetch.
+  // Comments + tips for this month's events, scoped to the active group.
+  const { data: comments } =
+    activeGroupId && eventIds.length
+      ? await supabase
+          .from("event_comments")
+          .select("*")
+          .eq("group_id", activeGroupId)
+          .in("event_id", eventIds)
+          .order("created_at", { ascending: true })
+      : { data: [] };
+  const commentRows = (comments ?? []) as EventComment[];
+
+  const placeIds = [
+    ...new Set(eventList.map((e) => e.place_id).filter((id): id is string => Boolean(id))),
+  ];
+  const eventIdsWithoutPlace = eventList
+    .filter((e) => !e.place_id)
+    .map((e) => e.id);
+
+  const [{ data: tipsByPlace }, { data: tipsByEvent }] = await Promise.all([
+    activeGroupId && placeIds.length
+      ? supabase
+          .from("place_tips")
+          .select("*")
+          .eq("group_id", activeGroupId)
+          .in("place_id", placeIds)
+      : Promise.resolve({ data: [] as PlaceTip[] }),
+    activeGroupId && eventIdsWithoutPlace.length
+      ? supabase
+          .from("place_tips")
+          .select("*")
+          .eq("group_id", activeGroupId)
+          .in("event_id", eventIdsWithoutPlace)
+      : Promise.resolve({ data: [] as PlaceTip[] }),
+  ]);
+  const tipRows = [...(tipsByPlace ?? []), ...(tipsByEvent ?? [])] as PlaceTip[];
+
+  // Places linked to this month's events, for venue-practicality context.
+  const { data: places } = placeIds.length
+    ? await supabase.from("places").select(PLACE_CONTEXT_COLUMNS).in("id", placeIds)
+    : { data: [] };
+  const placeById = new Map((places ?? []).map((p) => [p.id, p as Partial<Place>]));
+
+  // Every profile we might need to render a name for: active-group roster
+  // (so LiveAttendees can resolve new realtime RSVPs), proposers, commenters,
+  // tip authors.
   const proposerIds = eventList
     .filter((e) => e.proposed_by_group && e.added_by)
     .map((e) => e.added_by as string);
   const profileIds = [
-    ...new Set([...scopedRows.map((r) => r.user_id), ...proposerIds]),
+    ...new Set([
+      ...activeGroupMemberIds,
+      ...scopedRsvpRows.map((r) => r.user_id),
+      ...proposerIds,
+      ...commentRows.map((c) => c.user_id),
+      ...tipRows.map((t) => t.user_id),
+    ]),
   ];
 
   const { data: profiles } = profileIds.length
@@ -118,8 +183,18 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
         .in("id", profileIds)
     : { data: [] };
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const roster = Object.fromEntries(
+    activeGroupMemberIds.map((id) => [
+      id,
+      {
+        display_name: profileById.get(id)?.display_name ?? "Someone",
+        avatar_color: profileById.get(id)?.avatar_color ?? "#C0356E",
+      },
+    ]),
+  );
 
-  for (const r of scopedRows) {
+  const rsvpsByEvent: Record<string, AttendeeDisplay[]> = {};
+  for (const r of scopedRsvpRows) {
     const profile = profileById.get(r.user_id);
     const list = rsvpsByEvent[r.event_id] ?? [];
     list.push({
@@ -131,6 +206,37 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
     rsvpsByEvent[r.event_id] = list;
   }
 
+  const commentsByEvent: Record<string, (EventComment & { display_name: string })[]> = {};
+  for (const c of commentRows) {
+    const list = commentsByEvent[c.event_id] ?? [];
+    list.push({ ...c, display_name: profileById.get(c.user_id)?.display_name ?? "Someone" });
+    commentsByEvent[c.event_id] = list;
+  }
+
+  const tipsByPlaceId: Record<string, (PlaceTip & { display_name: string })[]> = {};
+  const tipsByEventId: Record<string, (PlaceTip & { display_name: string })[]> = {};
+  for (const t of tipRows) {
+    const display = { ...t, display_name: profileById.get(t.user_id)?.display_name ?? "Someone" };
+    if (t.place_id) {
+      const list = tipsByPlaceId[t.place_id] ?? [];
+      list.push(display);
+      tipsByPlaceId[t.place_id] = list;
+    } else if (t.event_id) {
+      const list = tipsByEventId[t.event_id] ?? [];
+      list.push(display);
+      tipsByEventId[t.event_id] = list;
+    }
+  }
+
+  // NOTE: my_cancelled_upcoming is not self-scoping (see db/schema.sql) —
+  // the .eq("user_id", ...) below is load-bearing, not defensive belt-and-suspenders.
+  const { data: cancelledUpcoming } = await supabase
+    .from("my_cancelled_upcoming")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("starts_at", { ascending: true });
+  const cancelledUpcomingList = (cancelledUpcoming ?? []) as CancelledUpcoming[];
+
   const prevMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1);
   const nextMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
   const groupQuery = activeGroupId ? `&group=${activeGroupId}` : "";
@@ -140,6 +246,33 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
     <div className="flex flex-1 flex-col items-center px-4 py-10">
       <div className="w-full max-w-2xl">
         <Nav email={user.email ?? ""} />
+
+        {cancelledUpcomingList.length > 0 && (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4">
+            <p className="mb-2 text-sm font-semibold text-red-800">
+              {cancelledUpcomingList.length === 1
+                ? "An event you're going to was cancelled"
+                : `${cancelledUpcomingList.length} events you're going to were cancelled`}
+            </p>
+            <ul className="flex flex-col gap-1">
+              {cancelledUpcomingList.map((c) => (
+                <li key={c.event_id} className="text-sm text-red-700">
+                  <a
+                    href={`/calendar?month=${monthParam(new Date(c.starts_at))}${groupQuery}#event-${c.event_id}`}
+                    className="underline"
+                  >
+                    {c.title}
+                  </a>{" "}
+                  —{" "}
+                  {new Date(c.starts_at).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <GroupSwitcher
           groups={groupList}
@@ -171,16 +304,39 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
                   }
                 : null;
 
+            const place = event.place_id
+              ? (placeById.get(event.place_id) ?? null)
+              : null;
+
+            const duringNap = overlapsNapWindow(
+              event.starts_at,
+              event.ends_at,
+              myProfile?.nap_start ?? null,
+              myProfile?.nap_end ?? null,
+            );
+
+            const tips = event.place_id
+              ? (tipsByPlaceId[event.place_id] ?? [])
+              : (tipsByEventId[event.id] ?? []);
+
             return (
               <EventCard
                 key={event.id}
                 event={event}
                 currentUserId={user.id}
+                currentUserName={currentUserName}
                 currentStatus={myRsvpByEvent[event.id] ?? null}
                 attendees={rsvpsByEvent[event.id] ?? []}
                 hasActiveGroup={Boolean(activeGroupId)}
+                activeGroupId={activeGroupId}
                 activeGroupName={activeGroupName}
+                activeGroupMemberIds={activeGroupMemberIds}
+                roster={roster}
                 proposedBy={proposedBy}
+                place={place as EventCardPlace | null}
+                duringNap={duringNap}
+                comments={commentsByEvent[event.id] ?? []}
+                tips={tips}
               />
             );
           })}
@@ -189,3 +345,16 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
     </div>
   );
 }
+
+type EventCardPlace = {
+  is_enclosed: boolean | null;
+  has_changing_table: boolean | null;
+  nursing_friendly: boolean | null;
+  stroller_accessible: boolean | null;
+  food_onsite: boolean | null;
+  quiet_or_sensory_friendly: boolean | null;
+  parking_notes: string | null;
+  best_time_note: string | null;
+  typical_crowd_note: string | null;
+  what_to_bring: string[];
+};
