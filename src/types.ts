@@ -12,6 +12,19 @@ export interface Profile {
   home_lng: number | null;
 }
 
+// A geographic market — e.g. Wesley Chapel + a 45-minute drive radius.
+// events/places/recurring_programs.metro_area references markets.id.
+export interface Market {
+  id: string;
+  name: string;
+  center_lat: number;
+  center_lng: number;
+  radius_minutes: number;
+  timezone: string;
+  active: boolean;
+  created_at: string;
+}
+
 export interface Group {
   id: string;
   name: string;
@@ -145,6 +158,8 @@ export interface Rsvp {
   status: RsvpStatus;
   note: string | null;
   created_at: string;
+  // Defaults on insert only — no trigger keeps this current on update.
+  updated_at: string;
 }
 
 // A window of time a user has marked as free, scoped to a group.
