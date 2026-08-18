@@ -1,5 +1,5 @@
 -- ============================================================
--- Momma's Meetup — Postgres schema for Supabase (v6)
+-- Momma's Meetup — Postgres schema for Supabase (v7)
 -- Run this in the Supabase SQL Editor.
 -- Auth users are managed by Supabase in auth.users; we reference them.
 --
@@ -54,6 +54,14 @@
 -- ready-to-apply migration (supabase/migrations/) rather than a mirror of
 -- confirmed live state, unlike v1-v5 above. Confirm before treating v6 as
 -- live fact.
+--
+-- v7 revokes PUBLIC/anon/authenticated EXECUTE on materialize_programs()
+-- and grants it to service_role only — it was callable through the public
+-- Data API despite being intended for the protected cron route alone.
+-- Privilege change only, function body untouched. src/app/api/cron/
+-- materialize-programs/route.ts switches from the anon key to
+-- SUPABASE_SERVICE_ROLE_KEY accordingly. Also NOT yet applied to the live
+-- database this session — see the v6 note above, same caveat applies.
 --
 -- This file mirrors the live schema; it is not re-run against the existing
 -- project.
@@ -493,6 +501,24 @@ begin
   return made;
 end;
 $$;
+
+-- Security hardening (v7): Postgres grants EXECUTE on a new function to
+-- PUBLIC by default unless explicitly revoked, and nothing above revoked
+-- it — so materialize_programs() was callable by anon/authenticated
+-- through the public Data API (PostgREST's /rpc/materialize_programs),
+-- not just the protected cron route (src/app/api/cron/materialize-
+-- programs). No data leak (returns only an occurrence count), but anyone
+-- with the public anon key could trigger repeated writes. Privilege
+-- change only — the function body above is untouched.
+revoke execute on function materialize_programs(integer) from public;
+revoke execute on function materialize_programs(integer) from anon;
+revoke execute on function materialize_programs(integer) from authenticated;
+grant  execute on function materialize_programs(integer) to service_role;
+
+-- NOTE (flagged, not fixed): cancel_event() below has the identical
+-- shape — SECURITY DEFINER, no internal auth check, its own comment says
+-- "not exposed in the app UI," and it returns RSVP'd users' display_name/
+-- user_id via its return table. Same class of issue, out of v7's scope.
 
 -- Marks an event cancelled (appending `reason` to its description) and
 -- returns everyone who'd RSVP'd, for notification purposes. Not exposed in

@@ -11,11 +11,14 @@ import { createClient } from "@supabase/supabase-js";
 // isn't touched.
 //
 // No dedicated user session here (a cron trigger, not a browser request),
-// so this uses a plain supabase-js client with the anon key rather than the
-// cookie-based src/lib/supabase/server.ts client — materialize_programs()
-// is SECURITY DEFINER and doesn't gate on auth.uid(), so the anon key is
-// sufficient. Protected by CRON_SECRET so the endpoint can't be triggered
-// by anyone who finds the URL.
+// so this uses a plain supabase-js client rather than the cookie-based
+// src/lib/supabase/server.ts client. Uses SUPABASE_SERVICE_ROLE_KEY, not
+// the anon key: as of v7, EXECUTE on materialize_programs() is revoked
+// from anon/authenticated and granted to service_role only, so this route
+// is now the only caller that can invoke it at all (the anon key would
+// get a permission-denied error). Protected by CRON_SECRET on top of
+// that, so the endpoint itself can't be triggered by anyone who finds
+// the URL.
 const DAYS_AHEAD = 60;
 
 export async function GET(request: Request) {
@@ -26,7 +29,7 @@ export async function GET(request: Request) {
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
   const { data, error } = await supabase.rpc("materialize_programs", {
