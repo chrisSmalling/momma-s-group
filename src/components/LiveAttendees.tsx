@@ -87,6 +87,18 @@ export default function LiveAttendees({
 
   const going = attendees.filter((a) => a.status === "going");
   const maybe = attendees.filter((a) => a.status === "maybe");
+  const notGoing = attendees.filter((a) => a.status === "not_going");
+  const outSick = attendees.filter((a) => a.status === "out_sick");
+
+  // Declines are a quiet count, never named, never compared against group
+  // size — we only ever show explicit responses, never who's silent.
+  const declineParts: string[] = [];
+  if (notGoing.length > 0) {
+    declineParts.push(`${notGoing.length} not going`);
+  }
+  if (outSick.length > 0) {
+    declineParts.push(`${outSick.length} out sick`);
+  }
 
   return (
     <div>
@@ -106,6 +118,11 @@ export default function LiveAttendees({
                 : p.display_name,
             )
             .join(", ")}
+        </p>
+      )}
+      {declineParts.length > 0 && (
+        <p className="mt-1.5 text-xs text-zinc-400">
+          {declineParts.join(" · ")}
         </p>
       )}
     </div>

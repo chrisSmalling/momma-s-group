@@ -87,6 +87,7 @@ export default function EventCard({
   currentUserId,
   currentUserName,
   currentStatus,
+  currentNote,
   attendees,
   hasActiveGroup,
   activeGroupId,
@@ -103,6 +104,7 @@ export default function EventCard({
   currentUserId: string;
   currentUserName: string;
   currentStatus: RsvpStatus | null;
+  currentNote: string | null;
   attendees: Attendee[];
   hasActiveGroup: boolean;
   activeGroupId: string | null;
@@ -123,6 +125,7 @@ export default function EventCard({
     <EventCardShell
       eventId={event.id}
       currentStatus={currentStatus}
+      currentNote={currentNote}
       disabled={cancelled}
       duringNap={duringNap}
     >

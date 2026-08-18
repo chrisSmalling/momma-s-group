@@ -4,20 +4,39 @@ import { useOptimistic, useState, useTransition, type ReactNode } from "react";
 import { rsvp } from "@/app/calendar/actions";
 import type { RsvpStatus } from "@/types";
 
+const STATUS_LABELS: Record<RsvpStatus, { label: string; activeLabel: string }> = {
+  going: { label: "Going", activeLabel: "✓ Going" },
+  maybe: { label: "Maybe", activeLabel: "✓ Maybe" },
+  not_going: { label: "Not this time", activeLabel: "✓ Not this time" },
+  out_sick: { label: "We're out — sick", activeLabel: "✓ We're out — sick" },
+};
+
+function buttonClass(active: boolean, muted: boolean) {
+  if (active) {
+    return muted
+      ? "rounded-full bg-zinc-500 px-4 py-1.5 text-sm font-medium text-white shadow-sm disabled:opacity-60"
+      : "rounded-full bg-rose-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm disabled:opacity-60";
+  }
+  return "rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm text-zinc-700 hover:border-zinc-400 disabled:opacity-60";
+}
+
 export default function EventCardShell({
   eventId,
   currentStatus,
+  currentNote,
   disabled = false,
   duringNap = false,
   children,
 }: {
   eventId: string;
   currentStatus: RsvpStatus | null;
+  currentNote?: string | null;
   disabled?: boolean;
   duringNap?: boolean;
   children: ReactNode;
 }) {
   const [optimisticStatus, setOptimisticStatus] = useOptimistic(currentStatus);
+  const [note, setNote] = useState(currentNote ?? "");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +45,22 @@ export default function EventCardShell({
     setError(null);
     startTransition(async () => {
       setOptimisticStatus(next);
-      const result = await rsvp(eventId, next);
+      const result = await rsvp(eventId, next, next ? note : null);
+      if (result?.error) {
+        setError(result.error);
+      }
+    });
+  }
+
+  // Editing the note shouldn't toggle the RSVP off — save it separately
+  // when the field loses focus, only if it actually changed.
+  function handleNoteBlur() {
+    if (!optimisticStatus) return;
+    const trimmed = note.trim();
+    if (trimmed === (currentNote ?? "").trim()) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await rsvp(eventId, optimisticStatus, trimmed || null);
       if (result?.error) {
         setError(result.error);
       }
@@ -54,32 +88,40 @@ export default function EventCardShell({
         <p className="mt-4 text-sm text-zinc-400">This meetup was cancelled.</p>
       ) : (
         <>
-          <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => handleClick("going")}
-              className={
-                optimisticStatus === "going"
-                  ? "rounded-full bg-rose-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm disabled:opacity-60"
-                  : "rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm text-zinc-700 hover:border-zinc-400 disabled:opacity-60"
-              }
-            >
-              {optimisticStatus === "going" ? "✓ Going" : "Going"}
-            </button>
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => handleClick("maybe")}
-              className={
-                optimisticStatus === "maybe"
-                  ? "rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white shadow-sm disabled:opacity-60"
-                  : "rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm text-zinc-700 hover:border-zinc-400 disabled:opacity-60"
-              }
-            >
-              {optimisticStatus === "maybe" ? "✓ Maybe" : "Maybe"}
-            </button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {(["going", "maybe", "not_going", "out_sick"] as const).map(
+              (status) => {
+                const active = optimisticStatus === status;
+                const muted = status === "not_going" || status === "out_sick";
+                return (
+                  <button
+                    key={status}
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => handleClick(status)}
+                    className={buttonClass(active, muted)}
+                  >
+                    {active
+                      ? STATUS_LABELS[status].activeLabel
+                      : STATUS_LABELS[status].label}
+                  </button>
+                );
+              },
+            )}
           </div>
+
+          {optimisticStatus && (
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value.slice(0, 200))}
+              onBlur={handleNoteBlur}
+              maxLength={200}
+              placeholder="Add a short note (optional)"
+              className="mt-2 w-full rounded-md border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-700 outline-none focus:border-zinc-400"
+            />
+          )}
+
           {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
         </>
       )}

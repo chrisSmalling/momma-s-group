@@ -24,6 +24,9 @@ export interface GroupMember {
   group_id: string;
   user_id: string;
   joined_at: string;
+  // Allergies/medical notes, e.g. "peanut allergy, we bring our own snacks".
+  // Optional, editable by the member, visible to their group.
+  things_to_know: string | null;
 }
 
 // e.g. { mon: "10:00-21:00", tue: "10:00-21:00", ... } — keys are lowercase
@@ -134,12 +137,24 @@ export interface Event {
   what_to_bring: string[];
 }
 
-export type RsvpStatus = "going" | "maybe";
+export type RsvpStatus = "going" | "maybe" | "not_going" | "out_sick";
 
 export interface Rsvp {
   event_id: string;
   user_id: string;
   status: RsvpStatus;
+  note: string | null;
+  created_at: string;
+}
+
+// A window of time a user has marked as free, scoped to a group.
+export interface Availability {
+  id: string;
+  user_id: string;
+  group_id: string;
+  starts_at: string;
+  ends_at: string;
+  note: string | null;
   created_at: string;
 }
 

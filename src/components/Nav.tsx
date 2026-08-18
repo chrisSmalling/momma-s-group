@@ -14,6 +14,9 @@ export default function Nav({ email }: { email: string }) {
         <Link href="/places" className="text-zinc-700 hover:text-zinc-900">
           Places
         </Link>
+        <Link href="/free" className="text-zinc-700 hover:text-zinc-900">
+          We&apos;re Free
+        </Link>
         <Link href="/settings" className="text-zinc-700 hover:text-zinc-900">
           Settings
         </Link>

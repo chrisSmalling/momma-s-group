@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Nav from "@/components/Nav";
-import { createGroup, joinGroup } from "./actions";
+import { createGroup, joinGroup, updateThingsToKnow } from "./actions";
 
 type GroupMemberDisplay = {
   user_id: string;
   display_name: string;
   avatar_color: string;
+  things_to_know: string | null;
 };
 
 export default async function GroupsPage(props: PageProps<"/groups">) {
@@ -34,7 +35,7 @@ export default async function GroupsPage(props: PageProps<"/groups">) {
   if (groupIds.length > 0) {
     const { data: members } = await supabase
       .from("group_members")
-      .select("group_id, user_id")
+      .select("group_id, user_id, things_to_know")
       .in("group_id", groupIds);
 
     const memberRows = members ?? [];
@@ -56,6 +57,7 @@ export default async function GroupsPage(props: PageProps<"/groups">) {
         user_id: member.user_id,
         display_name: profile?.display_name ?? "Unknown",
         avatar_color: profile?.avatar_color ?? "#C0356E",
+        things_to_know: member.things_to_know ?? null,
       });
       membersByGroup[member.group_id] = list;
     }
@@ -114,33 +116,70 @@ export default async function GroupsPage(props: PageProps<"/groups">) {
               You&apos;re not in any groups yet.
             </p>
           )}
-          {groupList.map((group) => (
-            <div key={group.id} className="rounded-md border border-zinc-200 p-4">
-              <div className="mb-2 flex items-baseline justify-between gap-2">
-                <h2 className="text-lg font-semibold">{group.name}</h2>
-                <span className="font-mono text-xs text-zinc-500">
-                  invite code: {group.invite_code}
-                </span>
-              </div>
-              <ul className="flex flex-col gap-1">
-                {(membersByGroup[group.id] ?? []).map((member) => (
-                  <li
-                    key={member.user_id}
-                    className="flex items-center gap-2 text-sm text-zinc-700"
+          {groupList.map((group) => {
+            const members = membersByGroup[group.id] ?? [];
+            const me = members.find((m) => m.user_id === user.id);
+
+            return (
+              <div key={group.id} className="rounded-md border border-zinc-200 p-4">
+                <div className="mb-2 flex items-baseline justify-between gap-2">
+                  <h2 className="text-lg font-semibold">{group.name}</h2>
+                  <span className="font-mono text-xs text-zinc-500">
+                    invite code: {group.invite_code}
+                  </span>
+                </div>
+                <ul className="flex flex-col gap-2">
+                  {members.map((member) => (
+                    <li key={member.user_id} className="text-sm text-zinc-700">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-block h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: member.avatar_color }}
+                        />
+                        {member.display_name}
+                        {member.user_id === user.id && (
+                          <span className="text-zinc-400">(you)</span>
+                        )}
+                      </div>
+                      {member.things_to_know && (
+                        <p className="ml-4 mt-0.5 text-xs text-zinc-500">
+                          {member.things_to_know}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+
+                <details className="mt-3 border-t border-zinc-100 pt-3">
+                  <summary className="cursor-pointer text-xs font-semibold text-zinc-500">
+                    {me?.things_to_know
+                      ? "Edit your notes for this group"
+                      : "Add notes for this group (allergies, medical, optional)"}
+                  </summary>
+                  <form
+                    action={updateThingsToKnow}
+                    className="mt-2 flex flex-col gap-2"
                   >
-                    <span
-                      className="inline-block h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: member.avatar_color }}
+                    <input type="hidden" name="group_id" value={group.id} />
+                    <textarea
+                      name="things_to_know"
+                      maxLength={300}
+                      rows={2}
+                      defaultValue={me?.things_to_know ?? ""}
+                      placeholder="e.g. peanut allergy, we bring our own snacks"
+                      className="rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
                     />
-                    {member.display_name}
-                    {member.user_id === user.id && (
-                      <span className="text-zinc-400">(you)</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+                    <button
+                      type="submit"
+                      className="self-start rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white"
+                    >
+                      Save
+                    </button>
+                  </form>
+                </details>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

@@ -102,15 +102,17 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
   const { data: rsvps } = eventIds.length
     ? await supabase
         .from("rsvps")
-        .select("event_id, user_id, status")
+        .select("event_id, user_id, status, note")
         .in("event_id", eventIds)
     : { data: [] };
   const rsvpRows = rsvps ?? [];
 
   const myRsvpByEvent: Record<string, RsvpStatus> = {};
+  const myNoteByEvent: Record<string, string | null> = {};
   for (const r of rsvpRows) {
     if (r.user_id === user.id) {
       myRsvpByEvent[r.event_id] = r.status as RsvpStatus;
+      myNoteByEvent[r.event_id] = r.note ?? null;
     }
   }
   const scopedRsvpRows = rsvpRows.filter((r) =>
@@ -326,6 +328,7 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
                 currentUserId={user.id}
                 currentUserName={currentUserName}
                 currentStatus={myRsvpByEvent[event.id] ?? null}
+                currentNote={myNoteByEvent[event.id] ?? null}
                 attendees={rsvpsByEvent[event.id] ?? []}
                 hasActiveGroup={Boolean(activeGroupId)}
                 activeGroupId={activeGroupId}

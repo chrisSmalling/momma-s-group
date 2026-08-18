@@ -41,6 +41,40 @@ export async function createGroup(formData: FormData) {
   revalidatePath("/groups");
 }
 
+export async function updateThingsToKnow(formData: FormData) {
+  const groupId = String(formData.get("group_id") ?? "");
+  const thingsToKnow = String(formData.get("things_to_know") ?? "").trim();
+
+  if (!groupId) {
+    redirect("/groups?error=Missing%20group");
+  }
+  if (thingsToKnow.length > 300) {
+    redirect(
+      `/groups?error=${encodeURIComponent("Things to know is too long (300 characters max)")}`,
+    );
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  const { error } = await supabase
+    .from("group_members")
+    .update({ things_to_know: thingsToKnow || null })
+    .eq("group_id", groupId)
+    .eq("user_id", user.id);
+
+  if (error) {
+    redirect(`/groups?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath("/groups");
+}
+
 export async function joinGroup(formData: FormData) {
   const code = String(formData.get("code") ?? "").trim().toLowerCase();
   if (!code) {
