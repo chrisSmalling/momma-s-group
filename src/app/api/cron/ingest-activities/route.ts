@@ -11,10 +11,14 @@ import type { SourceAdapter } from "@/lib/ingestion/types";
 // a new vendor by writing a new adapter class + one case here, not by
 // special-casing call sites throughout the pipeline.
 //
-// Same auth shape as materialize-programs: CRON_SECRET bearer token, and
-// SUPABASE_SERVICE_ROLE_KEY for the actual writes — activity_sources/
-// activity_source_records have zero RLS policies for anon/authenticated
-// by design (PR #16), so only the service role can touch them at all.
+// Same auth shape as materialize-programs (CRON_SECRET bearer token) but
+// SUPABASE_SECRET_KEY — Supabase's modern secret API key, not the legacy
+// SUPABASE_SERVICE_ROLE_KEY JWT — for the actual writes — activity_sources/
+// activity_source_records have zero RLS policies for anon/authenticated by
+// design (PR #16), so only this key can touch them at all. NOTE:
+// materialize-programs/route.ts (already merged, PR #17) still reads the
+// legacy SUPABASE_SERVICE_ROLE_KEY name — flagged as a likely-broken
+// production cron, not fixed here, out of this PR's scope.
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -23,7 +27,7 @@ export async function GET(request: Request) {
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    process.env.SUPABASE_SECRET_KEY!,
   );
 
   const { data: sources, error: sourcesError } = await supabase
