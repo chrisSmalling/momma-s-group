@@ -3,6 +3,9 @@ import LiveAttendees from "@/components/LiveAttendees";
 import PracticalityIcons from "@/components/PracticalityIcons";
 import EventComments from "@/components/EventComments";
 import TipsSection from "@/components/TipsSection";
+import IndoorOutdoorTag from "@/components/IndoorOutdoorTag";
+import AgeFitBadge from "@/components/AgeFitBadge";
+import { isGoodAgeFit } from "@/lib/ageFit";
 import type { Event, Place, PlaceTip, RsvpStatus, EventComment } from "@/types";
 
 type Attendee = {
@@ -99,6 +102,7 @@ export default function EventCard({
   duringNap,
   comments,
   tips,
+  childAgeMonths,
 }: {
   event: Event;
   currentUserId: string;
@@ -116,10 +120,14 @@ export default function EventCard({
   duringNap: boolean;
   comments: CommentDisplay[];
   tips: TipDisplay[];
+  // Viewer's profiles.child_age_months, when set — drives the "Good fit"
+  // badge. Omit when unknown so nothing renders (see isGoodAgeFit).
+  childAgeMonths?: number | null;
 }) {
   const { weekday, day } = dateBadgeParts(event);
   const cancelled = event.status === "cancelled";
   const bring = event.what_to_bring.length > 0 ? event.what_to_bring : (place?.what_to_bring ?? []);
+  const goodAgeFit = isGoodAgeFit(childAgeMonths, event.age_min_months, event.age_max_months);
 
   return (
     <EventCardShell
@@ -158,11 +166,19 @@ export default function EventCard({
               {event.venue_name}
             </p>
           )}
-          {event.age_tags.length > 0 && (
-            <span className="mt-1.5 inline-block rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-600">
-              {event.age_tags.join(" · ")}
-            </span>
+          {(event.age_tags.length > 0 || goodAgeFit) && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {event.age_tags.length > 0 && (
+                <span className="inline-block rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-600">
+                  {event.age_tags.join(" · ")}
+                </span>
+              )}
+              {goodAgeFit && <AgeFitBadge />}
+            </div>
           )}
+          <div className="mt-1.5">
+            <IndoorOutdoorTag isOutdoor={event.is_outdoor} />
+          </div>
           {event.description && (
             <p className="mt-1.5 line-clamp-2 text-xs text-zinc-400">
               {event.description}

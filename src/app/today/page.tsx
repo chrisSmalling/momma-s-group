@@ -54,7 +54,7 @@ export default async function TodayPage(props: PageProps<"/today">) {
 
   const { data: myProfile } = await supabase
     .from("profiles")
-    .select("display_name, nap_start, nap_end, home_lat, home_lng")
+    .select("display_name, nap_start, nap_end, home_lat, home_lng, child_age_months")
     .eq("id", user.id)
     .maybeSingle();
   const currentUserName = myProfile?.display_name ?? "You";
@@ -395,6 +395,7 @@ export default async function TodayPage(props: PageProps<"/today">) {
                     duringNap={duringNap}
                     comments={commentsByEvent[event.id] ?? []}
                     tips={tips}
+                    childAgeMonths={myProfile?.child_age_months ?? null}
                   />
                 );
               })}
@@ -428,6 +429,7 @@ export default async function TodayPage(props: PageProps<"/today">) {
                         }
                       : undefined
                   }
+                  childAgeMonths={myProfile?.child_age_months ?? null}
                 />
               ))}
             </div>
