@@ -1,5 +1,5 @@
 -- ============================================================
--- Momma's Meetup — Postgres schema for Supabase (v4)
+-- Momma's Meetup — Postgres schema for Supabase (v5)
 -- Run this in the Supabase SQL Editor.
 -- Auth users are managed by Supabase in auth.users; we reference them.
 --
@@ -28,8 +28,20 @@
 -- notes, member-editable, group-visible); and `availability` (a user's free
 -- windows, scoped to a group, realtime-enabled) paired with who_is_free(),
 -- which computes the caller's own windows, overlapping groupmates, and
--- events that fit. The availability table's columns/RLS and who_is_free()'s
--- signature/return shape were confirmed against the live database.
+-- events that fit.
+--
+-- v5 adds: `markets` (curated geographic markets — initially just
+-- 'tampa_bay' / "Wesley Chapel + 45 min"), with events/places/
+-- recurring_programs.metro_area now FK'd to it; distance_km(), a plain
+-- Haversine great-circle-distance helper (NOT a real drive time — no
+-- routing/traffic data is available to a SQL function; the app must compute
+-- this per-viewer from profiles.home_lat/home_lng and label it as an
+-- approximate distance); places/recurring_programs RLS now also requires
+-- the row's market to be active (events' RLS does not — confirmed
+-- asymmetry, not changed here); and rsvps.updated_at (present live, but no
+-- trigger keeps it current — defaults on insert only). Everything in this
+-- v5 section was read directly from the live database via the Supabase MCP
+-- connection, not guessed.
 --
 -- This file mirrors the live schema; it is not re-run against the existing
 -- project.
@@ -67,6 +79,21 @@ create table group_members (
   primary key (group_id, user_id)
 );
 
+-- A geographic market — initially just Wesley Chapel + a 45-minute drive
+-- radius. events/places/recurring_programs.metro_area FK to this. Curated,
+-- no app-side writes (same shape as places/recurring_programs: read-only
+-- reference data, admin-managed).
+create table markets (
+  id              text primary key,
+  name            text not null,
+  center_lat      double precision not null,
+  center_lng      double precision not null,
+  radius_minutes  int not null default 45,
+  timezone        text not null default 'America/New_York',
+  active          boolean not null default true,
+  created_at      timestamptz not null default now()
+);
+
 -- A venue with open hours — nothing scheduled, nothing to RSVP to. Curated
 -- (fed in by hand or a scraper), not user-generated.
 create table places (
@@ -75,7 +102,7 @@ create table places (
   address                     text,
   lat                         double precision,
   lng                         double precision,
-  metro_area                  text not null default 'tampa_bay',
+  metro_area                  text not null default 'tampa_bay' references markets(id),
   hours                       jsonb,                     -- e.g. {"mon": "10:00-21:00", ...}
   description                 text,
   toddler_notes               text,
@@ -114,7 +141,7 @@ create table recurring_programs (
   place_id              uuid references places(id) on delete cascade,
   venue_name            text,
   address               text,
-  metro_area            text not null default 'tampa_bay',
+  metro_area            text not null default 'tampa_bay' references markets(id),
   title                 text not null,
   description           text,
   rrule                 text not null,        -- e.g. 'FREQ=WEEKLY;BYDAY=TU,TH'
@@ -155,7 +182,7 @@ create table events (
   created_at             timestamptz not null default now(),
   place_id               uuid references places(id) on delete set null,
   program_id             uuid references recurring_programs(id) on delete set null,
-  metro_area             text not null default 'tampa_bay',
+  metro_area             text not null default 'tampa_bay' references markets(id),
   external_id            text,                              -- feed-source id, for upsert on re-ingest
   status                 text not null default 'published' check (status in ('published', 'cancelled')),
   registration_required  boolean not null default false,
@@ -189,6 +216,10 @@ create table rsvps (
   -- Optional short note, e.g. "running 10 min late" or "bringing a friend".
   note        text check (note is null or length(note) <= 200),
   created_at  timestamptz not null default now(),
+  -- Defaults on insert only — there's no trigger keeping this current on
+  -- update, so it reflects insert time unless a future write sets it
+  -- explicitly. Not used by the app today.
+  updated_at  timestamptz not null default now(),
   primary key (event_id, user_id)
 );
 
@@ -399,53 +430,62 @@ $$;
 -- Returns the caller's own upcoming free windows in `target_group` over the
 -- next `days_ahead` days, one row per window, each paired with which other
 -- group members' windows overlap it (display names) and which upcoming
--- events fall inside it.
---
--- Signature and return columns confirmed against the live database:
---   who_is_free(target_group uuid, days_ahead integer)
---   returns table(window_start timestamptz, window_end timestamptz,
---                 also_free text[], matching_events jsonb)
--- The body below is not reproduced from the live function (only the
--- interface was confirmed) — src/app/free/page.tsx only relies on the
--- signature above, not on this SQL being byte-for-byte the live definition.
-create or replace function who_is_free(target_group uuid, days_ahead integer)
+-- published events fall inside it. Byte-for-byte from the live database.
+create or replace function who_is_free(target_group uuid, days_ahead integer default 14)
 returns table(
   window_start    timestamptz,
   window_end      timestamptz,
   also_free       text[],
   matching_events jsonb
-) language sql stable security definer set search_path = public as $$
+) language sql stable security definer set search_path = 'public' as $$
+  with mine as (
+    select a.id, a.starts_at, a.ends_at
+    from public.availability a
+    where a.user_id = auth.uid()
+      and a.group_id = target_group
+      and a.ends_at >= now()
+      and a.starts_at <= now() + (days_ahead || ' days')::interval
+  )
   select
-    a.starts_at as window_start,
-    a.ends_at as window_end,
-    (
-      select coalesce(array_agg(p.display_name order by p.display_name), '{}')
-      from availability o
-      join profiles p on p.id = o.user_id
+    m.starts_at,
+    m.ends_at,
+    coalesce((
+      select array_agg(distinct p.display_name)
+      from public.availability o
+      join public.profiles p on p.id = o.user_id
       where o.group_id = target_group
         and o.user_id <> auth.uid()
-        and o.starts_at < a.ends_at
-        and o.ends_at > a.starts_at
-    ) as also_free,
-    (
-      select coalesce(jsonb_agg(jsonb_build_object(
-               'id', e.id,
-               'title', e.title,
-               'starts_at', e.starts_at,
-               'venue', e.venue_name,
-               'cost', e.cost
-             ) order by e.starts_at), '[]'::jsonb)
-      from events e
-      where (e.proposed_by_group is null or e.proposed_by_group = target_group)
-        and e.starts_at >= a.starts_at
-        and e.starts_at < a.ends_at
-    ) as matching_events
-  from availability a
-  where a.group_id = target_group
-    and a.user_id = auth.uid()
-    and a.ends_at >= now()
-    and a.starts_at < now() + (days_ahead || ' days')::interval
-  order by a.starts_at;
+        and o.starts_at < m.ends_at
+        and o.ends_at   > m.starts_at
+    ), '{}'::text[]),
+    coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', e.id, 'title', e.title,
+               'starts_at', e.starts_at, 'venue', e.venue_name, 'cost', e.cost)
+               order by e.starts_at)
+      from public.events e
+      where e.status = 'published'
+        and e.starts_at >= m.starts_at
+        and e.starts_at <  m.ends_at
+        and (e.proposed_by_group is null or e.proposed_by_group = target_group)
+    ), '[]'::jsonb)
+  from mine m
+  order by m.starts_at;
+$$;
+
+-- Great-circle (Haversine) distance in km between two lat/lng points. This
+-- is straight-line "as the crow flies" distance, NOT a real drive time —
+-- there's no routing/traffic data available to a plain SQL function. The
+-- app must compute this per-viewer from profiles.home_lat/home_lng (never
+-- store it on the event) and label it as an approximate distance, not a
+-- drive-time estimate, unless a real routing API is wired in separately.
+create or replace function distance_km(lat1 double precision, lng1 double precision, lat2 double precision, lng2 double precision)
+returns double precision language sql immutable as $$
+  select 6371 * 2 * asin(sqrt(
+    power(sin(radians(lat2 - lat1) / 2), 2) +
+    cos(radians(lat1)) * cos(radians(lat2)) *
+    power(sin(radians(lng2 - lng1) / 2), 2)
+  ));
 $$;
 
 -- Turns a comment into a durable place_tips row: place-scoped if the
@@ -480,6 +520,7 @@ $$;
 alter table profiles           enable row level security;
 alter table groups             enable row level security;
 alter table group_members      enable row level security;
+alter table markets            enable row level security;
 alter table places             enable row level security;
 alter table recurring_programs enable row level security;
 alter table events             enable row level security;
@@ -506,14 +547,31 @@ create policy "read rosters of my groups" on group_members for select
 create policy "add self to group" on group_members for insert with check (user_id = auth.uid());
 create policy "leave group" on group_members for delete using (user_id = auth.uid());
 
--- places, recurring_programs: curated read-only reference data, no user writes.
-create policy "read places" on places for select using (auth.role() = 'authenticated');
-create policy "read programs" on recurring_programs for select using (auth.role() = 'authenticated');
+-- markets: curated read-only reference data, no user writes.
+create policy "read markets" on markets for select using (auth.role() = 'authenticated');
+
+-- places, recurring_programs: curated read-only reference data, no user
+-- writes. Also gated on the row's market being active — a place/program in
+-- a deactivated market stops being readable.
+create policy "read places" on places for select
+  using (
+    auth.role() = 'authenticated'
+    and exists (select 1 from markets m where m.id = places.metro_area and m.active)
+  );
+create policy "read programs" on recurring_programs for select
+  using (
+    auth.role() = 'authenticated'
+    and exists (select 1 from markets m where m.id = recurring_programs.metro_area and m.active)
+  );
 
 -- events: curated/materialized events (proposed_by_group is null) are visible
 -- to every signed-in user, same as before. A user-proposed meetup
 -- (proposed_by_group set) is only visible to — and only insertable/editable
 -- by — members of that group; added_by must be the proposer themselves.
+-- NOTE: unlike places/recurring_programs above, this policy is NOT gated on
+-- the event's market being active (confirmed live) — an event in a
+-- deactivated market stays readable even though its place/program wouldn't
+-- be. Flagging as an asymmetry, not fixing it myself (RLS change).
 create policy "read events" on events for select
   using (
     auth.role() = 'authenticated'
