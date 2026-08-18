@@ -226,6 +226,9 @@ export interface ActivitySource {
   base_url: string | null;
   metro_area: string;
   active: boolean;
+  // Orthogonal to source_type: which export a multi-format vendor's
+  // adapter should parse (v8). Null when not applicable/not yet configured.
+  feed_format: "rss" | "ical" | null;
   fetch_frequency_minutes: number | null;
   last_fetch_at: string | null;
   last_fetch_status: "success" | "partial" | "error" | null;

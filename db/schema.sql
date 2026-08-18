@@ -1,5 +1,5 @@
 -- ============================================================
--- Momma's Meetup — Postgres schema for Supabase (v7)
+-- Momma's Meetup — Postgres schema for Supabase (v8)
 -- Run this in the Supabase SQL Editor.
 -- Auth users are managed by Supabase in auth.users; we reference them.
 --
@@ -62,6 +62,12 @@
 -- materialize-programs/route.ts switches from the anon key to
 -- SUPABASE_SERVICE_ROLE_KEY accordingly. Also NOT yet applied to the live
 -- database this session — see the v6 note above, same caveat applies.
+--
+-- v8 adds activity_sources.feed_format (rss|ical) — a small gap found
+-- while wiring up the first real ingestion adapter (PR #18.1): a single
+-- vendor (Communico) can expose the same calendar as either RSS or iCal,
+-- which needs different parsing independent of source_type (the vendor).
+-- Also NOT yet applied to the live database this session.
 --
 -- This file mirrors the live schema; it is not re-run against the existing
 -- project.
@@ -324,6 +330,11 @@ create table activity_sources (
   base_url                 text,
   metro_area               text not null references markets(id),
   active                   boolean not null default true,
+  -- Orthogonal to source_type (v8): source_type identifies the vendor
+  -- (Communico), feed_format identifies which export that vendor's
+  -- adapter should parse (a single vendor can expose both). Nullable —
+  -- only meaningful for multi-format adapters.
+  feed_format              text check (feed_format in ('rss', 'ical')),
   fetch_frequency_minutes  int,
   last_fetch_at            timestamptz,
   last_fetch_status        text check (last_fetch_status in ('success', 'partial', 'error')),
