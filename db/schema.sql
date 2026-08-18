@@ -1,5 +1,5 @@
 -- ============================================================
--- Momma's Meetup — Postgres schema for Supabase (v3)
+-- Momma's Meetup — Postgres schema for Supabase (v4)
 -- Run this in the Supabase SQL Editor.
 -- Auth users are managed by Supabase in auth.users; we reference them.
 --
@@ -22,6 +22,14 @@
 -- child_age_months/home_lat/home_lng on `profiles`; the my_cancelled_upcoming
 -- view; and cancel_event(). rsvps and event_comments are added to the
 -- supabase_realtime publication.
+--
+-- v4 adds: a 4th/5th rsvps.status value pair (not_going, out_sick) plus an
+-- optional rsvps.note; group_members.things_to_know (allergies/medical
+-- notes, member-editable, group-visible); and `availability` (a user's free
+-- windows, scoped to a group, realtime-enabled) paired with who_is_free(),
+-- which computes the caller's own windows, overlapping groupmates, and
+-- events that fit. The availability table's columns/RLS and who_is_free()'s
+-- signature/return shape were confirmed against the live database.
 --
 -- This file mirrors the live schema; it is not re-run against the existing
 -- project.
@@ -50,9 +58,12 @@ create table groups (
 );
 
 create table group_members (
-  group_id   uuid not null references groups(id) on delete cascade,
-  user_id    uuid not null references auth.users(id) on delete cascade,
-  joined_at  timestamptz not null default now(),
+  group_id        uuid not null references groups(id) on delete cascade,
+  user_id         uuid not null references auth.users(id) on delete cascade,
+  joined_at       timestamptz not null default now(),
+  -- Allergies/medical notes, e.g. "peanut allergy, we bring our own
+  -- snacks". Optional, editable by the member, visible to their group.
+  things_to_know  text check (things_to_know is null or length(things_to_know) <= 300),
   primary key (group_id, user_id)
 );
 
@@ -174,7 +185,9 @@ create unique index uniq_events_source_external on events (source, external_id)
 create table rsvps (
   event_id    uuid not null references events(id) on delete cascade,
   user_id     uuid not null references auth.users(id) on delete cascade,
-  status      text not null check (status in ('going', 'maybe')),
+  status      text not null check (status in ('going', 'maybe', 'not_going', 'out_sick')),
+  -- Optional short note, e.g. "running 10 min late" or "bringing a friend".
+  note        text check (note is null or length(note) <= 200),
   created_at  timestamptz not null default now(),
   primary key (event_id, user_id)
 );
@@ -218,6 +231,20 @@ create table event_comments (
 );
 
 create index idx_event_comments_event on event_comments (event_id, created_at);
+
+-- A window of time a user has marked free, scoped to a group.
+create table availability (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  group_id    uuid not null references groups(id) on delete cascade,
+  starts_at   timestamptz not null,
+  ends_at     timestamptz not null,
+  note        text check (note is null or length(note) <= 200),
+  created_at  timestamptz not null default now(),
+  check (ends_at > starts_at)
+);
+
+create index idx_availability_group on availability (group_id, starts_at);
 
 -- Post-outing "would you do this again" — one row per person per event.
 create table outing_feedback (
@@ -369,6 +396,58 @@ begin
 end;
 $$;
 
+-- Returns the caller's own upcoming free windows in `target_group` over the
+-- next `days_ahead` days, one row per window, each paired with which other
+-- group members' windows overlap it (display names) and which upcoming
+-- events fall inside it.
+--
+-- Signature and return columns confirmed against the live database:
+--   who_is_free(target_group uuid, days_ahead integer)
+--   returns table(window_start timestamptz, window_end timestamptz,
+--                 also_free text[], matching_events jsonb)
+-- The body below is not reproduced from the live function (only the
+-- interface was confirmed) — src/app/free/page.tsx only relies on the
+-- signature above, not on this SQL being byte-for-byte the live definition.
+create or replace function who_is_free(target_group uuid, days_ahead integer)
+returns table(
+  window_start    timestamptz,
+  window_end      timestamptz,
+  also_free       text[],
+  matching_events jsonb
+) language sql stable security definer set search_path = public as $$
+  select
+    a.starts_at as window_start,
+    a.ends_at as window_end,
+    (
+      select coalesce(array_agg(p.display_name order by p.display_name), '{}')
+      from availability o
+      join profiles p on p.id = o.user_id
+      where o.group_id = target_group
+        and o.user_id <> auth.uid()
+        and o.starts_at < a.ends_at
+        and o.ends_at > a.starts_at
+    ) as also_free,
+    (
+      select coalesce(jsonb_agg(jsonb_build_object(
+               'id', e.id,
+               'title', e.title,
+               'starts_at', e.starts_at,
+               'venue', e.venue_name,
+               'cost', e.cost
+             ) order by e.starts_at), '[]'::jsonb)
+      from events e
+      where (e.proposed_by_group is null or e.proposed_by_group = target_group)
+        and e.starts_at >= a.starts_at
+        and e.starts_at < a.ends_at
+    ) as matching_events
+  from availability a
+  where a.group_id = target_group
+    and a.user_id = auth.uid()
+    and a.ends_at >= now()
+    and a.starts_at < now() + (days_ahead || ' days')::interval
+  order by a.starts_at;
+$$;
+
 -- Turns a comment into a durable place_tips row: place-scoped if the
 -- comment's event has a place_id, otherwise event-scoped. Callable by any
 -- member of the comment's group (not just the comment's author) — that's
@@ -408,6 +487,7 @@ alter table rsvps              enable row level security;
 alter table event_comments     enable row level security;
 alter table place_tips         enable row level security;
 alter table outing_feedback    enable row level security;
+alter table availability       enable row level security;
 
 -- profiles: see your own, and anyone you share a group with (to render names/avatars)
 create policy "read self or shared" on profiles for select
@@ -492,10 +572,19 @@ create policy "write own feedback" on outing_feedback for insert
 create policy "update own feedback" on outing_feedback for update
   using (user_id = auth.uid());
 
+-- availability: same group-scoped shape as event_comments/place_tips.
+create policy "read group availability" on availability for select
+  using (is_member(group_id));
+create policy "write own availability" on availability for insert
+  with check (user_id = auth.uid() and is_member(group_id));
+create policy "delete own availability" on availability for delete
+  using (user_id = auth.uid());
+
 -- ---------- Realtime ------------------------------------------
 
 alter publication supabase_realtime add table rsvps;
 alter publication supabase_realtime add table event_comments;
+alter publication supabase_realtime add table availability;
 
 -- ---------- Auto-create a profile row on signup ------------
 
