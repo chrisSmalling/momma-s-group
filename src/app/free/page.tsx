@@ -9,40 +9,30 @@ import { removeFreeWindow } from "./actions";
 
 const DAYS_AHEAD = 14;
 
-type WhoIsFreeWindow = {
+type MyWindow = {
   id: string;
   starts_at: string;
   ends_at: string;
   note: string | null;
 };
 
-type WhoIsFreeOverlap = {
-  user_id: string;
-  display_name: string;
-  starts_at: string;
-  ends_at: string;
-  note: string | null;
-};
-
-type WhoIsFreeEvent = {
+type MatchingEvent = {
   id: string;
   title: string;
   starts_at: string;
-  ends_at: string | null;
-  venue_name: string | null;
+  venue: string | null;
+  cost: string | null;
 };
 
-// IMPORTANT — best-effort guess, not verified against the live schema.
-// The Supabase MCP connection was unavailable for this entire session, so
-// this shape (a single jsonb object with my_windows/overlaps/events keys)
-// could not be confirmed against who_is_free()'s actual return type. If the
-// real function returns something else — a row set with a different
-// structure, differently-named keys, etc. — this page will need updating
-// once that's verified. Confirm before relying on this in production.
-type WhoIsFreeResult = {
-  my_windows: WhoIsFreeWindow[];
-  overlaps: WhoIsFreeOverlap[];
-  events: WhoIsFreeEvent[];
+// Confirmed against the live database: who_is_free(target_group, days_ahead)
+// returns one row per one of the caller's own upcoming free windows, each
+// paired with the display names of other group members whose windows
+// overlap it and the events that fall inside it.
+type WhoIsFreeRow = {
+  window_start: string;
+  window_end: string;
+  also_free: string[];
+  matching_events: MatchingEvent[] | null;
 };
 
 function formatRange(startsAt: string, endsAt: string) {
@@ -95,7 +85,20 @@ export default async function FreePage(props: PageProps<"/free">) {
   const activeGroupName =
     groupList.find((g) => g.id === activeGroupId)?.name ?? null;
 
-  let result: WhoIsFreeResult | null = null;
+  // "Your upcoming free windows" needs id/note for the Remove form, which
+  // who_is_free() doesn't return — read those straight from the table.
+  const { data: myWindowsData } = activeGroupId
+    ? await supabase
+        .from("availability")
+        .select("id, starts_at, ends_at, note")
+        .eq("group_id", activeGroupId)
+        .eq("user_id", user.id)
+        .gte("ends_at", new Date().toISOString())
+        .order("starts_at", { ascending: true })
+    : { data: null };
+  const myWindows = (myWindowsData ?? []) as MyWindow[];
+
+  let whoIsFreeRows: WhoIsFreeRow[] = [];
   let rpcError: string | null = null;
   if (activeGroupId) {
     const { data, error } = await supabase.rpc("who_is_free", {
@@ -105,13 +108,21 @@ export default async function FreePage(props: PageProps<"/free">) {
     if (error) {
       rpcError = error.message;
     } else {
-      result = data as WhoIsFreeResult;
+      whoIsFreeRows = (data ?? []) as WhoIsFreeRow[];
     }
   }
 
-  const myWindows = result?.my_windows ?? [];
-  const overlaps = result?.overlaps ?? [];
-  const fittingEvents = result?.events ?? [];
+  const overlapRows = whoIsFreeRows.filter((row) => row.also_free.length > 0);
+
+  const eventsById = new Map<string, MatchingEvent>();
+  for (const row of whoIsFreeRows) {
+    for (const event of row.matching_events ?? []) {
+      eventsById.set(event.id, event);
+    }
+  }
+  const fittingEvents = Array.from(eventsById.values()).sort((a, b) =>
+    a.starts_at.localeCompare(b.starts_at),
+  );
 
   return (
     <div className="flex flex-1 flex-col items-center px-4 py-10">
@@ -209,26 +220,23 @@ export default async function FreePage(props: PageProps<"/free">) {
               <h2 className="mb-2 text-sm font-semibold text-zinc-700">
                 Who else in {activeGroupName ?? "your group"} overlaps
               </h2>
-              {overlaps.length === 0 ? (
+              {overlapRows.length === 0 ? (
                 <p className="text-sm text-zinc-400">
                   No overlapping free time yet.
                 </p>
               ) : (
                 <ul className="flex flex-col gap-2">
-                  {overlaps.map((o, i) => (
+                  {overlapRows.map((row) => (
                     <li
-                      key={`${o.user_id}-${i}`}
+                      key={`${row.window_start}-${row.window_end}`}
                       className="rounded-lg bg-rose-50 px-3 py-2 text-sm"
                     >
-                      <p className="font-medium text-rose-700">
-                        {o.user_id === user.id ? "You" : o.display_name}
-                      </p>
                       <p className="text-zinc-600">
-                        {formatRange(o.starts_at, o.ends_at)}
+                        {formatRange(row.window_start, row.window_end)}
                       </p>
-                      {o.note && (
-                        <p className="text-xs text-zinc-500">{o.note}</p>
-                      )}
+                      <p className="font-medium text-rose-700">
+                        {row.also_free.join(", ")}
+                      </p>
                     </li>
                   ))}
                 </ul>
@@ -264,7 +272,8 @@ export default async function FreePage(props: PageProps<"/free">) {
                           hour: "numeric",
                           minute: "2-digit",
                         })}
-                        {e.venue_name ? ` · ${e.venue_name}` : ""}
+                        {e.venue ? ` · ${e.venue}` : ""}
+                        {e.cost ? ` · ${e.cost}` : ""}
                       </p>
                     </li>
                   ))}

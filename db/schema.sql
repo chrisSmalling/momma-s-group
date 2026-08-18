@@ -28,11 +28,8 @@
 -- notes, member-editable, group-visible); and `availability` (a user's free
 -- windows, scoped to a group, realtime-enabled) paired with who_is_free(),
 -- which computes the caller's own windows, overlapping groupmates, and
--- events that fit. IMPORTANT: v4's `availability` table, its RLS policies,
--- and who_is_free() were written without live database access this
--- session — see the caveat comments on each. Everything else in this file
--- (v1-v3, and the rsvps/group_members changes above) mirrors the live
--- schema as verified in earlier sessions.
+-- events that fit. The availability table's columns/RLS and who_is_free()'s
+-- signature/return shape were confirmed against the live database.
 --
 -- This file mirrors the live schema; it is not re-run against the existing
 -- project.
@@ -236,14 +233,6 @@ create table event_comments (
 create index idx_event_comments_event on event_comments (event_id, created_at);
 
 -- A window of time a user has marked free, scoped to a group.
---
--- CAVEAT: this table's columns are exactly as specified in the task that
--- introduced it (user_id, group_id, starts_at, ends_at, note), but the
--- Supabase MCP connection was unavailable for the entire session that added
--- it, so id/created_at, the exact RLS policies below, and — most
--- importantly — who_is_free()'s actual return shape were never confirmed
--- against the live database. Treat this section as a best-effort
--- reconstruction, not verified fact; confirm before trusting it.
 create table availability (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users(id) on delete cascade,
@@ -251,7 +240,8 @@ create table availability (
   starts_at   timestamptz not null,
   ends_at     timestamptz not null,
   note        text check (note is null or length(note) <= 200),
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  check (ends_at > starts_at)
 );
 
 create index idx_availability_group on availability (group_id, starts_at);
@@ -406,20 +396,57 @@ begin
 end;
 $$;
 
--- Returns everything the "We're Free" screen needs for `target_group` over
--- the next `days_ahead` days in one call: the caller's own upcoming free
--- windows, which other group members' windows overlap theirs, and which
--- upcoming events fall inside a free window.
+-- Returns the caller's own upcoming free windows in `target_group` over the
+-- next `days_ahead` days, one row per window, each paired with which other
+-- group members' windows overlap it (display names) and which upcoming
+-- events fall inside it.
 --
--- NOT REPRODUCED HERE — signature only. Unlike the other functions in this
--- file, this one's actual body was never read from the live database (see
--- the availability table's caveat above), so fabricating plausible-looking
--- SQL for it would be actively misleading. src/app/free/page.tsx calls it
--- expecting a single jsonb return value shaped like
--- { my_windows: [...], overlaps: [...], events: [...] } — that shape is
--- also an unverified guess and may not match reality.
--- create or replace function who_is_free(target_group uuid, days_ahead integer default 14)
--- returns jsonb ...
+-- Signature and return columns confirmed against the live database:
+--   who_is_free(target_group uuid, days_ahead integer)
+--   returns table(window_start timestamptz, window_end timestamptz,
+--                 also_free text[], matching_events jsonb)
+-- The body below is not reproduced from the live function (only the
+-- interface was confirmed) — src/app/free/page.tsx only relies on the
+-- signature above, not on this SQL being byte-for-byte the live definition.
+create or replace function who_is_free(target_group uuid, days_ahead integer)
+returns table(
+  window_start    timestamptz,
+  window_end      timestamptz,
+  also_free       text[],
+  matching_events jsonb
+) language sql stable security definer set search_path = public as $$
+  select
+    a.starts_at as window_start,
+    a.ends_at as window_end,
+    (
+      select coalesce(array_agg(p.display_name order by p.display_name), '{}')
+      from availability o
+      join profiles p on p.id = o.user_id
+      where o.group_id = target_group
+        and o.user_id <> auth.uid()
+        and o.starts_at < a.ends_at
+        and o.ends_at > a.starts_at
+    ) as also_free,
+    (
+      select coalesce(jsonb_agg(jsonb_build_object(
+               'id', e.id,
+               'title', e.title,
+               'starts_at', e.starts_at,
+               'venue', e.venue_name,
+               'cost', e.cost
+             ) order by e.starts_at), '[]'::jsonb)
+      from events e
+      where (e.proposed_by_group is null or e.proposed_by_group = target_group)
+        and e.starts_at >= a.starts_at
+        and e.starts_at < a.ends_at
+    ) as matching_events
+  from availability a
+  where a.group_id = target_group
+    and a.user_id = auth.uid()
+    and a.ends_at >= now()
+    and a.starts_at < now() + (days_ahead || ' days')::interval
+  order by a.starts_at;
+$$;
 
 -- Turns a comment into a durable place_tips row: place-scoped if the
 -- comment's event has a place_id, otherwise event-scoped. Callable by any
@@ -546,7 +573,6 @@ create policy "update own feedback" on outing_feedback for update
   using (user_id = auth.uid());
 
 -- availability: same group-scoped shape as event_comments/place_tips.
--- UNVERIFIED — see the table's caveat comment above.
 create policy "read group availability" on availability for select
   using (is_member(group_id));
 create policy "write own availability" on availability for insert
