@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { formatHours } from "@/lib/hours";
+import { formatDistance } from "@/lib/distance";
 import PracticalityIcons from "@/components/PracticalityIcons";
 import TipsSection from "@/components/TipsSection";
 import type { Place, PlaceTip } from "@/types";
@@ -22,18 +23,30 @@ export default function PlaceCard({
   groupName,
   currentUserId,
   tips,
+  distanceKm,
 }: {
   place: Place;
   groupId: string | null;
   groupName: string | null;
   currentUserId: string;
   tips: TipDisplay[];
+  // Straight-line distance from the viewer's home_lat/home_lng, when set.
+  // Omit entirely (rather than pass undefined-as-null) when the viewer
+  // hasn't set a home location, so no distance line renders.
+  distanceKm?: number;
 }) {
   const hours = formatHours(place.hours);
 
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-4">
-      <h3 className="text-lg font-bold text-zinc-900">{place.name}</h3>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-lg font-bold text-zinc-900">{place.name}</h3>
+        {distanceKm !== undefined && (
+          <span className="shrink-0 text-xs text-zinc-400">
+            {formatDistance(distanceKm)}
+          </span>
+        )}
+      </div>
 
       {place.description && (
         <p className="mt-1 text-sm text-zinc-600">{place.description}</p>

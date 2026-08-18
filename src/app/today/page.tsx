@@ -1,0 +1,405 @@
+import { redirect } from "next/navigation";
+import { overlapsNapWindow } from "@/lib/nap";
+import { distanceKm } from "@/lib/distance";
+import { createClient } from "@/lib/supabase/server";
+import EventCard from "@/components/EventCard";
+import PlaceCard from "@/components/PlaceCard";
+import Nav from "@/components/Nav";
+import type {
+  Event,
+  EventComment,
+  Place,
+  PlaceTip,
+  RsvpStatus,
+} from "@/types";
+
+type AttendeeDisplay = {
+  user_id: string;
+  status: RsvpStatus;
+  display_name: string;
+  avatar_color: string;
+};
+
+const PLACE_CONTEXT_COLUMNS =
+  "id, is_enclosed, has_changing_table, nursing_friendly, stroller_accessible, food_onsite, quiet_or_sensory_friendly, parking_notes, best_time_note, typical_crowd_note, what_to_bring";
+
+type EventCardPlace = {
+  is_enclosed: boolean | null;
+  has_changing_table: boolean | null;
+  nursing_friendly: boolean | null;
+  stroller_accessible: boolean | null;
+  food_onsite: boolean | null;
+  quiet_or_sensory_friendly: boolean | null;
+  parking_notes: string | null;
+  best_time_note: string | null;
+  typical_crowd_note: string | null;
+  what_to_bring: string[];
+};
+
+export default async function TodayPage(props: PageProps<"/today">) {
+  const searchParams = await props.searchParams;
+  const requestedGroup =
+    typeof searchParams.group === "string" ? searchParams.group : undefined;
+  const paramError =
+    typeof searchParams.error === "string" ? searchParams.error : undefined;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  const { data: myProfile } = await supabase
+    .from("profiles")
+    .select("display_name, nap_start, nap_end, home_lat, home_lng")
+    .eq("id", user.id)
+    .maybeSingle();
+  const currentUserName = myProfile?.display_name ?? "You";
+  const home =
+    myProfile?.home_lat != null && myProfile?.home_lng != null
+      ? { lat: myProfile.home_lat, lng: myProfile.home_lng }
+      : null;
+
+  const { data: groups } = await supabase
+    .from("groups")
+    .select("id, name")
+    .order("created_at", { ascending: true });
+  const groupList = groups ?? [];
+
+  const activeGroupId =
+    (requestedGroup && groupList.some((g) => g.id === requestedGroup)
+      ? requestedGroup
+      : groupList[0]?.id) ?? null;
+  const activeGroupName =
+    groupList.find((g) => g.id === activeGroupId)?.name ?? null;
+
+  let activeGroupMemberIds: string[] = [];
+  if (activeGroupId) {
+    const { data: members } = await supabase
+      .from("group_members")
+      .select("user_id")
+      .eq("group_id", activeGroupId);
+    activeGroupMemberIds = (members ?? []).map((m) => m.user_id);
+  }
+
+  // Same naive local-Date "today" boundary the rest of the app already uses
+  // for "is this the current day" (see MonthCalendar) — no explicit
+  // timezone conversion, an accepted existing simplification.
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(todayStart);
+  todayEnd.setDate(todayEnd.getDate() + 1);
+
+  const { data: events } = await supabase
+    .from("events")
+    .select("*")
+    .gte("starts_at", todayStart.toISOString())
+    .lt("starts_at", todayEnd.toISOString())
+    .eq("status", "published")
+    .order("starts_at", { ascending: true });
+  const eventList = (events ?? []) as Event[];
+  const eventIds = eventList.map((e) => e.id);
+
+  const { data: rsvps } = eventIds.length
+    ? await supabase
+        .from("rsvps")
+        .select("event_id, user_id, status, note")
+        .in("event_id", eventIds)
+    : { data: [] };
+  const rsvpRows = rsvps ?? [];
+
+  const myRsvpByEvent: Record<string, RsvpStatus> = {};
+  const myNoteByEvent: Record<string, string | null> = {};
+  for (const r of rsvpRows) {
+    if (r.user_id === user.id) {
+      myRsvpByEvent[r.event_id] = r.status as RsvpStatus;
+      myNoteByEvent[r.event_id] = r.note ?? null;
+    }
+  }
+  const scopedRsvpRows = rsvpRows.filter((r) =>
+    activeGroupMemberIds.includes(r.user_id),
+  );
+
+  const { data: comments } =
+    activeGroupId && eventIds.length
+      ? await supabase
+          .from("event_comments")
+          .select("*")
+          .eq("group_id", activeGroupId)
+          .in("event_id", eventIds)
+          .order("created_at", { ascending: true })
+      : { data: [] };
+  const commentRows = (comments ?? []) as EventComment[];
+
+  const todayPlaceIds = [
+    ...new Set(eventList.map((e) => e.place_id).filter((id): id is string => Boolean(id))),
+  ];
+  const eventIdsWithoutPlace = eventList
+    .filter((e) => !e.place_id)
+    .map((e) => e.id);
+
+  const [{ data: tipsByPlace }, { data: tipsByEvent }] = await Promise.all([
+    activeGroupId && todayPlaceIds.length
+      ? supabase
+          .from("place_tips")
+          .select("*")
+          .eq("group_id", activeGroupId)
+          .in("place_id", todayPlaceIds)
+      : Promise.resolve({ data: [] as PlaceTip[] }),
+    activeGroupId && eventIdsWithoutPlace.length
+      ? supabase
+          .from("place_tips")
+          .select("*")
+          .eq("group_id", activeGroupId)
+          .in("event_id", eventIdsWithoutPlace)
+      : Promise.resolve({ data: [] as PlaceTip[] }),
+  ]);
+  const eventTipRows = [...(tipsByPlace ?? []), ...(tipsByEvent ?? [])] as PlaceTip[];
+
+  const { data: eventPlaces } = todayPlaceIds.length
+    ? await supabase.from("places").select(PLACE_CONTEXT_COLUMNS).in("id", todayPlaceIds)
+    : { data: [] };
+  const eventPlaceById = new Map((eventPlaces ?? []).map((p) => [p.id, p as Partial<Place>]));
+
+  const proposerIds = eventList
+    .filter((e) => e.proposed_by_group && e.added_by)
+    .map((e) => e.added_by as string);
+  const profileIds = [
+    ...new Set([
+      ...activeGroupMemberIds,
+      ...scopedRsvpRows.map((r) => r.user_id),
+      ...proposerIds,
+      ...commentRows.map((c) => c.user_id),
+      ...eventTipRows.map((t) => t.user_id),
+    ]),
+  ];
+
+  const { data: profiles } = profileIds.length
+    ? await supabase
+        .from("profiles")
+        .select("id, display_name, avatar_color")
+        .in("id", profileIds)
+    : { data: [] };
+  const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const roster = Object.fromEntries(
+    activeGroupMemberIds.map((id) => [
+      id,
+      {
+        display_name: profileById.get(id)?.display_name ?? "Someone",
+        avatar_color: profileById.get(id)?.avatar_color ?? "#C0356E",
+      },
+    ]),
+  );
+
+  const rsvpsByEvent: Record<string, AttendeeDisplay[]> = {};
+  for (const r of scopedRsvpRows) {
+    const profile = profileById.get(r.user_id);
+    const list = rsvpsByEvent[r.event_id] ?? [];
+    list.push({
+      user_id: r.user_id,
+      status: r.status as RsvpStatus,
+      display_name: profile?.display_name ?? "Unknown",
+      avatar_color: profile?.avatar_color ?? "#C0356E",
+    });
+    rsvpsByEvent[r.event_id] = list;
+  }
+
+  const commentsByEvent: Record<string, (EventComment & { display_name: string })[]> = {};
+  for (const c of commentRows) {
+    const list = commentsByEvent[c.event_id] ?? [];
+    list.push({ ...c, display_name: profileById.get(c.user_id)?.display_name ?? "Someone" });
+    commentsByEvent[c.event_id] = list;
+  }
+
+  const eventTipsByPlaceId: Record<string, (PlaceTip & { display_name: string })[]> = {};
+  const eventTipsByEventId: Record<string, (PlaceTip & { display_name: string })[]> = {};
+  for (const t of eventTipRows) {
+    const display = { ...t, display_name: profileById.get(t.user_id)?.display_name ?? "Someone" };
+    if (t.place_id) {
+      const list = eventTipsByPlaceId[t.place_id] ?? [];
+      list.push(display);
+      eventTipsByPlaceId[t.place_id] = list;
+    } else if (t.event_id) {
+      const list = eventTipsByEventId[t.event_id] ?? [];
+      list.push(display);
+      eventTipsByEventId[t.event_id] = list;
+    }
+  }
+
+  // Evergreen fallback — always shown, even on days with events, so a day
+  // with nothing scheduled never reads as a dead end.
+  const { data: places } = await supabase
+    .from("places")
+    .select("*")
+    .eq("active", true)
+    .order("name", { ascending: true });
+  let placeList = (places ?? []) as Place[];
+  if (home) {
+    placeList = [...placeList].sort((a, b) => {
+      if (a.lat == null || a.lng == null) return 1;
+      if (b.lat == null || b.lng == null) return -1;
+      return (
+        distanceKm(home.lat, home.lng, a.lat, a.lng) -
+        distanceKm(home.lat, home.lng, b.lat, b.lng)
+      );
+    });
+  }
+
+  const placeIds = placeList.map((p) => p.id);
+  const { data: placeTips } =
+    activeGroupId && placeIds.length
+      ? await supabase
+          .from("place_tips")
+          .select("*")
+          .eq("group_id", activeGroupId)
+          .in("place_id", placeIds)
+      : { data: [] };
+  const placeTipsByPlaceId: Record<string, (PlaceTip & { display_name: string })[]> = {};
+  for (const t of (placeTips ?? []) as PlaceTip[]) {
+    if (!t.place_id) continue;
+    const list = placeTipsByPlaceId[t.place_id] ?? [];
+    list.push({ ...t, display_name: profileById.get(t.user_id)?.display_name ?? "Someone" });
+    placeTipsByPlaceId[t.place_id] = list;
+  }
+
+  const todayLabel = todayStart.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  return (
+    <div className="flex flex-1 flex-col items-center px-4 py-10">
+      <div className="w-full max-w-2xl">
+        <Nav email={user.email ?? ""} />
+
+        <h1 className="mb-1 text-xl font-bold text-zinc-900">Today</h1>
+        <p className="mb-6 text-sm text-zinc-500">{todayLabel}</p>
+
+        {paramError && <p className="mb-6 text-sm text-red-600">{paramError}</p>}
+
+        {groupList.length > 1 && (
+          <div className="mb-6 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-zinc-500">Group:</span>
+            {groupList.map((g) => (
+              <a
+                key={g.id}
+                href={`/today?group=${g.id}`}
+                className={
+                  g.id === activeGroupId
+                    ? "rounded-full bg-zinc-900 px-3 py-1 font-medium text-white"
+                    : "rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:border-zinc-500"
+                }
+              >
+                {g.name}
+              </a>
+            ))}
+          </div>
+        )}
+
+        {!home && (
+          <p className="mb-6 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Set your home location in{" "}
+            <a href="/settings" className="underline">
+              Settings
+            </a>{" "}
+            to see how far places are from you.
+          </p>
+        )}
+
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm font-semibold text-zinc-700">
+            Happening today
+          </h2>
+          {eventList.length === 0 ? (
+            <p className="text-sm text-zinc-400">
+              Nothing scheduled today — here are some ideas instead.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {eventList.map((event) => {
+                const proposedBy =
+                  event.proposed_by_group && event.added_by
+                    ? {
+                        user_id: event.added_by,
+                        display_name:
+                          profileById.get(event.added_by)?.display_name ??
+                          "Someone",
+                      }
+                    : null;
+
+                const place = event.place_id
+                  ? (eventPlaceById.get(event.place_id) ?? null)
+                  : null;
+
+                const duringNap = overlapsNapWindow(
+                  event.starts_at,
+                  event.ends_at,
+                  myProfile?.nap_start ?? null,
+                  myProfile?.nap_end ?? null,
+                );
+
+                const tips = event.place_id
+                  ? (eventTipsByPlaceId[event.place_id] ?? [])
+                  : (eventTipsByEventId[event.id] ?? []);
+
+                return (
+                  <EventCard
+                    key={event.id}
+                    event={event}
+                    currentUserId={user.id}
+                    currentUserName={currentUserName}
+                    currentStatus={myRsvpByEvent[event.id] ?? null}
+                    currentNote={myNoteByEvent[event.id] ?? null}
+                    attendees={rsvpsByEvent[event.id] ?? []}
+                    hasActiveGroup={Boolean(activeGroupId)}
+                    activeGroupId={activeGroupId}
+                    activeGroupName={activeGroupName}
+                    activeGroupMemberIds={activeGroupMemberIds}
+                    roster={roster}
+                    proposedBy={proposedBy}
+                    place={place as EventCardPlace | null}
+                    duringNap={duringNap}
+                    comments={commentsByEvent[event.id] ?? []}
+                    tips={tips}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-zinc-700">
+            Good options for your family
+          </h2>
+          {placeList.length === 0 ? (
+            <p className="text-sm text-zinc-400">
+              No curated places yet in your market.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {placeList.map((place) => (
+                <PlaceCard
+                  key={place.id}
+                  place={place}
+                  groupId={activeGroupId}
+                  groupName={activeGroupName}
+                  currentUserId={user.id}
+                  tips={placeTipsByPlaceId[place.id] ?? []}
+                  distanceKm={
+                    home && place.lat != null && place.lng != null
+                      ? distanceKm(home.lat, home.lng, place.lat, place.lng)
+                      : undefined
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
