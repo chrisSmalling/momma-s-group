@@ -33,9 +33,6 @@ export default function LiveAttendees({
 }) {
   const [attendees, setAttendees] = useState<Attendee[]>(initialAttendees);
 
-  // Refs so the subscription callback always sees fresh values without
-  // needing to tear down and resubscribe when these props' identity changes
-  // on every parent server-render.
   const memberIdsRef = useRef(activeGroupMemberIds);
   const rosterRef = useRef(roster);
   useEffect(() => {
@@ -90,15 +87,9 @@ export default function LiveAttendees({
   const notGoing = attendees.filter((a) => a.status === "not_going");
   const outSick = attendees.filter((a) => a.status === "out_sick");
 
-  // Declines are a quiet count, never named, never compared against group
-  // size — we only ever show explicit responses, never who's silent.
   const declineParts: string[] = [];
-  if (notGoing.length > 0) {
-    declineParts.push(`${notGoing.length} not going`);
-  }
-  if (outSick.length > 0) {
-    declineParts.push(`${outSick.length} out sick`);
-  }
+  if (notGoing.length > 0) declineParts.push(`${notGoing.length} not going`);
+  if (outSick.length > 0) declineParts.push(`${outSick.length} out sick`);
 
   return (
     <div>
@@ -110,14 +101,7 @@ export default function LiveAttendees({
       />
       {maybe.length > 0 && (
         <p className="mt-1.5 text-xs text-zinc-400">
-          Maybe:{" "}
-          {maybe
-            .map((p) =>
-              p.user_id === currentUserId
-                ? `${p.display_name} (you)`
-                : p.display_name,
-            )
-            .join(", ")}
+          {maybe.length} {maybe.length === 1 ? "undecided" : "undecided"}
         </p>
       )}
       {declineParts.length > 0 && (
