@@ -7,9 +7,27 @@ export interface IngestResult {
   invalid: number;
   created: number;
   updated: number;
+  // Valid items that passed validate() but couldn't be resolved to an
+  // event (no existing/cross-source match, and no startsAt to create one
+  // with -- e.g. every item from a source whose feed_format is 'rss',
+  // since RSS has no event-time field). Tracked separately from
+  // created/updated so a "successful" ingest run doesn't read as if it
+  // produced real events when it structurally can't have.
+  skippedNoStartDate: number;
   cancelled: number;
   errors: string[];
+  timingMs: { fetch: number; process: number; total: number };
 }
+
+// Per-run cap on raw items processed. A single invocation processes one
+// source (see route.ts) with its own duration budget, but a feed could
+// still return an unexpectedly large number of items -- this bounds the
+// worst case rather than relying on the duration limit alone to fail
+// safely. Items beyond the cap are simply left for the next run; nothing
+// is lost (activity_source_records.last_seen_at only advances for items
+// actually processed this run, so unprocessed items are never marked
+// stale/cancelled).
+const MAX_ITEMS_PER_RUN = 300;
 
 // Runs one source end to end: fetch -> normalize -> validate ->
 // mapToActivity -> dedupe -> write. Deliberately generic over SourceAdapter
@@ -27,38 +45,73 @@ export interface IngestResult {
 // event marked cancelled and itself marked 'stale'. If fetch() itself
 // throws, this function returns early before reaching that step — a
 // single failed fetch never mass-cancels everything from that source.
+// Same reasoning applies when MAX_ITEMS_PER_RUN truncates the item list:
+// the staleness pass only ever runs after a *complete* fetch, but a
+// truncated run would incorrectly mark untouched-this-run items as
+// stale, so staleness detection is skipped entirely when truncation
+// happened (see `truncated` below).
+//
+// Resumability: each item's writes (events + activity_source_records)
+// commit before the next item starts, so a mid-run failure (timeout,
+// crash) leaves whatever was already processed as valid, durable partial
+// data rather than nothing. Confirmed for real by the first live run
+// against Pasco/Hillsborough: a 300s timeout killed the invocation
+// partway through the second source, and both sources' already-processed
+// records were intact and correctly marked afterward.
 export async function ingestSource(
   supabase: SupabaseClient,
   sourceId: string,
   adapter: SourceAdapter,
 ): Promise<IngestResult> {
+  const runStart = Date.now();
   const result: IngestResult = {
     fetched: 0,
     valid: 0,
     invalid: 0,
     created: 0,
     updated: 0,
+    skippedNoStartDate: 0,
     cancelled: 0,
     errors: [],
+    timingMs: { fetch: 0, process: 0, total: 0 },
   };
   const now = new Date().toISOString();
 
+  // Marks the run as in-progress before doing any slow work, so a killed
+  // invocation is visibly distinguishable in activity_sources from "never
+  // run" or "ran and finished" — check last_fetch_status = 'running' with
+  // an old last_fetch_at as a stall signal.
+  await supabase.from("activity_sources").update({ last_fetch_status: "running" }).eq("id", sourceId);
+
   let rawItems;
+  const fetchStart = Date.now();
   try {
     rawItems = await adapter.fetch();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    result.timingMs.fetch = Date.now() - fetchStart;
+    result.timingMs.total = Date.now() - runStart;
     await supabase
       .from("activity_sources")
       .update({ last_fetch_at: now, last_fetch_status: "error", last_fetch_error: message })
       .eq("id", sourceId);
     result.errors.push(message);
+    console.log(`[ingest] ${sourceId} fetch failed after ${result.timingMs.fetch}ms: ${message}`);
     return result;
   }
-
+  result.timingMs.fetch = Date.now() - fetchStart;
   result.fetched = rawItems.length;
 
-  for (const raw of rawItems) {
+  const truncated = rawItems.length > MAX_ITEMS_PER_RUN;
+  const itemsToProcess = truncated ? rawItems.slice(0, MAX_ITEMS_PER_RUN) : rawItems;
+  console.log(
+    `[ingest] ${sourceId} fetch done in ${result.timingMs.fetch}ms: ${result.fetched} items` +
+      (truncated ? ` (processing first ${MAX_ITEMS_PER_RUN}, rest deferred to next run)` : ""),
+  );
+
+  const processStart = Date.now();
+  let processed = 0;
+  for (const raw of itemsToProcess) {
     const normalized = adapter.normalize(raw);
     const validation = adapter.validate(normalized);
     if (!validation.valid) {
@@ -133,6 +186,11 @@ export async function ingestSource(
         resolvedEventId = newEvent.id;
         result.created++;
       }
+    } else {
+      // Valid item, but no start time to act on and nothing to link it
+      // to yet (e.g. an RSS-only source). Still recorded below so it's
+      // deduped against on future runs and against other sources.
+      result.skippedNoStartDate++;
     }
 
     const { error: upsertError } = await supabase.from("activity_source_records").upsert(
@@ -150,26 +208,44 @@ export async function ingestSource(
     if (upsertError) {
       result.errors.push(`upsert source record failed for ${normalized.title}: ${upsertError.message}`);
     }
+
+    processed++;
+    if (processed % 50 === 0) {
+      console.log(`[ingest] ${sourceId} processed ${processed}/${itemsToProcess.length} (${Date.now() - processStart}ms elapsed)`);
+    }
+  }
+  result.timingMs.process = Date.now() - processStart;
+  console.log(
+    `[ingest] ${sourceId} process done in ${result.timingMs.process}ms: ` +
+      `valid=${result.valid} invalid=${result.invalid} created=${result.created} ` +
+      `updated=${result.updated} skippedNoStartDate=${result.skippedNoStartDate}`,
+  );
+
+  // Staleness pass only runs after a complete (non-truncated) fetch —
+  // otherwise items beyond MAX_ITEMS_PER_RUN that legitimately still
+  // exist on the source would get incorrectly cancelled just because
+  // this run didn't reach them.
+  if (!truncated) {
+    const { data: staleRecords } = await supabase
+      .from("activity_source_records")
+      .select("id, resolved_event_id")
+      .eq("source_id", sourceId)
+      .lt("last_seen_at", now)
+      .not("resolved_event_id", "is", null);
+
+    for (const stale of staleRecords ?? []) {
+      if (!stale.resolved_event_id) continue;
+      await supabase
+        .from("events")
+        .update({ status: "cancelled" })
+        .eq("id", stale.resolved_event_id)
+        .eq("status", "published");
+      await supabase.from("activity_source_records").update({ verification_status: "stale" }).eq("id", stale.id);
+      result.cancelled++;
+    }
   }
 
-  const { data: staleRecords } = await supabase
-    .from("activity_source_records")
-    .select("id, resolved_event_id")
-    .eq("source_id", sourceId)
-    .lt("last_seen_at", now)
-    .not("resolved_event_id", "is", null);
-
-  for (const stale of staleRecords ?? []) {
-    if (!stale.resolved_event_id) continue;
-    await supabase
-      .from("events")
-      .update({ status: "cancelled" })
-      .eq("id", stale.resolved_event_id)
-      .eq("status", "published");
-    await supabase.from("activity_source_records").update({ verification_status: "stale" }).eq("id", stale.id);
-    result.cancelled++;
-  }
-
+  result.timingMs.total = Date.now() - runStart;
   const status = result.valid === 0 && result.errors.length > 0 ? "error" : result.errors.length > 0 ? "partial" : "success";
   await supabase
     .from("activity_sources")
@@ -181,5 +257,6 @@ export async function ingestSource(
     })
     .eq("id", sourceId);
 
+  console.log(`[ingest] ${sourceId} total ${result.timingMs.total}ms status=${status}`);
   return result;
 }

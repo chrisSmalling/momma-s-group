@@ -39,12 +39,23 @@ export class CommunicoSourceAdapter implements SourceAdapter {
   ) {}
 
   async fetch(): Promise<RawSourceItem[]> {
-    const response = await fetch(this.feedUrl, { signal: AbortSignal.timeout(15000) });
+    // 10s cap on the HTTP call itself so one slow Communico response can't
+    // consume the whole function duration budget on its own — separate
+    // from and much smaller than the overall route-level maxDuration
+    // (route.ts), which also has to cover the per-item DB writes.
+    const httpStart = Date.now();
+    const response = await fetch(this.feedUrl, { signal: AbortSignal.timeout(10000) });
     if (!response.ok) {
       throw new Error(`Communico feed fetch failed: HTTP ${response.status} for ${this.feedUrl}`);
     }
     const body = await response.text();
-    return this.feedFormat === "ical" ? parseIcalEvents(body) : parseRssItems(body);
+    const httpMs = Date.now() - httpStart;
+
+    const parseStart = Date.now();
+    const items = this.feedFormat === "ical" ? parseIcalEvents(body) : parseRssItems(body);
+    const parseMs = Date.now() - parseStart;
+    console.log(`[ingest] ${this.feedUrl} http=${httpMs}ms parse=${parseMs}ms items=${items.length} format=${this.feedFormat}`);
+    return items;
   }
 
   normalize(raw: RawSourceItem): NormalizedActivity {
