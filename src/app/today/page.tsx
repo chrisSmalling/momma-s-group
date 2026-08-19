@@ -21,6 +21,15 @@ type AttendeeDisplay = {
   avatar_color: string;
 };
 
+type TodayEvent = Event & {
+  experience_type?: string | null;
+  weather_fit?: string | null;
+  today_priority?: number | null;
+  geography_tier?: string | null;
+  content_status?: string | null;
+  age_band?: string | null;
+};
+
 const PLACE_CONTEXT_COLUMNS =
   "id, is_enclosed, has_changing_table, nursing_friendly, stroller_accessible, food_onsite, quiet_or_sensory_friendly, parking_notes, best_time_note, typical_crowd_note, what_to_bring";
 
@@ -36,6 +45,56 @@ type EventCardPlace = {
   typical_crowd_note: string | null;
   what_to_bring: string[];
 };
+
+function todayEventScore(event: TodayEvent, childAgeMonths: number | null) {
+  let score = event.today_priority ?? 0;
+
+  if (event.content_status === "keep") score += 20;
+  if (event.geography_tier === "pasco") score += 12;
+  if (event.geography_tier === "tampa") score += 4;
+
+  if (childAgeMonths != null) {
+    const min = event.age_min_months ?? 0;
+    const max = event.age_max_months ?? 120;
+    if (childAgeMonths >= min && childAgeMonths <= max) score += 35;
+    else if (childAgeMonths >= min - 6 && childAgeMonths <= max + 6) score += 10;
+    else score -= 30;
+  }
+
+  const experienceBoosts: Record<string, number> = {
+    community_helper: 24,
+    animal: 22,
+    vehicle: 22,
+    storytime_experience: 20,
+    sensory: 18,
+    hands_on: 18,
+    music_movement: 15,
+    general: 0,
+  };
+  score += experienceBoosts[event.experience_type ?? "general"] ?? 0;
+
+  if (event.registration_required) score -= 2;
+  return score;
+}
+
+function dedupeTodayEvents(events: TodayEvent[]) {
+  const seen = new Set<string>();
+  const result: TodayEvent[] = [];
+
+  for (const event of events) {
+    const title = event.title
+      .toLowerCase()
+      .replace(/session\s*\d+/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const key = `${event.place_id ?? event.venue_name ?? ""}|${title}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(event);
+  }
+
+  return result;
+}
 
 export default async function TodayPage(props: PageProps<"/today">) {
   const searchParams = await props.searchParams;
@@ -85,9 +144,6 @@ export default async function TodayPage(props: PageProps<"/today">) {
     activeGroupMemberIds = (members ?? []).map((m) => m.user_id);
   }
 
-  // Same naive local-Date "today" boundary the rest of the app already uses
-  // for "is this the current day" (see MonthCalendar) — no explicit
-  // timezone conversion, an accepted existing simplification.
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(todayStart);
@@ -96,11 +152,20 @@ export default async function TodayPage(props: PageProps<"/today">) {
   const { data: events } = await supabase
     .from("events")
     .select("*")
-    .gte("starts_at", todayStart.toISOString())
+    .gte("ends_at", now.toISOString())
     .lt("starts_at", todayEnd.toISOString())
     .eq("status", "published")
+    .eq("content_status", "keep")
     .order("starts_at", { ascending: true });
-  const eventList = (events ?? []) as Event[];
+
+  const rawEventList = (events ?? []) as TodayEvent[];
+  const eventList = dedupeTodayEvents(
+    [...rawEventList].sort(
+      (a, b) =>
+        todayEventScore(b, myProfile?.child_age_months ?? null) -
+        todayEventScore(a, myProfile?.child_age_months ?? null),
+    ),
+  ).slice(0, 6);
   const eventIds = eventList.map((e) => e.id);
 
   const { data: rsvps } = eventIds.length
@@ -229,8 +294,6 @@ export default async function TodayPage(props: PageProps<"/today">) {
     }
   }
 
-  // Evergreen fallback — always shown, even on days with events, so a day
-  // with nothing scheduled never reads as a dead end.
   const { data: places } = await supabase
     .from("places")
     .select("*")
@@ -238,9 +301,6 @@ export default async function TodayPage(props: PageProps<"/today">) {
     .order("name", { ascending: true });
   let placeList = (places ?? []) as Place[];
 
-  // Straight-line distance always available (no network call) as the
-  // baseline/fallback. Real drive time layers on top when a routing
-  // provider is configured — see src/lib/routing for the swap point.
   const straightLineByPlaceId = new Map<string, number>();
   if (home) {
     for (const p of placeList) {
@@ -341,12 +401,18 @@ export default async function TodayPage(props: PageProps<"/today">) {
         )}
 
         <section className="mb-8">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-700">
-            Happening today
-          </h2>
+          <div className="mb-3 flex items-end justify-between gap-4">
+            <div>
+              <h2 className="text-base font-semibold text-zinc-900">Good options for today</h2>
+              <p className="mt-1 text-xs text-zinc-500">A few picks, not a calendar.</p>
+            </div>
+            <a href="/calendar" className="text-xs font-medium text-zinc-600 underline underline-offset-2">
+              See all
+            </a>
+          </div>
           {eventList.length === 0 ? (
-            <p className="text-sm text-zinc-400">
-              Nothing scheduled today — here are some ideas instead.
+            <p className="rounded-xl border border-dashed border-zinc-200 px-4 py-5 text-sm text-zinc-500">
+              Nothing scheduled for the rest of today — here are some ideas instead.
             </p>
           ) : (
             <div className="flex flex-col gap-4">
