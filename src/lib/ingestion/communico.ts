@@ -22,17 +22,34 @@ export type CommunicoFeedFormat = "ical" | "rss";
 // back null rather than guessed from pubDate (which means "when this feed
 // item was published," not "when the event happens").
 //
-// NOT YET RUN against a real Communico feed for either target library.
-// Two things Communico's own documentation flags that aren't confirmed
-// for Pasco/Hillsborough specifically:
-//   1. RSS/iCal export may need to be explicitly enabled per-library by
-//      Communico support — it isn't necessarily on by default.
-//   2. Whether either feed embeds structured age/cost data in its
-//      DESCRIPTION text, and in what format. That enrichment is
-//      deliberately not implemented here until a real sample confirms
-//      the format — see this PR's description for exactly what's needed
-//      to close that loop.
+// Run for real against both target libraries (not just fixtures): the
+// first live attempt used RSS for both and confirmed the fetch/parse/
+// normalize/dedupe/upsert pipeline end to end, but produced zero events
+// (RSS has no start time — see below). Both sources have since been
+// switched to iCal, which does carry DTSTART/DTEND.
+//
+// Still open, confirmed via real Communico feed content but not yet
+// resolved in this codebase:
+//   1. Whether DESCRIPTION embeds structured age/cost data, and in what
+//      format — not implemented here until a real sample confirms the
+//      format (still true; iCal DESCRIPTION hasn't been inspected for
+//      this yet).
+//   2. Both feeds return ALL library programming (mahjong, chair yoga,
+//      chess club, adult events — not just kid-relevant ones). Neither
+//      this adapter nor /today's query currently filters by
+//      age-appropriateness at all; every ingested event is eligible to
+//      show up for every user regardless of relevance. That's a real gap
+//      to close before this reaches real users — not solved here.
 export class CommunicoSourceAdapter implements SourceAdapter {
+  // Set by fetch() from the actual response, and what normalize()/
+  // validate() key off — NOT the constructor's feedFormat, which is only
+  // a hint from activity_sources.feed_format and can drift out of sync
+  // with what a source's URL actually serves (confirmed for real: the
+  // first live run against an iCal-configured Pasco URL still parsed 0
+  // items because the adapter trusted feed_format="rss" from the DB
+  // instead of the actual response, which was iCal all along).
+  private detectedFormat: CommunicoFeedFormat | null = null;
+
   constructor(
     private feedUrl: string,
     private feedFormat: CommunicoFeedFormat,
@@ -51,15 +68,45 @@ export class CommunicoSourceAdapter implements SourceAdapter {
     const body = await response.text();
     const httpMs = Date.now() - httpStart;
 
+    const contentType = response.headers.get("content-type");
+    const detected = this.detectFormat(body, contentType);
+    if (detected !== this.feedFormat) {
+      console.warn(
+        `[ingest] ${this.feedUrl} activity_sources.feed_format="${this.feedFormat}" but response is actually ` +
+          `"${detected}" (content-type="${contentType ?? "none"}") — using the detected format, not the configured one`,
+      );
+    }
+    this.detectedFormat = detected;
+
     const parseStart = Date.now();
-    const items = this.feedFormat === "ical" ? parseIcalEvents(body) : parseRssItems(body);
+    const items = detected === "ical" ? parseIcalEvents(body) : parseRssItems(body);
     const parseMs = Date.now() - parseStart;
-    console.log(`[ingest] ${this.feedUrl} http=${httpMs}ms parse=${parseMs}ms items=${items.length} format=${this.feedFormat}`);
+    console.log(`[ingest] ${this.feedUrl} http=${httpMs}ms parse=${parseMs}ms items=${items.length} format=${detected}`);
     return items;
   }
 
+  // Sniffs the actual format from the response rather than trusting
+  // config. Body content is the primary signal (a real BEGIN:VCALENDAR or
+  // <rss> tag is unambiguous); Content-Type is a secondary fallback since
+  // some servers set it loosely or generically (e.g. text/plain,
+  // application/xml for both formats). Throws rather than guessing when
+  // neither signal is conclusive — a 0-item parse must never look like a
+  // successful ingest of an empty feed.
+  private detectFormat(body: string, contentType: string | null): CommunicoFeedFormat {
+    const head = body.slice(0, 1000);
+    if (/^\s*BEGIN:VCALENDAR/.test(head)) return "ical";
+    if (/<rss[\s>]/i.test(head) || /<\?xml[^>]*\?>\s*<rss/i.test(head)) return "rss";
+    if (contentType?.includes("calendar")) return "ical";
+    if (contentType?.includes("rss")) return "rss";
+    throw new Error(
+      `Cannot determine feed format for ${this.feedUrl}: content-type="${contentType ?? "none"}", ` +
+        `body starts with "${head.slice(0, 80).replace(/\s+/g, " ")}" — no BEGIN:VCALENDAR or <rss> found`,
+    );
+  }
+
   normalize(raw: RawSourceItem): NormalizedActivity {
-    return this.feedFormat === "ical" ? this.normalizeIcal(raw) : this.normalizeRss(raw);
+    const format = this.detectedFormat ?? this.feedFormat;
+    return format === "ical" ? this.normalizeIcal(raw) : this.normalizeRss(raw);
   }
 
   private normalizeIcal(raw: RawSourceItem): NormalizedActivity {
@@ -108,10 +155,11 @@ export class CommunicoSourceAdapter implements SourceAdapter {
   }
 
   validate(item: NormalizedActivity): ValidationResult {
+    const format = this.detectedFormat ?? this.feedFormat;
     const errors: string[] = [];
     if (!item.externalId) errors.push("missing external id (no uid/guid/link)");
     if (!item.title) errors.push("missing title");
-    if (this.feedFormat === "ical" && !item.startsAt) errors.push("missing/unparseable DTSTART");
+    if (format === "ical" && !item.startsAt) errors.push("missing/unparseable DTSTART");
     return { valid: errors.length === 0, errors };
   }
 
