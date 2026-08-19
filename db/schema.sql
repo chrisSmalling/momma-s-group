@@ -1,5 +1,5 @@
 -- ============================================================
--- Momma's Meetup — Postgres schema for Supabase (v8)
+-- Momma's Meetup — Postgres schema for Supabase (v9)
 -- Run this in the Supabase SQL Editor.
 -- Auth users are managed by Supabase in auth.users; we reference them.
 --
@@ -68,6 +68,19 @@
 -- vendor (Communico) can expose the same calendar as either RSS or iCal,
 -- which needs different parsing independent of source_type (the vendor).
 -- Also NOT yet applied to the live database this session.
+--
+-- v9 adds events.is_kid_relevant, a GENERATED STORED boolean computed by
+-- is_kid_relevant_event() from title/venue_name/source. Real ingestion
+-- against Pasco/Hillsborough (765 records) confirmed both feeds return
+-- ALL library programming, not just kid-relevant events, with no
+-- structured age/audience field to filter on — so relevance is inferred
+-- from title/location keywords, strict-allowlist (false negatives
+-- accepted, false positives are not). Only applies to source='communico'
+-- rows; every other event (manual, materialized, user-proposed) always
+-- passes. Filters at display time (query-side .eq("is_kid_relevant",
+-- true) in /today and /calendar), not at ingestion — ingestion keeps
+-- writing every event unconditionally. Not yet applied to the live
+-- database this session.
 --
 -- This file mirrors the live schema; it is not re-run against the existing
 -- project.
@@ -190,6 +203,24 @@ create table recurring_programs (
 
 create index idx_programs_active on recurring_programs (active, metro_area);
 
+-- v9: strict-allowlist kid/toddler relevance inference for ingested
+-- events, evidence-based from real Pasco/Hillsborough titles — see the
+-- v9 changelog note above for why this exists and its false-positive/
+-- false-negative tradeoff.
+create or replace function is_kid_relevant_event(p_title text, p_venue_name text, p_source text)
+returns boolean
+language sql
+immutable
+as $$
+  select case
+    when p_source is distinct from 'communico' then true
+    else
+      coalesce(p_title ~* '(storytime|story time|lap-sit|toddler|preschool|baby|babies)', false)
+      and coalesce(p_venue_name !~* '(- adult|teen room)', true)
+      and coalesce(p_title !~* '(teen|adult|18\+|book club|chess|yoga|crochet|woodworking|woodturners|open build|craft & chat|painting)', true)
+  end;
+$$;
+
 create table events (
   id                     uuid primary key default gen_random_uuid(),
   title                  text not null,
@@ -221,13 +252,17 @@ create table events (
   proposed_by_group      uuid references groups(id) on delete cascade,
   last_verified_at       timestamptz,
   is_outdoor             boolean not null default false,
-  what_to_bring          text[] not null default '{}'
+  what_to_bring          text[] not null default '{}',
+  is_kid_relevant        boolean generated always as (
+                            is_kid_relevant_event(title, venue_name, source)
+                          ) stored
 );
 
 create index idx_events_starts_at on events (starts_at);
 create index idx_events_metro_starts on events (metro_area, starts_at);
 create index idx_events_place on events (place_id);
 create index idx_events_proposed_group on events (proposed_by_group);
+create index idx_events_kid_relevant_starts_at on events (starts_at) where is_kid_relevant;
 
 -- Lets a re-ingest of the same feed source update rather than duplicate a row.
 create unique index uniq_events_source_external on events (source, external_id)

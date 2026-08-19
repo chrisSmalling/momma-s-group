@@ -99,6 +99,11 @@ export default async function TodayPage(props: PageProps<"/today">) {
     .gte("starts_at", todayStart.toISOString())
     .lt("starts_at", todayEnd.toISOString())
     .eq("status", "published")
+    // v9: hides ingested events that don't pass the kid-relevance
+    // allowlist (see is_kid_relevant_event() in db/schema.sql). Always
+    // true for non-communico events, so this never affects manual/
+    // materialized/user-proposed events.
+    .eq("is_kid_relevant", true)
     .order("starts_at", { ascending: true });
   const eventList = (events ?? []) as Event[];
   const eventIds = eventList.map((e) => e.id);

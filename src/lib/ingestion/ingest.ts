@@ -153,6 +153,10 @@ export async function ingestSource(
           ...(normalized.startsAt ? { starts_at: normalized.startsAt } : {}),
           ends_at: normalized.endsAt,
           source_url: normalized.externalUrl,
+          lat: normalized.lat,
+          lng: normalized.lng,
+          age_min_months: normalized.ageMinMonths,
+          age_max_months: normalized.ageMaxMonths,
           last_verified_at: now,
           status: "published",
         })
@@ -176,6 +180,10 @@ export async function ingestSource(
           ends_at: normalized.endsAt,
           source: "communico",
           source_url: normalized.externalUrl,
+          lat: normalized.lat,
+          lng: normalized.lng,
+          age_min_months: normalized.ageMinMonths,
+          age_max_months: normalized.ageMaxMonths,
           last_verified_at: now,
         })
         .select("id")

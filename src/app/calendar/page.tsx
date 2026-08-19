@@ -92,6 +92,11 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
     .select("*")
     .gte("starts_at", monthStart.toISOString())
     .lt("starts_at", monthEnd.toISOString())
+    // v9: hides ingested events that don't pass the kid-relevance
+    // allowlist (see is_kid_relevant_event() in db/schema.sql). Always
+    // true for non-communico events, so this never affects manual/
+    // materialized/user-proposed events.
+    .eq("is_kid_relevant", true)
     .order("starts_at", { ascending: true });
   const eventList = (events ?? []) as Event[];
   const eventIds = eventList.map((e) => e.id);

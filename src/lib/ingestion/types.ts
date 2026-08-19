@@ -22,6 +22,16 @@ export interface NormalizedActivity {
   startsAt: string | null;
   endsAt: string | null;
   venueName: string | null;
+  // From iCal GEO (lat;lon) when the source provides it; null otherwise.
+  // Populated so per-viewer drive time (src/lib/routing) works for
+  // ingested events the same way it already does for places.
+  lat: number | null;
+  lng: number | null;
+  // Inferred from description text (src/lib/ingestion/ageRange.ts) when
+  // no structured age field exists in the source format. Null, not
+  // guessed, when nothing in the description indicates an age range.
+  ageMinMonths: number | null;
+  ageMaxMonths: number | null;
   // Raw fields not yet mapped to a known column — carried through to
   // activity_source_records.raw_payload for debugging/future enrichment.
   // RLS already blocks this from ever reaching a normal user (PR #16).

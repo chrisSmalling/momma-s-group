@@ -148,6 +148,10 @@ export interface Event {
   last_verified_at: string | null;
   is_outdoor: boolean;
   what_to_bring: string[];
+  // Generated column (v9) — always true for non-communico events; for
+  // communico events, a strict title/venue_name keyword allowlist. See
+  // is_kid_relevant_event() in db/schema.sql.
+  is_kid_relevant: boolean;
 }
 
 export type RsvpStatus = "going" | "maybe" | "not_going" | "out_sick";

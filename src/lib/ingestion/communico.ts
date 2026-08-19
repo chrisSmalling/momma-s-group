@@ -1,6 +1,7 @@
 import { parseIcalEvents, icalDateToUtcIso } from "./ical";
 import { parseRssItems } from "./rss";
 import { normalizeDedupKey } from "./dedup";
+import { parseAgeRangeMonths } from "./ageRange";
 import type {
   SourceAdapter,
   RawSourceItem,
@@ -10,6 +11,19 @@ import type {
 } from "./types";
 
 export type CommunicoFeedFormat = "ical" | "rss";
+
+// RFC 5545 §3.8.1.6: GEO is "lat;lon" as two signed decimal floats, e.g.
+// "28.199930;-82.464690". Returns nulls (not 0/0) when absent or
+// malformed — a missing coordinate must never look like "null island."
+function parseGeo(geo: string | null): { lat: number | null; lng: number | null } {
+  if (!geo) return { lat: null, lng: null };
+  const parts = geo.split(";");
+  if (parts.length !== 2) return { lat: null, lng: null };
+  const lat = Number(parts[0]);
+  const lng = Number(parts[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { lat: null, lng: null };
+  return { lat, lng };
+}
 
 // Ingests a Communico ("Attend") library events feed. Communico's platform
 // is confirmed — via their own documentation, not guessed — to support
@@ -28,18 +42,18 @@ export type CommunicoFeedFormat = "ical" | "rss";
 // (RSS has no start time — see below). Both sources have since been
 // switched to iCal, which does carry DTSTART/DTEND.
 //
-// Still open, confirmed via real Communico feed content but not yet
-// resolved in this codebase:
-//   1. Whether DESCRIPTION embeds structured age/cost data, and in what
-//      format — not implemented here until a real sample confirms the
-//      format (still true; iCal DESCRIPTION hasn't been inspected for
-//      this yet).
-//   2. Both feeds return ALL library programming (mahjong, chair yoga,
-//      chess club, adult events — not just kid-relevant ones). Neither
-//      this adapter nor /today's query currently filters by
-//      age-appropriateness at all; every ingested event is eligible to
-//      show up for every user regardless of relevance. That's a real gap
-//      to close before this reaches real users — not solved here.
+// Confirmed via real Communico feed content (765 real ingested records
+// across both libraries):
+//   - Neither feed has a structured age field. events.age_min_months/
+//     age_max_months are inferred from free-text DESCRIPTION where
+//     possible (src/lib/ingestion/ageRange.ts) and left null otherwise —
+//     never guessed.
+//   - Both feeds return ALL library programming (mahjong, chair yoga,
+//     chess club, adult events, not just kid-relevant ones), with no way
+//     to distinguish them structurally. events.is_kid_relevant (v9,
+//     db/schema.sql) filters this at display time via a strict title/
+//     venue_name keyword allowlist — see that migration's comment for
+//     the evidence behind the keyword list.
 export class CommunicoSourceAdapter implements SourceAdapter {
   // Set by fetch() from the actual response, and what normalize()/
   // validate() key off — NOT the constructor's feedFormat, which is only
@@ -116,15 +130,22 @@ export class CommunicoSourceAdapter implements SourceAdapter {
     const url = get("URL");
     const dtstart = get("DTSTART");
     const dtend = get("DTEND");
+    const description = get("DESCRIPTION");
+    const { lat, lng } = parseGeo(get("GEO"));
+    const { minMonths, maxMonths } = parseAgeRangeMonths(description);
 
     return {
       externalId: uid ?? url ?? title,
       externalUrl: url,
       title,
-      description: get("DESCRIPTION"),
+      description,
       startsAt: dtstart ? icalDateToUtcIso(dtstart, get("DTSTART_TZID") ?? undefined) : null,
       endsAt: dtend ? icalDateToUtcIso(dtend, get("DTEND_TZID") ?? undefined) : null,
       venueName: get("LOCATION"),
+      lat,
+      lng,
+      ageMinMonths: minMonths,
+      ageMaxMonths: maxMonths,
       raw,
     };
   }
@@ -140,16 +161,23 @@ export class CommunicoSourceAdapter implements SourceAdapter {
           : null;
     const link = get("link");
     const title = get("title") ?? "";
+    const description = get("description");
+    const { minMonths, maxMonths } = parseAgeRangeMonths(description);
 
     return {
       externalId: guid ?? link ?? title,
       externalUrl: link,
       title,
-      description: get("description"),
+      description,
       // Deliberately null, not derived from pubDate — see class comment.
       startsAt: null,
       endsAt: null,
       venueName: null,
+      // RSS has no GEO equivalent.
+      lat: null,
+      lng: null,
+      ageMinMonths: minMonths,
+      ageMaxMonths: maxMonths,
       raw,
     };
   }
