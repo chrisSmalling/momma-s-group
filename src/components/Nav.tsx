@@ -8,20 +8,17 @@ export default function Nav({ email }: { email: string }) {
         <Link href="/today" className="text-zinc-700 hover:text-zinc-900">
           Today
         </Link>
+        <Link href="/places" className="text-zinc-700 hover:text-zinc-900">
+          Explore
+        </Link>
         <Link href="/calendar" className="text-zinc-700 hover:text-zinc-900">
           Calendar
         </Link>
         <Link href="/groups" className="text-zinc-700 hover:text-zinc-900">
           Groups
         </Link>
-        <Link href="/places" className="text-zinc-700 hover:text-zinc-900">
-          Places
-        </Link>
-        <Link href="/free" className="text-zinc-700 hover:text-zinc-900">
-          We&apos;re Free
-        </Link>
         <Link href="/settings" className="text-zinc-700 hover:text-zinc-900">
-          Settings
+          Me
         </Link>
       </nav>
       <div className="flex items-center gap-4">
