@@ -7,7 +7,7 @@ import EventCard from "@/components/EventCard";
 import PlaceCard from "@/components/PlaceCard";
 import Nav from "@/components/Nav";
 import type {
-  Event,
+  FeedEvent,
   EventComment,
   Place,
   PlaceTip,
@@ -93,19 +93,16 @@ export default async function TodayPage(props: PageProps<"/today">) {
   const todayEnd = new Date(todayStart);
   todayEnd.setDate(todayEnd.getDate() + 1);
 
+  // public.feed_events already applies status='published' AND
+  // is_kid_relevant AND NOT is_suppressed AND duplicate_of IS NULL —
+  // don't hand-filter events here, query the view directly.
   const { data: events } = await supabase
-    .from("events")
+    .from("feed_events")
     .select("*")
     .gte("starts_at", todayStart.toISOString())
     .lt("starts_at", todayEnd.toISOString())
-    .eq("status", "published")
-    // v9: hides ingested events that don't pass the kid-relevance
-    // allowlist (see is_kid_relevant_event() in db/schema.sql). Always
-    // true for non-communico events, so this never affects manual/
-    // materialized/user-proposed events.
-    .eq("is_kid_relevant", true)
     .order("starts_at", { ascending: true });
-  const eventList = (events ?? []) as Event[];
+  const eventList = (events ?? []) as FeedEvent[];
   const eventIds = eventList.map((e) => e.id);
 
   const { data: rsvps } = eventIds.length

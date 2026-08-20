@@ -143,6 +143,28 @@ export async function ingestSource(
       resolvedEventId = matchingRecord?.resolved_event_id ?? null;
     }
 
+    // is_kid_relevant is set by calling the DB function, not by
+    // reimplementing its keyword logic here — a duplicated TS copy is
+    // exactly how this drifted out of sync with the live function once
+    // already (a keyword got added to one copy but not the other).
+    // Single source of truth in Postgres; ingestion just calls it. Only
+    // called when an events write is actually about to happen (skipped
+    // for the no-start-date/no-match branch below, which never writes to
+    // events at all) — avoids a wasted round trip per item on RSS-only
+    // sources, where most items always take that branch.
+    let isKidRelevant = false;
+    if (resolvedEventId || normalized.startsAt) {
+      const { data: kidRelevant, error: kidRelevantError } = await supabase.rpc("is_kid_relevant_event", {
+        p_title: normalized.title,
+        p_venue_name: normalized.venueName,
+        p_source: "communico",
+      });
+      if (kidRelevantError) {
+        result.errors.push(`is_kid_relevant_event RPC failed for ${normalized.title}: ${kidRelevantError.message}`);
+      }
+      isKidRelevant = kidRelevantError ? false : Boolean(kidRelevant);
+    }
+
     if (resolvedEventId) {
       const { error: updateError } = await supabase
         .from("events")
@@ -157,6 +179,7 @@ export async function ingestSource(
           lng: normalized.lng,
           age_min_months: normalized.ageMinMonths,
           age_max_months: normalized.ageMaxMonths,
+          is_kid_relevant: isKidRelevant,
           last_verified_at: now,
           status: "published",
         })
@@ -184,6 +207,7 @@ export async function ingestSource(
           lng: normalized.lng,
           age_min_months: normalized.ageMinMonths,
           age_max_months: normalized.ageMaxMonths,
+          is_kid_relevant: isKidRelevant,
           last_verified_at: now,
         })
         .select("id")

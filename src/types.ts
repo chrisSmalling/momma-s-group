@@ -148,10 +148,55 @@ export interface Event {
   last_verified_at: string | null;
   is_outdoor: boolean;
   what_to_bring: string[];
-  // Generated column (v9) — always true for non-communico events; for
-  // communico events, a strict title/venue_name keyword allowlist. See
-  // is_kid_relevant_event() in db/schema.sql.
+  // Plain column (not generated — confirmed live), default false. Always
+  // true for non-communico events; for communico events, set by ingestion
+  // via the is_kid_relevant_event() SQL function (single source of truth
+  // — ingest.ts calls it rather than reimplementing the keyword logic in
+  // TypeScript, so the two can't drift the way they briefly did here).
   is_kid_relevant: boolean;
+}
+
+// public.feed_events — the view /today and /calendar actually query.
+// Applies status='published' AND is_kid_relevant AND NOT is_suppressed
+// AND duplicate_of IS NULL server-side, so page code never hand-filters
+// events. Display fields are pre-resolved here (title/venue fall back
+// through display_title/venue_display to the raw columns via a
+// canonicalize_venue() trigger) — render these, not events.title/
+// events.venue_name, directly.
+export interface FeedEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  venue: string | null;
+  room_name: string | null;
+  organizer: string | null;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  starts_at: string;
+  ends_at: string | null;
+  time_precision: string;
+  // true when time_precision = 'date_only' — render "All day"/"Check
+  // times", never a clock time, when this is true.
+  time_unknown: boolean;
+  cost: string | null;
+  is_free: boolean;
+  age_tags: string[];
+  age_min_months: number | null;
+  age_max_months: number | null;
+  is_outdoor: boolean;
+  what_to_bring: string[];
+  registration_required: boolean;
+  registration_url: string | null;
+  source: string;
+  source_url: string | null;
+  place_id: string | null;
+  program_id: string | null;
+  proposed_by_group: string | null;
+  metro_area: string;
+  status: EventStatus;
+  last_verified_at: string | null;
+  added_by: string | null;
 }
 
 export type RsvpStatus = "going" | "maybe" | "not_going" | "out_sick";

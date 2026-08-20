@@ -1,5 +1,5 @@
 -- ============================================================
--- Momma's Meetup — Postgres schema for Supabase (v9)
+-- Momma's Meetup — Postgres schema for Supabase (v10)
 -- Run this in the Supabase SQL Editor.
 -- Auth users are managed by Supabase in auth.users; we reference them.
 --
@@ -69,7 +69,8 @@
 -- which needs different parsing independent of source_type (the vendor).
 -- Also NOT yet applied to the live database this session.
 --
--- v9 adds events.is_kid_relevant, a GENERATED STORED boolean computed by
+-- v9 adds events.is_kid_relevant, a PLAIN boolean (not null, default
+-- false — NOT generated; see the migration file for why) computed by
 -- is_kid_relevant_event() from title/venue_name/source. Real ingestion
 -- against Pasco/Hillsborough (765 records) confirmed both feeds return
 -- ALL library programming, not just kid-relevant events, with no
@@ -77,10 +78,32 @@
 -- from title/location keywords, strict-allowlist (false negatives
 -- accepted, false positives are not). Only applies to source='communico'
 -- rows; every other event (manual, materialized, user-proposed) always
--- passes. Filters at display time (query-side .eq("is_kid_relevant",
--- true) in /today and /calendar), not at ingestion — ingestion keeps
--- writing every event unconditionally. Not yet applied to the live
--- database this session.
+-- passes. Ingestion (src/lib/ingestion/ingest.ts) sets this explicitly
+-- via an RPC call to is_kid_relevant_event() on every insert/update —
+-- the function is the single source of truth, not a TS reimplementation
+-- (a duplicated copy drifted out of sync once already: an out-of-band
+-- change added "little" back into the keyword allowlist despite it being
+-- a verified false-positive source; caught and reverted here). Applied
+-- directly to the live database this session (confirmed via direct
+-- query, not assumed).
+--
+-- v10 adds events.added_by to the public.feed_events VIEW. IMPORTANT:
+-- feed_events itself — along with is_suppressed, duplicate_of,
+-- display_title, venue_display, room_name, organizer, time_precision on
+-- `events`, the canonicalize_venue() trigger that populates the display
+-- columns, and a venue_aliases table it consults — were added directly
+-- to the live database OUT OF BAND, not through any migration file in
+-- this repo. A "db/schema-snapshot.sql" was referenced as ground truth
+-- for that restructure but does not exist anywhere in this repository.
+-- The `events` table definition below does NOT yet include those
+-- columns — only what v1-v9 above account for — because I don't have
+-- verified DDL for them (constraints, the trigger body's full
+-- implications, venue_aliases' contents) to add without guessing.
+-- /today and /calendar now query public.feed_events instead of `events`
+-- directly (src/app/today/page.tsx, src/app/calendar/page.tsx), so they
+-- already depend on this out-of-band schema being present in whatever
+-- database they run against. Reconciling this file fully needs that
+-- snapshot (or an equivalent pg_dump) committed to the repo.
 --
 -- This file mirrors the live schema; it is not re-run against the existing
 -- project.
@@ -214,10 +237,12 @@ immutable
 as $$
   select case
     when p_source is distinct from 'communico' then true
-    else
-      coalesce(p_title ~* '(storytime|story time|lap-sit|toddler|preschool|baby|babies)', false)
-      and coalesce(p_venue_name !~* '(- adult|teen room)', true)
-      and coalesce(p_title !~* '(teen|adult|18\+|book club|chess|yoga|crochet|woodworking|woodturners|open build|craft & chat|painting)', true)
+    when p_title ~* '(teen|adult|18\+|book club|chess|yoga|crochet|woodwork|woodturner|open build|craft & chat|painting|mahjong|bingo|genealogy|resume)'
+      then false
+    when coalesce(p_venue_name, '') ~* '(- Adult|Teen Room)' then false
+    when p_title ~* '(storytime|story time|lap.?sit|toddler|preschool|bab(y|ies)|sensory)'
+      then true
+    else false
   end;
 $$;
 
@@ -253,9 +278,11 @@ create table events (
   last_verified_at       timestamptz,
   is_outdoor             boolean not null default false,
   what_to_bring          text[] not null default '{}',
-  is_kid_relevant        boolean generated always as (
-                            is_kid_relevant_event(title, venue_name, source)
-                          ) stored
+  -- Plain, not generated — see v9 changelog note above. Set explicitly
+  -- by ingestion via is_kid_relevant_event(); defaults false so a row
+  -- written by anything that forgets to set it fails closed (hidden),
+  -- not open (shown).
+  is_kid_relevant        boolean not null default false
 );
 
 create index idx_events_starts_at on events (starts_at);

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Event } from "@/types";
+import type { FeedEvent } from "@/types";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -10,7 +10,7 @@ export default function MonthCalendar({
   nextHref,
 }: {
   date: Date;
-  events: Event[];
+  events: FeedEvent[];
   prevHref: string;
   nextHref: string;
 }) {
@@ -24,7 +24,7 @@ export default function MonthCalendar({
   const isCurrentMonth =
     today.getFullYear() === year && today.getMonth() === month;
 
-  const eventsByDay = new Map<number, Event[]>();
+  const eventsByDay = new Map<number, FeedEvent[]>();
   for (const event of events) {
     const day = new Date(event.starts_at).getDate();
     const list = eventsByDay.get(day) ?? [];
