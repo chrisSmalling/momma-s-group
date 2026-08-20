@@ -1,8 +1,3 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/ingest-activities?source=ba6f93f4-2bf8-4652-a28f-fe80e9c1d07c",
-      "schedule": "30 * * * *"
-    }
-  ]
+  "crons": []
 }
