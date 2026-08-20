@@ -6,10 +6,14 @@ import { createClient } from "@/lib/supabase/server";
 import EventCard from "@/components/EventCard";
 import PlaceCard from "@/components/PlaceCard";
 import Nav from "@/components/Nav";
-import type { Event, EventComment, Place, PlaceTip, RsvpStatus } from "@/types";
+import type { FeedEvent, EventComment, Place, PlaceTip, RsvpStatus } from "@/types";
 
 type AttendeeDisplay = { user_id: string; status: RsvpStatus; display_name: string; avatar_color: string };
-type TodayEvent = Event & { experience_type?: string | null; weather_fit?: string | null; today_priority?: number | null; geography_tier?: string | null; content_status?: string | null; age_band?: string | null; location_latitude?: number | null; location_longitude?: number | null };
+// public.feed_events already carries content_status/geography_tier/
+// experience_type/weather_fit/age_band/location_latitude/
+// location_longitude natively (added to the view alongside is_kid_relevant/
+// is_suppressed/duplicate_of filtering) -- no intersection type needed.
+type TodayEvent = FeedEvent;
 type Weather = { temperature: number; apparentTemperature: number; precipitationProbability: number; weatherCode: number };
 
 const PLACE_CONTEXT_COLUMNS = "id, is_enclosed, has_changing_table, nursing_friendly, stroller_accessible, food_onsite, quiet_or_sensory_friendly, parking_notes, best_time_note, typical_crowd_note, what_to_bring, lat, lng";
@@ -17,7 +21,7 @@ const PLACE_CONTEXT_COLUMNS = "id, is_enclosed, has_changing_table, nursing_frie
 type EventCardPlace = { is_enclosed: boolean | null; has_changing_table: boolean | null; nursing_friendly: boolean | null; stroller_accessible: boolean | null; food_onsite: boolean | null; quiet_or_sensory_friendly: boolean | null; parking_notes: string | null; best_time_note: string | null; typical_crowd_note: string | null; what_to_bring: string[] };
 
 function todayEventScore(event: TodayEvent, childAgeMonths: number | null, weather: Weather | null) {
-  let score = event.today_priority ?? 0;
+  let score = 0;
   if (event.content_status === "keep") score += 20;
   if (event.geography_tier === "pasco") score += 12;
   if (event.geography_tier === "tampa") score += 4;
@@ -49,7 +53,7 @@ function dedupeTodayEvents(events: TodayEvent[]) {
   const result: TodayEvent[] = [];
   for (const event of events) {
     const title = event.title.toLowerCase().replace(/session\s*\d+/g, "").replace(/\s+/g, " ").trim();
-    const key = `${event.place_id ?? event.venue_name ?? ""}|${title}`;
+    const key = `${event.place_id ?? event.venue ?? ""}|${title}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(event);
@@ -120,7 +124,15 @@ export default async function TodayPage(props: PageProps<"/today">) {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1);
-  const { data: events } = await supabase.from("events").select("*").gte("ends_at", now.toISOString()).lt("starts_at", todayEnd.toISOString()).eq("status", "published").eq("content_status", "keep").order("starts_at", { ascending: true });
+  // public.feed_events already applies status='published' AND
+  // is_kid_relevant AND NOT is_suppressed AND duplicate_of IS NULL --
+  // content_status is NOT used as a hard filter here (confirmed against
+  // real data: filtering on content_status='keep' alone would drop 186
+  // real kid-relevant 'review'-status events; is_kid_relevant is the
+  // canonical signal, content_status is a looser triage tag) -- it's
+  // still used below as one input to todayEventScore's ranking, just not
+  // as an exclusion filter.
+  const { data: events } = await supabase.from("feed_events").select("*").gte("ends_at", now.toISOString()).lt("starts_at", todayEnd.toISOString()).order("starts_at", { ascending: true });
   const rawEventList = (events ?? []) as TodayEvent[];
 
   const placeIdsForEvents = [...new Set(rawEventList.map((e) => e.place_id).filter((id): id is string => Boolean(id)))];
@@ -129,8 +141,8 @@ export default async function TodayPage(props: PageProps<"/today">) {
 
   const weatherByEventId = new Map<string, Weather | null>();
   await Promise.all(rawEventList.map(async (event) => {
-    const lat = event.location_latitude ?? (event as TodayEvent & { lat?: number | null }).lat ?? (event.place_id ? eventPlaceById.get(event.place_id)?.lat : null);
-    const lng = event.location_longitude ?? (event as TodayEvent & { lng?: number | null }).lng ?? (event.place_id ? eventPlaceById.get(event.place_id)?.lng : null);
+    const lat = event.lat ?? (event.place_id ? eventPlaceById.get(event.place_id)?.lat : null);
+    const lng = event.lng ?? (event.place_id ? eventPlaceById.get(event.place_id)?.lng : null);
     if (lat == null || lng == null) { weatherByEventId.set(event.id, null); return; }
     weatherByEventId.set(event.id, await getWeatherAtLocation({ lat, lng }, event.starts_at));
   }));

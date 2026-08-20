@@ -148,6 +148,72 @@ export interface Event {
   last_verified_at: string | null;
   is_outdoor: boolean;
   what_to_bring: string[];
+  // Plain column (not generated — confirmed live), default false. Always
+  // true for non-communico events; for communico events, set by ingestion
+  // via the is_kid_relevant_event() SQL function (single source of truth
+  // — ingest.ts calls it rather than reimplementing the keyword logic in
+  // TypeScript, so the two can't drift the way they briefly did here).
+  is_kid_relevant: boolean;
+}
+
+// public.feed_events — the view /today and /calendar actually query.
+// Applies status='published' AND is_kid_relevant AND NOT is_suppressed
+// AND duplicate_of IS NULL server-side, so page code never hand-filters
+// events. Display fields are pre-resolved here (title/venue fall back
+// through display_title/venue_display to the raw columns via a
+// canonicalize_venue() trigger) — render these, not events.title/
+// events.venue_name, directly.
+export interface FeedEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  venue: string | null;
+  room_name: string | null;
+  organizer: string | null;
+  address: string | null;
+  // lat/lng coalesce events.lat/lng with location_latitude/longitude;
+  // the raw (non-coalesced) pair is also exposed below since some
+  // consumers (e.g. /today's weather lookup) want the same fallback
+  // chain explicitly.
+  lat: number | null;
+  lng: number | null;
+  location_latitude: number | null;
+  location_longitude: number | null;
+  starts_at: string;
+  ends_at: string | null;
+  time_precision: string;
+  // true when time_precision = 'date_only' — render "All day"/"Check
+  // times", never a clock time, when this is true.
+  time_unknown: boolean;
+  cost: string | null;
+  is_free: boolean;
+  age_tags: string[];
+  age_min_months: number | null;
+  age_max_months: number | null;
+  // From the out-of-band content-classification pipeline (see db/schema.sql
+  // v10 note) — a looser triage signal, NOT a substitute for
+  // is_kid_relevant (confirmed against real data: 'review'-status rows
+  // include 186 genuinely kid-relevant events). Useful as a ranking input,
+  // not a filter.
+  age_band: string | null;
+  is_outdoor: boolean;
+  what_to_bring: string[];
+  registration_required: boolean;
+  registration_url: string | null;
+  source: string;
+  source_id: string | null;
+  source_url: string | null;
+  content_status: string | null;
+  geography_tier: string | null;
+  experience_type: string | null;
+  weather_fit: string | null;
+  place_id: string | null;
+  program_id: string | null;
+  proposed_by_group: string | null;
+  metro_area: string;
+  status: EventStatus;
+  last_verified_at: string | null;
+  added_by: string | null;
 }
 
 export type RsvpStatus = "going" | "maybe" | "not_going" | "out_sick";
@@ -226,6 +292,9 @@ export interface ActivitySource {
   base_url: string | null;
   metro_area: string;
   active: boolean;
+  // Orthogonal to source_type: which export a multi-format vendor's
+  // adapter should parse (v8). Null when not applicable/not yet configured.
+  feed_format: "rss" | "ical" | null;
   fetch_frequency_minutes: number | null;
   last_fetch_at: string | null;
   last_fetch_status: "success" | "partial" | "error" | null;

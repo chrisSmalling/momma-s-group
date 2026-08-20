@@ -8,7 +8,7 @@ import EventCard from "@/components/EventCard";
 import Nav from "@/components/Nav";
 import type {
   CancelledUpcoming,
-  Event,
+  FeedEvent,
   EventComment,
   Place,
   PlaceTip,
@@ -87,13 +87,16 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
   // events (proposed_by_group null) are visible to everyone.
   const monthStart = monthDate;
   const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
+  // public.feed_events already applies status='published' AND
+  // is_kid_relevant AND NOT is_suppressed AND duplicate_of IS NULL —
+  // don't hand-filter events here, query the view directly.
   const { data: events } = await supabase
-    .from("events")
+    .from("feed_events")
     .select("*")
     .gte("starts_at", monthStart.toISOString())
     .lt("starts_at", monthEnd.toISOString())
     .order("starts_at", { ascending: true });
-  const eventList = (events ?? []) as Event[];
+  const eventList = (events ?? []) as FeedEvent[];
   const eventIds = eventList.map((e) => e.id);
 
   // RSVPs for those events: RLS already limits rows to mine + anyone I share

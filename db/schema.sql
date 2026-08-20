@@ -1,5 +1,5 @@
 -- ============================================================
--- Momma's Meetup — Postgres schema for Supabase (v7)
+-- Momma's Meetup — Postgres schema for Supabase (v10)
 -- Run this in the Supabase SQL Editor.
 -- Auth users are managed by Supabase in auth.users; we reference them.
 --
@@ -62,6 +62,48 @@
 -- materialize-programs/route.ts switches from the anon key to
 -- SUPABASE_SERVICE_ROLE_KEY accordingly. Also NOT yet applied to the live
 -- database this session — see the v6 note above, same caveat applies.
+--
+-- v8 adds activity_sources.feed_format (rss|ical) — a small gap found
+-- while wiring up the first real ingestion adapter (PR #18.1): a single
+-- vendor (Communico) can expose the same calendar as either RSS or iCal,
+-- which needs different parsing independent of source_type (the vendor).
+-- Also NOT yet applied to the live database this session.
+--
+-- v9 adds events.is_kid_relevant, a PLAIN boolean (not null, default
+-- false — NOT generated; see the migration file for why) computed by
+-- is_kid_relevant_event() from title/venue_name/source. Real ingestion
+-- against Pasco/Hillsborough (765 records) confirmed both feeds return
+-- ALL library programming, not just kid-relevant events, with no
+-- structured age/audience field to filter on — so relevance is inferred
+-- from title/location keywords, strict-allowlist (false negatives
+-- accepted, false positives are not). Only applies to source='communico'
+-- rows; every other event (manual, materialized, user-proposed) always
+-- passes. Ingestion (src/lib/ingestion/ingest.ts) sets this explicitly
+-- via an RPC call to is_kid_relevant_event() on every insert/update —
+-- the function is the single source of truth, not a TS reimplementation
+-- (a duplicated copy drifted out of sync once already: an out-of-band
+-- change added "little" back into the keyword allowlist despite it being
+-- a verified false-positive source; caught and reverted here). Applied
+-- directly to the live database this session (confirmed via direct
+-- query, not assumed).
+--
+-- v10 adds events.added_by to the public.feed_events VIEW. IMPORTANT:
+-- feed_events itself — along with is_suppressed, duplicate_of,
+-- display_title, venue_display, room_name, organizer, time_precision on
+-- `events`, the canonicalize_venue() trigger that populates the display
+-- columns, and a venue_aliases table it consults — were added directly
+-- to the live database OUT OF BAND, not through any migration file in
+-- this repo. A "db/schema-snapshot.sql" was referenced as ground truth
+-- for that restructure but does not exist anywhere in this repository.
+-- The `events` table definition below does NOT yet include those
+-- columns — only what v1-v9 above account for — because I don't have
+-- verified DDL for them (constraints, the trigger body's full
+-- implications, venue_aliases' contents) to add without guessing.
+-- /today and /calendar now query public.feed_events instead of `events`
+-- directly (src/app/today/page.tsx, src/app/calendar/page.tsx), so they
+-- already depend on this out-of-band schema being present in whatever
+-- database they run against. Reconciling this file fully needs that
+-- snapshot (or an equivalent pg_dump) committed to the repo.
 --
 -- This file mirrors the live schema; it is not re-run against the existing
 -- project.
@@ -184,6 +226,26 @@ create table recurring_programs (
 
 create index idx_programs_active on recurring_programs (active, metro_area);
 
+-- v9: strict-allowlist kid/toddler relevance inference for ingested
+-- events, evidence-based from real Pasco/Hillsborough titles — see the
+-- v9 changelog note above for why this exists and its false-positive/
+-- false-negative tradeoff.
+create or replace function is_kid_relevant_event(p_title text, p_venue_name text, p_source text)
+returns boolean
+language sql
+immutable
+as $$
+  select case
+    when p_source is distinct from 'communico' then true
+    when p_title ~* '(teen|adult|18\+|book club|chess|yoga|crochet|woodwork|woodturner|open build|craft & chat|painting|mahjong|bingo|genealogy|resume)'
+      then false
+    when coalesce(p_venue_name, '') ~* '(- Adult|Teen Room)' then false
+    when p_title ~* '(storytime|story time|lap.?sit|toddler|preschool|bab(y|ies)|sensory)'
+      then true
+    else false
+  end;
+$$;
+
 create table events (
   id                     uuid primary key default gen_random_uuid(),
   title                  text not null,
@@ -215,13 +277,19 @@ create table events (
   proposed_by_group      uuid references groups(id) on delete cascade,
   last_verified_at       timestamptz,
   is_outdoor             boolean not null default false,
-  what_to_bring          text[] not null default '{}'
+  what_to_bring          text[] not null default '{}',
+  -- Plain, not generated — see v9 changelog note above. Set explicitly
+  -- by ingestion via is_kid_relevant_event(); defaults false so a row
+  -- written by anything that forgets to set it fails closed (hidden),
+  -- not open (shown).
+  is_kid_relevant        boolean not null default false
 );
 
 create index idx_events_starts_at on events (starts_at);
 create index idx_events_metro_starts on events (metro_area, starts_at);
 create index idx_events_place on events (place_id);
 create index idx_events_proposed_group on events (proposed_by_group);
+create index idx_events_kid_relevant_starts_at on events (starts_at) where is_kid_relevant;
 
 -- Lets a re-ingest of the same feed source update rather than duplicate a row.
 create unique index uniq_events_source_external on events (source, external_id)
@@ -324,6 +392,11 @@ create table activity_sources (
   base_url                 text,
   metro_area               text not null references markets(id),
   active                   boolean not null default true,
+  -- Orthogonal to source_type (v8): source_type identifies the vendor
+  -- (Communico), feed_format identifies which export that vendor's
+  -- adapter should parse (a single vendor can expose both). Nullable —
+  -- only meaningful for multi-format adapters.
+  feed_format              text check (feed_format in ('rss', 'ical')),
   fetch_frequency_minutes  int,
   last_fetch_at            timestamptz,
   last_fetch_status        text check (last_fetch_status in ('success', 'partial', 'error')),

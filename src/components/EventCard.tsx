@@ -6,7 +6,7 @@ import TipsSection from "@/components/TipsSection";
 import IndoorOutdoorTag from "@/components/IndoorOutdoorTag";
 import AgeFitBadge from "@/components/AgeFitBadge";
 import { isGoodAgeFit } from "@/lib/ageFit";
-import type { Event, Place, PlaceTip, RsvpStatus, EventComment } from "@/types";
+import type { FeedEvent, Place, PlaceTip, RsvpStatus, EventComment } from "@/types";
 
 type Attendee = {
   user_id: string;
@@ -37,7 +37,7 @@ type PlaceContext = Pick<
 type CommentDisplay = EventComment & { display_name: string };
 type TipDisplay = PlaceTip & { display_name: string };
 
-function dateBadgeParts(event: Event) {
+function dateBadgeParts(event: FeedEvent) {
   const d = new Date(event.starts_at);
   return {
     weekday: d.toLocaleDateString(undefined, { weekday: "short" }),
@@ -45,7 +45,12 @@ function dateBadgeParts(event: Event) {
   };
 }
 
-function formatTime(event: Event) {
+// time_unknown (time_precision = 'date_only') means the source only gave
+// us a date, not a real start time — starts_at is midnight-filled to
+// satisfy the NOT NULL constraint, not an actual time, so it must never
+// be rendered as one.
+function formatTime(event: FeedEvent) {
+  if (event.time_unknown) return "Check times";
   return new Date(event.starts_at).toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
@@ -104,7 +109,7 @@ export default function EventCard({
   tips,
   childAgeMonths,
 }: {
-  event: Event;
+  event: FeedEvent;
   currentUserId: string;
   currentUserName: string;
   currentStatus: RsvpStatus | null;
@@ -161,9 +166,10 @@ export default function EventCard({
           <p className="text-sm font-semibold text-zinc-600">
             {formatTime(event)}
           </p>
-          {event.venue_name && (
+          {event.venue && (
             <p className="truncate text-sm text-zinc-500">
-              {event.venue_name}
+              {event.venue}
+              {event.room_name ? ` · ${event.room_name}` : ""}
             </p>
           )}
           {(event.age_tags.length > 0 || goodAgeFit) && (
