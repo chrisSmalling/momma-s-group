@@ -7,57 +7,14 @@ export interface IngestResult {
   invalid: number;
   created: number;
   updated: number;
-  // Valid items that passed validate() but couldn't be resolved to an
-  // event (no existing/cross-source match, and no startsAt to create one
-  // with -- e.g. every item from a source whose feed_format is 'rss',
-  // since RSS has no event-time field). Tracked separately from
-  // created/updated so a "successful" ingest run doesn't read as if it
-  // produced real events when it structurally can't have.
   skippedNoStartDate: number;
   cancelled: number;
   errors: string[];
   timingMs: { fetch: number; process: number; total: number };
 }
 
-// Per-run cap on raw items processed. A single invocation processes one
-// source (see route.ts) with its own duration budget, but a feed could
-// still return an unexpectedly large number of items -- this bounds the
-// worst case rather than relying on the duration limit alone to fail
-// safely. Items beyond the cap are simply left for the next run; nothing
-// is lost (activity_source_records.last_seen_at only advances for items
-// actually processed this run, so unprocessed items are never marked
-// stale/cancelled).
 const MAX_ITEMS_PER_RUN = 300;
 
-// Runs one source end to end: fetch -> normalize -> validate ->
-// mapToActivity -> dedupe -> write. Deliberately generic over SourceAdapter
-// — this function never branches on which adapter it was given.
-//
-// Dedup, two layers (matching db/schema.sql's design):
-//   1. Same-source: activity_source_records' unique (source_id,
-//      external_id) — re-seeing the same listing updates it in place.
-//   2. Cross-source: dedup_key — if a DIFFERENT source already resolved
-//      this same real-world activity, link to that existing event instead
-//      of creating a duplicate.
-//
-// Cancellation/staleness: any source_record for this source not touched
-// in this run (because the source stopped listing it) gets its resolved
-// event marked cancelled and itself marked 'stale'. If fetch() itself
-// throws, this function returns early before reaching that step — a
-// single failed fetch never mass-cancels everything from that source.
-// Same reasoning applies when MAX_ITEMS_PER_RUN truncates the item list:
-// the staleness pass only ever runs after a *complete* fetch, but a
-// truncated run would incorrectly mark untouched-this-run items as
-// stale, so staleness detection is skipped entirely when truncation
-// happened (see `truncated` below).
-//
-// Resumability: each item's writes (events + activity_source_records)
-// commit before the next item starts, so a mid-run failure (timeout,
-// crash) leaves whatever was already processed as valid, durable partial
-// data rather than nothing. Confirmed for real by the first live run
-// against Pasco/Hillsborough: a 300s timeout killed the invocation
-// partway through the second source, and both sources' already-processed
-// records were intact and correctly marked afterward.
 export async function ingestSource(
   supabase: SupabaseClient,
   sourceId: string,
@@ -77,10 +34,6 @@ export async function ingestSource(
   };
   const now = new Date().toISOString();
 
-  // Marks the run as in-progress before doing any slow work, so a killed
-  // invocation is visibly distinguishable in activity_sources from "never
-  // run" or "ran and finished" — check last_fetch_status = 'running' with
-  // an old last_fetch_at as a stall signal.
   await supabase.from("activity_sources").update({ last_fetch_status: "running" }).eq("id", sourceId);
 
   let rawItems;
@@ -143,15 +96,6 @@ export async function ingestSource(
       resolvedEventId = matchingRecord?.resolved_event_id ?? null;
     }
 
-    // is_kid_relevant is set by calling the DB function, not by
-    // reimplementing its keyword logic here — a duplicated TS copy is
-    // exactly how this drifted out of sync with the live function once
-    // already (a keyword got added to one copy but not the other).
-    // Single source of truth in Postgres; ingestion just calls it. Only
-    // called when an events write is actually about to happen (skipped
-    // for the no-start-date/no-match branch below, which never writes to
-    // events at all) — avoids a wasted round trip per item on RSS-only
-    // sources, where most items always take that branch.
     let isKidRelevant = false;
     if (resolvedEventId || normalized.startsAt) {
       const { data: kidRelevant, error: kidRelevantError } = await supabase.rpc("is_kid_relevant_event", {
@@ -190,9 +134,6 @@ export async function ingestSource(
         result.updated++;
       }
     } else if (normalized.startsAt) {
-      // Only create a new event once we actually have a start time —
-      // events.starts_at is NOT NULL, and a fabricated/guessed time would
-      // be worse than not creating the row yet.
       const { data: newEvent, error: insertError } = await supabase
         .from("events")
         .insert({
@@ -219,9 +160,6 @@ export async function ingestSource(
         result.created++;
       }
     } else {
-      // Valid item, but no start time to act on and nothing to link it
-      // to yet (e.g. an RSS-only source). Still recorded below so it's
-      // deduped against on future runs and against other sources.
       result.skippedNoStartDate++;
     }
 
@@ -253,10 +191,6 @@ export async function ingestSource(
       `updated=${result.updated} skippedNoStartDate=${result.skippedNoStartDate}`,
   );
 
-  // Staleness pass only runs after a complete (non-truncated) fetch —
-  // otherwise items beyond MAX_ITEMS_PER_RUN that legitimately still
-  // exist on the source would get incorrectly cancelled just because
-  // this run didn't reach them.
   if (!truncated) {
     const { data: staleRecords } = await supabase
       .from("activity_source_records")
@@ -267,6 +201,24 @@ export async function ingestSource(
 
     for (const stale of staleRecords ?? []) {
       if (!stale.resolved_event_id) continue;
+
+      const { count: otherSourceCount, error: otherSourceError } = await supabase
+        .from("activity_source_records")
+        .select("id", { count: "exact", head: true })
+        .eq("resolved_event_id", stale.resolved_event_id)
+        .neq("source_id", sourceId)
+        .neq("verification_status", "stale");
+
+      if (otherSourceError) {
+        result.errors.push(`cross-source staleness check failed for ${stale.resolved_event_id}: ${otherSourceError.message}`);
+        continue;
+      }
+
+      if ((otherSourceCount ?? 0) > 0) {
+        await supabase.from("activity_source_records").update({ verification_status: "stale" }).eq("id", stale.id);
+        continue;
+      }
+
       await supabase
         .from("events")
         .update({ status: "cancelled" })
