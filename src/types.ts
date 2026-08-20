@@ -171,8 +171,14 @@ export interface FeedEvent {
   room_name: string | null;
   organizer: string | null;
   address: string | null;
+  // lat/lng coalesce events.lat/lng with location_latitude/longitude;
+  // the raw (non-coalesced) pair is also exposed below since some
+  // consumers (e.g. /today's weather lookup) want the same fallback
+  // chain explicitly.
   lat: number | null;
   lng: number | null;
+  location_latitude: number | null;
+  location_longitude: number | null;
   starts_at: string;
   ends_at: string | null;
   time_precision: string;
@@ -184,12 +190,23 @@ export interface FeedEvent {
   age_tags: string[];
   age_min_months: number | null;
   age_max_months: number | null;
+  // From the out-of-band content-classification pipeline (see db/schema.sql
+  // v10 note) — a looser triage signal, NOT a substitute for
+  // is_kid_relevant (confirmed against real data: 'review'-status rows
+  // include 186 genuinely kid-relevant events). Useful as a ranking input,
+  // not a filter.
+  age_band: string | null;
   is_outdoor: boolean;
   what_to_bring: string[];
   registration_required: boolean;
   registration_url: string | null;
   source: string;
+  source_id: string | null;
   source_url: string | null;
+  content_status: string | null;
+  geography_tier: string | null;
+  experience_type: string | null;
+  weather_fit: string | null;
   place_id: string | null;
   program_id: string | null;
   proposed_by_group: string | null;
