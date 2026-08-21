@@ -1,0 +1,29 @@
+"use client";
+
+import { useEffect } from "react";
+
+export default function Error({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  useEffect(() => {
+    // Keep the error boundary intentionally quiet; production details belong in server logs.
+  }, []);
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-5 py-10">
+      <section className="w-full max-w-md rounded-3xl bg-white p-7 text-center shadow-sm ring-1 ring-zinc-200 sm:p-9">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-xl">!</div>
+        <h1 className="mt-5 text-2xl font-extrabold tracking-tight text-zinc-950">Something went wrong</h1>
+        <p className="mt-2 text-sm leading-6 text-zinc-500">
+          Momma&apos;s Meetup hit a temporary snag. Your plans are still safe. Try again, and if it keeps happening, come back in a minute.
+        </p>
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <button onClick={() => reset()} className="min-h-11 rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+            Try again
+          </button>
+          <a href="/today" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-200 px-5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
+            Go to Today
+          </a>
+        </div>
+      </section>
+    </main>
+  );
+}
