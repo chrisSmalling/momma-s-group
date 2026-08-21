@@ -1,30 +1,38 @@
 import Link from "next/link";
 import SignOutButton from "./SignOutButton";
 
+const links = [
+  ["/today", "Today"],
+  ["/calendar", "Calendar"],
+  ["/places", "Explore"],
+  ["/groups", "Groups"],
+  ["/settings", "Me"],
+] as const;
+
 export default function Nav({ email }: { email: string }) {
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-y-2">
-      <nav className="flex flex-wrap gap-4 text-sm font-medium">
-        <Link href="/today" className="text-zinc-700 hover:text-zinc-900">
-          Today
+    <header className="mb-8 rounded-2xl border border-zinc-200 bg-white/90 p-3 shadow-sm backdrop-blur sm:p-4">
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/today" className="shrink-0" aria-label="Momma's Meetup home">
+          <div className="text-base font-extrabold tracking-tight text-zinc-950">Momma&apos;s Meetup</div>
+          <div className="hidden text-[11px] font-medium text-zinc-400 sm:block">Find something worth doing.</div>
         </Link>
-        <Link href="/places" className="text-zinc-700 hover:text-zinc-900">
-          Explore
-        </Link>
-        <Link href="/calendar" className="text-zinc-700 hover:text-zinc-900">
-          Calendar
-        </Link>
-        <Link href="/groups" className="text-zinc-700 hover:text-zinc-900">
-          Groups
-        </Link>
-        <Link href="/settings" className="text-zinc-700 hover:text-zinc-900">
-          Me
-        </Link>
-      </nav>
-      <div className="flex items-center gap-4">
-        <span className="text-sm text-zinc-500">{email}</span>
-        <SignOutButton />
+        <div className="flex items-center gap-2">
+          <span className="hidden max-w-40 truncate text-xs text-zinc-500 lg:block">{email}</span>
+          <SignOutButton />
+        </div>
       </div>
-    </div>
+      <nav aria-label="Primary" className="mt-3 grid grid-cols-5 gap-1 rounded-xl bg-zinc-100 p-1">
+        {links.map(([href, label]) => (
+          <Link
+            key={href}
+            href={href}
+            className="rounded-lg px-2 py-2 text-center text-xs font-semibold text-zinc-600 transition hover:bg-white hover:text-zinc-950 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+          >
+            {label}
+          </Link>
+        ))}
+      </nav>
+    </header>
   );
 }
