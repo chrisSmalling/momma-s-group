@@ -1,9 +1,36 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-const admin=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-const clean=(v:string|null|undefined)=>(v??"").replace(/<[^>]*>/g," ").replace(/&nbsp;/g," ").replace(/&#8211;/g,"-").replace(/&#8217;/g,"'").replace(/&#39;/g,"'").replace(/&amp;/g,"&").replace(/\s+/g," ").trim();
-const iso=(v:string|null|undefined)=>{if(!v)return null;const d=new Date(v);return Number.isNaN(d.getTime())?null:d.toISOString()};
-function parseIcal(text:string){const u=text.replace(/\r?\n[ \t]/g,"");return u.split("BEGIN:VEVENT").slice(1).map(b=>{const l=b.split("END:VEVENT")[0].split(/\r?\n/);const g=(k:string)=>{const x=l.find(z=>z.startsWith(k+":")||z.startsWith(k+";"));return x?.slice(x.indexOf(":")+1).trim()??null};const uid=g("UID"),title=clean(g("SUMMARY")),description=clean(g("DESCRIPTION")),location=clean(g("LOCATION")),start=iso(g("DTSTART")),end=iso(g("DTEND"));return uid&&title&&start?{uid,title,description,location,start,end}:null}).filter(Boolean)}
-function parseJsonLd(html:string){const out:any[]=[];for(const m of html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)){try{const x=JSON.parse(m[1].trim());const a=Array.isArray(x)?x:[x];for(const v of a){if(v&&v["@graph"])out.push(...v["@graph"]);else out.push(v)}}catch{}}return out.filter(x=>x&&((x["@type"]==="Event")||(Array.isArray(x["@type"])&&x["@type"].some((t:string)=>/event/i.test(t)))))}
-async function fetchSource(s:any){if(!s.source_url)throw new Error("Source has no source_url");const r=await fetch(s.source_url,{headers:{"User-Agent":"MommasMeetup/1.0 content-sync"}});if(!r.ok)throw new Error(`HTTP ${r.status}`);const text=await r.text();if(s.source_type==="ical")return parseIcal(text);const out:any[]=[];for(const x of parseJsonLd(text)){const loc=typeof x.location==="string"?x.location:(x.location?.name??x.location?.address?.streetAddress??"");const start=iso(x.startDate),end=iso(x.endDate);if(x.name&&start)out.push({uid:x.url||`${x.name}|${start}`,title:clean(x.name),description:clean(typeof x.description==="string"?x.description:""),location:clean(loc),start,end})}return out}
-Deno.serve(async req=>{if(req.method!=="POST")return Response.json({error:"POST required"},{status:405});const now=Date.now(),max=now+90*86400000;const {data:sources,error}=await admin.from("content_sources").select("*").eq("active",true).in("source_type",["ical","api","structured_web","discovery"]).order("last_attempted_at",{ascending:true,nullsFirst:true}).limit(25);if(error)return Response.json({error:error.message},{status:500});const results:any[]=[];for(const s of sources??[]){const attemptedAt=new Date().toISOString();const run=await admin.from("content_sync_runs").insert({source_id:s.id,started_at:attemptedAt,status:"running"}).select("id").single();const runId=run.data?.id;try{const all=await fetchSource(s);let created=0,updated=0,rejected=0,outsideWindow=0,failedWrites=0;for(const e of all){const ms=new Date(e.start).getTime();if(ms<now||ms>max){outsideWindow++;continue}const {data:relevance,error:relevanceError}=await admin.rpc("is_kid_relevant_event",{p_title:e.title,p_venue_name:e.location||null,p_source:"discovery"});if(relevanceError)throw new Error(`relevance classification failed: ${relevanceError.message}`);const kidRelevant=relevance===true;const {data:old}=await admin.from("events").select("id").eq("source_id",s.id).eq("external_id",e.uid).maybeSingle();const p:any={title:e.title,description:e.description||null,venue_name:e.location||null,address:e.location||null,starts_at:e.start,ends_at:e.end,source_id:s.id,external_id:e.uid,source:"discovery",organizer:s.name,source_url:s.source_url,is_kid_relevant:kidRelevant,content_status:kidRelevant?"keep":"review",last_verified_at:new Date().toISOString(),source_last_seen_at:new Date().toISOString()};let writeError:any=null;if(old?.id){writeError=(await admin.from("events").update(p).eq("id",old.id)).error;if(!writeError)updated++}else{writeError=(await admin.from("events").insert(p)).error;if(!writeError)created++}if(writeError){failedWrites++;continue}if(!kidRelevant)rejected++}const finalStatus=failedWrites?"partial":"success";await admin.from("content_sync_runs").update({finished_at:new Date().toISOString(),status:finalStatus,discovered_count:all.length,created_count:created,updated_count:updated,rejected_count:rejected,error_message:failedWrites?`${failedWrites} event writes failed`:null}).eq("id",runId);await admin.from("content_sources").update({last_attempted_at:attemptedAt,last_success_at:new Date().toISOString(),last_error:failedWrites?`${failedWrites} event writes failed`:null,last_event_count:all.length}).eq("id",s.id);results.push({source:s.name,source_type:s.source_type,discovered:all.length,created,updated,rejected,outsideWindow,failedWrites})}catch(err){const msg=err instanceof Error?err.message:String(err);await admin.from("content_sync_runs").update({finished_at:new Date().toISOString(),status:"failed",error_message:msg}).eq("id",runId);await admin.from("content_sources").update({last_attempted_at:attemptedAt,last_error:msg}).eq("id",s.id);results.push({source:s.name,source_type:s.source_type,error:msg})}}return Response.json({ok:true,batch_size:25,window_days:90,processed:results.length,results})});
+
+const admin = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+);
+
+Deno.serve(async (req) => {
+  if (req.method !== "POST") {
+    return Response.json({ error: "POST required" }, { status: 405 });
+  }
+
+  const secret = req.headers.get("x-cron-secret");
+  if (!secret) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { data: valid } = await admin.rpc("validate_community_cron_secret", {
+    provided_secret: secret,
+  });
+
+  if (valid !== true) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  return Response.json(
+    {
+      ok: false,
+      retired: true,
+      error:
+        "sync-content-sources-v2 is retired; discovery ingestion is candidate-only through discover-local-events-v3",
+    },
+    { status: 410 },
+  );
+});
