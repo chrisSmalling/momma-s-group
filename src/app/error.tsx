@@ -1,12 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
-
-export default function Error({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
-  useEffect(() => {
-    // Keep the error boundary intentionally quiet; production details belong in server logs.
-  }, []);
-
+export default function Error({ reset }: { reset: () => void }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-5 py-10">
       <section className="w-full max-w-md rounded-3xl bg-white p-7 text-center shadow-sm ring-1 ring-zinc-200 sm:p-9">
