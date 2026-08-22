@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Privacy Policy · Momma's Meetup",
@@ -19,7 +20,7 @@ export default function PrivacyPage() {
         <h2>Information we collect</h2>
         <ul>
           <li><strong>Account information:</strong> email address and basic profile information needed to operate your account.</li>
-          <li><strong>Group activity:</strong> groups you create or join, invitations, RSVPs, availability, comments, saved activities, tips, and outing feedback.</li>
+          <li><strong>Group activity:</strong> groups you create or join, invitations, RSVPs, availability, comments, tips, and outing feedback.</li>
           <li><strong>Location information:</strong> location you choose to provide for local activity recommendations and travel estimates. We do not store a child profile or a child&apos;s precise location.</li>
           <li><strong>Technical information:</strong> information reasonably necessary to secure, operate, troubleshoot, and improve the service.</li>
         </ul>
@@ -34,11 +35,11 @@ export default function PrivacyPage() {
         <h2>Security and retention</h2>
         <p>We use database access controls and row-level security to limit access to private group information. We retain information only for as long as reasonably necessary to operate the service, meet legal obligations, resolve disputes, and maintain security.</p>
         <h2>Your choices and deletion</h2>
-        <p>You may request correction or deletion of your account and associated personal information. Account deletion requests should be sent to the support address provided by the service. Some records may be retained when required for security, fraud prevention, legal compliance, or legitimate operational purposes.</p>
+        <p>You can permanently delete your account from the <Link href="/account/delete">in-app account deletion page</Link>. Deletion removes your account and personal activity associated with it. Groups and events that other members rely on may remain, with your ownership identity removed where applicable. Some records may be retained when required for security, fraud prevention, legal compliance, or legitimate operational purposes.</p>
         <h2>Changes</h2>
         <p>We may update this policy as the service changes. Material changes will be communicated through the service or other appropriate means.</p>
         <h2>Contact</h2>
-        <p>For privacy questions, deletion requests, or data concerns, contact the Momma&apos;s Meetup support team through the support channel provided in the application.</p>
+        <p>For privacy questions or data concerns, use the support channel provided in the application.</p>
       </div>
     </main>
   );
