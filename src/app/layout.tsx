@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
@@ -39,6 +40,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="min-h-full flex flex-col">
         {children}
+        <footer className="mt-auto border-t border-zinc-200 bg-white px-5 py-6 text-sm text-zinc-500">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p>Momma&apos;s Meetup · Local family activities, together.</p>
+            <nav aria-label="Legal" className="flex gap-4">
+              <Link className="hover:text-zinc-900" href="/privacy">Privacy</Link>
+              <Link className="hover:text-zinc-900" href="/terms">Terms</Link>
+            </nav>
+          </div>
+        </footer>
         <ServiceWorkerRegister />
       </body>
     </html>
