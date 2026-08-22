@@ -5,19 +5,27 @@ import { rsvp } from "@/app/calendar/actions";
 import type { RsvpStatus } from "@/types";
 
 const STATUS_LABELS: Record<RsvpStatus, { label: string; activeLabel: string }> = {
-  going: { label: "Going", activeLabel: "✓ Going" },
+  going: { label: "I'm in", activeLabel: "✓ I'm in" },
   maybe: { label: "Maybe", activeLabel: "✓ Maybe" },
-  not_going: { label: "Not this time", activeLabel: "✓ Not this time" },
-  out_sick: { label: "We're out — sick", activeLabel: "✓ We're out — sick" },
+  not_going: { label: "Can't go", activeLabel: "✓ Can't go" },
+  out_sick: { label: "Out sick", activeLabel: "✓ Out sick" },
 };
 
-function buttonClass(active: boolean, muted: boolean) {
+function buttonClass(status: RsvpStatus, active: boolean, muted: boolean) {
   if (active) {
-    return muted
-      ? "rounded-full bg-zinc-500 px-4 py-1.5 text-sm font-medium text-white shadow-sm disabled:opacity-60"
-      : "rounded-full bg-rose-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm disabled:opacity-60";
+    return status === "going"
+      ? "rounded-full bg-rose-600 px-5 py-2 text-sm font-bold text-white shadow-sm disabled:opacity-60"
+      : muted
+        ? "rounded-full bg-zinc-600 px-4 py-2 text-sm font-medium text-white shadow-sm disabled:opacity-60"
+        : "rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-60";
   }
-  return "rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm text-zinc-700 hover:border-zinc-400 disabled:opacity-60";
+  if (status === "going") {
+    return "rounded-full bg-rose-50 px-5 py-2 text-sm font-bold text-rose-700 ring-1 ring-inset ring-rose-200 hover:bg-rose-100 disabled:opacity-60";
+  }
+  if (muted) {
+    return "rounded-full border border-transparent px-3 py-2 text-sm text-zinc-500 hover:border-zinc-200 hover:bg-zinc-50 disabled:opacity-60";
+  }
+  return "rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:border-zinc-400 disabled:opacity-60";
 }
 
 export default function EventCardShell({
@@ -46,14 +54,10 @@ export default function EventCardShell({
     startTransition(async () => {
       setOptimisticStatus(next);
       const result = await rsvp(eventId, next, next ? note : null);
-      if (result?.error) {
-        setError(result.error);
-      }
+      if (result?.error) setError(result.error);
     });
   }
 
-  // Editing the note shouldn't toggle the RSVP off — save it separately
-  // when the field loses focus, only if it actually changed.
   function handleNoteBlur() {
     if (!optimisticStatus) return;
     const trimmed = note.trim();
@@ -61,9 +65,7 @@ export default function EventCardShell({
     setError(null);
     startTransition(async () => {
       const result = await rsvp(eventId, optimisticStatus, trimmed || null);
-      if (result?.error) {
-        setError(result.error);
-      }
+      if (result?.error) setError(result.error);
     });
   }
 
@@ -76,38 +78,29 @@ export default function EventCardShell({
 
   return (
     <div id={`event-${eventId}`} className={cardClass}>
-      {duringNap && (
-        <p className="mb-2 text-xs font-medium text-zinc-500">
-          🌙 During nap window
-        </p>
-      )}
-
+      {duringNap && <p className="mb-2 text-xs font-medium text-zinc-500">🌙 During nap window</p>}
       {children}
 
       {disabled ? (
         <p className="mt-4 text-sm text-zinc-400">This meetup was cancelled.</p>
       ) : (
         <>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {(["going", "maybe", "not_going", "out_sick"] as const).map(
-              (status) => {
-                const active = optimisticStatus === status;
-                const muted = status === "not_going" || status === "out_sick";
-                return (
-                  <button
-                    key={status}
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => handleClick(status)}
-                    className={buttonClass(active, muted)}
-                  >
-                    {active
-                      ? STATUS_LABELS[status].activeLabel
-                      : STATUS_LABELS[status].label}
-                  </button>
-                );
-              },
-            )}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {(["going", "maybe", "not_going", "out_sick"] as const).map((status) => {
+              const active = optimisticStatus === status;
+              const muted = status === "not_going" || status === "out_sick";
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => handleClick(status)}
+                  className={buttonClass(status, active, muted)}
+                >
+                  {active ? STATUS_LABELS[status].activeLabel : STATUS_LABELS[status].label}
+                </button>
+              );
+            })}
           </div>
 
           {optimisticStatus && (
