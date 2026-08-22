@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -29,3 +31,16 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Require schema snapshot with migrations
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          if git diff --name-only "$base"...HEAD -- 'supabase/migrations/**' | grep -q .; then
+            if ! git diff --name-only "$base"...HEAD -- 'db/schema-snapshot.sql' | grep -q '^db/schema-snapshot.sql$'; then
+              echo 'Migration changes detected without a db/schema-snapshot.sql update.'
+              exit 1
+            fi
+          fi
