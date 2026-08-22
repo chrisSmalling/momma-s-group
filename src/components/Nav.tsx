@@ -6,8 +6,8 @@ import SignOutButton from "./SignOutButton";
 
 const links = [
   ["/today", "Today"],
-  ["/calendar", "Calendar"],
   ["/places", "Explore"],
+  ["/calendar", "Calendar"],
   ["/groups", "Groups"],
   ["/settings", "Me"],
 ] as const;
@@ -20,7 +20,7 @@ export default function Nav({ email }: { email: string }) {
       <div className="flex items-center justify-between gap-3">
         <Link href="/today" className="shrink-0" aria-label="Momma's Meetup home">
           <div className="text-base font-extrabold tracking-tight text-zinc-950">Momma&apos;s Meetup</div>
-          <div className="hidden text-[11px] font-medium text-zinc-400 sm:block">Find something worth doing.</div>
+          <div className="hidden text-[11px] font-medium text-zinc-400 sm:block">Find something worth doing. See who&apos;s in.</div>
         </Link>
         <div className="flex items-center gap-2">
           <span className="hidden max-w-40 truncate text-xs text-zinc-500 lg:block" title={email}>{email}</span>
