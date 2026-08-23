@@ -23,14 +23,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build
+        run: npm run build
+
       - name: Typecheck
         run: npm run typecheck
 
       - name: Lint
         run: npm run lint
-
-      - name: Build
-        run: npm run build
 
       - name: Require schema snapshot with migrations
         if: github.event_name == 'pull_request'
