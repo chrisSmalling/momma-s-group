@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Supabase Edge Functions are a separate Deno deployment target, not
+    // part of the Next.js app — same reasoning as tsconfig.json's
+    // "supabase/functions/**" exclude, mirrored here since ESLint has its
+    // own file-discovery config and doesn't read tsconfig's `exclude`.
+    "supabase/functions/**",
   ]),
 ]);
 
