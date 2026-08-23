@@ -10,7 +10,7 @@ import type { Place, PlaceTip } from "@/types";
 
 function NoteLine({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
-  return <p className="text-xs text-zinc-500"><span className="font-medium text-zinc-600">{label}: </span>{value}</p>;
+  return <p className="line-clamp-2 text-xs text-zinc-500"><span className="font-medium text-zinc-600">{label}: </span>{value}</p>;
 }
 
 type TipDisplay = PlaceTip & { display_name: string };
@@ -47,9 +47,9 @@ export default function PlaceCard({ place, groupId, groupName, currentUserId, ti
         {goodAgeFit && <AgeFitBadge />}
       </div>
       {weather && <p className="mt-2 text-xs font-semibold text-zinc-600">{weatherSummary(weather)} now</p>}
-      {place.toddler_notes && <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{place.toddler_notes}</p>}
-      {place.price_note && <p className="mt-2 text-xs font-medium text-amber-700">{place.price_note}</p>}
-      {place.what_to_bring.length > 0 && <p className="mt-2 text-sm font-semibold text-rose-700">Bring: {place.what_to_bring.join(", ")}</p>}
+      {place.toddler_notes && <p className="mt-2 line-clamp-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{place.toddler_notes}</p>}
+      {place.price_note && <p className="mt-2 line-clamp-1 text-xs font-medium text-amber-700">{place.price_note}</p>}
+      {place.what_to_bring.length > 0 && <p className="mt-2 line-clamp-2 text-sm font-semibold text-rose-700">Bring: {place.what_to_bring.join(", ")}</p>}
       <div className="mt-2 flex flex-col gap-1.5"><PracticalityIcons practicalities={place} /><NoteLine label="Parking" value={place.parking_notes} /><NoteLine label="Best time" value={place.best_time_note} /><NoteLine label="Typical crowd" value={place.typical_crowd_note} /></div>
       {hours.length > 0 && <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-zinc-500 sm:grid-cols-3">{hours.map(({ day, range }) => <div key={day} className="flex justify-between gap-2"><span className="font-medium text-zinc-600">{day}</span><span>{range}</span></div>)}</div>}
       <Link href={`/places/${place.id}/propose`} className="mt-4 inline-block rounded-full bg-rose-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm">Propose a meetup</Link>
