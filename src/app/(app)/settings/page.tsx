@@ -32,7 +32,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
       <div className="w-full max-w-md">
         <Nav email={user.email ?? ""} />
 
-        <h1 className="mb-1 text-xl font-bold text-zinc-900">Nap window</h1>
+        <h1 className="font-display mb-1 text-2xl font-bold text-zinc-900">Nap window</h1>
         <p className="mb-6 text-sm text-zinc-500">
           Events that overlap this window show dimmed on your calendar (never
           hidden) so you can plan around nap time.
@@ -86,7 +86,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
           </button>
         </form>
 
-        <h1 className="mb-1 mt-10 text-xl font-bold text-zinc-900">
+        <h1 className="font-display mb-1 mt-10 text-xl font-bold text-zinc-900">
           Home location
         </h1>
         <p className="mb-6 text-sm text-zinc-500">

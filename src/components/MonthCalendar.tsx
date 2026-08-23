@@ -49,7 +49,7 @@ export default function MonthCalendar({
         <Link href={prevHref} className="text-sm text-zinc-500 hover:text-zinc-900">
           ← Prev
         </Link>
-        <h2 className="text-xl font-semibold">{monthLabel}</h2>
+        <h2 className="font-display text-xl font-bold text-zinc-900">{monthLabel}</h2>
         <Link href={nextHref} className="text-sm text-zinc-500 hover:text-zinc-900">
           Next →
         </Link>
