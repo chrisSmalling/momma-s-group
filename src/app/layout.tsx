@@ -1,12 +1,17 @@
 import type { Metadata, Viewport } from "next";
-import Link from "next/link";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Nunito_Sans, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  axes: ["opsz"],
+});
+
+const nunitoSans = Nunito_Sans({
+  variable: "--font-nunito-sans",
   subsets: ["latin"],
 });
 
@@ -29,27 +34,22 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#C0356E",
+  themeColor: "#A82C5F",
 };
 
+// The global footer used to render here on every page. It's now only
+// rendered explicitly on public pages (login, terms, privacy — see
+// SiteFooter) — the fixed bottom tab bar in Nav.tsx replaces it for
+// signed-in users, and the two would otherwise collide on every authed
+// screen. See src/app/(app)/layout.tsx for the tabbar-clearance wrapper.
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${fraunces.variable} ${nunitoSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {children}
-        <footer className="mt-auto border-t border-zinc-200 bg-white px-5 py-6 text-sm text-zinc-500">
-          <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p>Momma&apos;s Meetup · Local family activities, together.</p>
-            <nav aria-label="Site" className="flex flex-wrap gap-4">
-              <Link className="hover:text-zinc-900" href="/privacy">Privacy</Link>
-              <Link className="hover:text-zinc-900" href="/terms">Terms</Link>
-              <Link className="hover:text-zinc-900" href="/account/delete">Delete account</Link>
-            </nav>
-          </div>
-        </footer>
         <ServiceWorkerRegister />
       </body>
     </html>

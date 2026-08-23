@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { markFree } from "@/app/free/actions";
+import { markFree } from "@/app/(app)/free/actions";
 
 // Same timezone fix as everywhere else datetime-local is used: convert to a
 // UTC instant in the browser, not the server, so the server's own timezone

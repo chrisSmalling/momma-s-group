@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { proposeMeetup } from "@/app/places/actions";
+import { proposeMeetup } from "@/app/(app)/places/actions";
 
 // datetime-local inputs give a naive "wall clock" string with no timezone.
 // Converting it to an ISO instant here (in the browser) uses the browser's

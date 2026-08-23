@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { addComment, promoteToTip } from "@/app/calendar/actions";
+import { addComment, promoteToTip } from "@/app/(app)/calendar/actions";
 import type { EventComment, TipCategory } from "@/types";
 
 type CommentDisplay = EventComment & { display_name: string };

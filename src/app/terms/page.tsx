@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import SiteFooter from "@/components/SiteFooter";
 
 export const metadata: Metadata = {
   title: "Terms of Service · Momma's Meetup",
@@ -9,6 +10,7 @@ const updated = "August 22, 2026";
 
 export default function TermsPage() {
   return (
+    <>
     <main className="mx-auto w-full max-w-3xl px-5 py-10 text-slate-900">
       <p className="text-sm font-medium text-pink-700">Momma&apos;s Meetup</p>
       <h1 className="mt-2 text-3xl font-semibold tracking-tight">Terms of Service</h1>
@@ -38,5 +40,7 @@ export default function TermsPage() {
         <p>Questions about these Terms should be sent through the Momma&apos;s Meetup support channel provided in the application.</p>
       </div>
     </main>
+    <SiteFooter />
+    </>
   );
 }

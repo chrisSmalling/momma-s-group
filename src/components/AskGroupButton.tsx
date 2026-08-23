@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { askGroupAboutEvent } from "@/app/groups/actions";
+import { askGroupAboutEvent } from "@/app/(app)/groups/actions";
 
 export default function AskGroupButton({ eventId, groupId, groupName }: { eventId: string; groupId: string | null; groupName: string | null }) {
   const [asked, setAsked] = useState(false);
@@ -9,11 +9,12 @@ export default function AskGroupButton({ eventId, groupId, groupName }: { eventI
   const [isPending, startTransition] = useTransition();
 
   if (!groupId) return null;
+  const activeGroupId = groupId;
 
   function handleAsk() {
     setError(null);
     startTransition(async () => {
-      const result = await askGroupAboutEvent(groupId, eventId);
+      const result = await askGroupAboutEvent(activeGroupId, eventId);
       if (result?.error) setError(result.error);
       else setAsked(true);
     });

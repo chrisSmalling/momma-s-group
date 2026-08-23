@@ -1,7 +1,7 @@
 "use client";
 
 import { useOptimistic, useState, useTransition, type ReactNode } from "react";
-import { rsvp } from "@/app/calendar/actions";
+import { rsvp } from "@/app/(app)/calendar/actions";
 import type { RsvpStatus } from "@/types";
 
 const STATUS_LABELS: Record<RsvpStatus, { label: string; activeLabel: string }> = {
@@ -11,21 +11,28 @@ const STATUS_LABELS: Record<RsvpStatus, { label: string; activeLabel: string }> 
   out_sick: { label: "Out sick", activeLabel: "✓ Out sick" },
 };
 
-function buttonClass(status: RsvpStatus, active: boolean, muted: boolean) {
-  if (active) {
-    return status === "going"
-      ? "rounded-full bg-rose-600 px-5 py-2 text-sm font-bold text-white shadow-sm disabled:opacity-60"
-      : muted
-        ? "rounded-full bg-zinc-600 px-4 py-2 text-sm font-medium text-white shadow-sm disabled:opacity-60"
-        : "rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-60";
-  }
+// Hierarchy: "going" is the dominant primary action (large, bold, berry —
+// sage once active), "maybe" is a quieter secondary outline, "not_going"/
+// "out_sick" are low-emphasis quiet buttons (present but visually
+// recessive). A gentle tap "pop" (see the motion-safe: classes) is the
+// one sanctioned micro-interaction, gated behind prefers-reduced-motion
+// globally (globals.css) and per-utility here via motion-safe:.
+function buttonClass(status: RsvpStatus, active: boolean) {
+  const pop = "motion-safe:active:scale-95 transition-transform";
   if (status === "going") {
-    return "rounded-full bg-rose-50 px-5 py-2 text-sm font-bold text-rose-700 ring-1 ring-inset ring-rose-200 hover:bg-rose-100 disabled:opacity-60";
+    return active
+      ? `min-h-11 flex-1 rounded-2xl bg-emerald-600 px-5 py-3 text-base font-bold text-white shadow-sm disabled:opacity-60 ${pop}`
+      : `min-h-11 flex-1 rounded-2xl bg-rose-600 px-5 py-3 text-base font-bold text-white shadow-sm hover:bg-rose-700 disabled:opacity-60 ${pop}`;
   }
-  if (muted) {
-    return "rounded-full border border-transparent px-3 py-2 text-sm text-zinc-500 hover:border-zinc-200 hover:bg-zinc-50 disabled:opacity-60";
+  if (status === "maybe") {
+    return active
+      ? `min-h-11 rounded-2xl border-2 border-zinc-900 bg-white px-4 py-3 text-sm font-bold text-zinc-900 disabled:opacity-60 ${pop}`
+      : `min-h-11 rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-semibold text-zinc-700 hover:border-zinc-400 disabled:opacity-60 ${pop}`;
   }
-  return "rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:border-zinc-400 disabled:opacity-60";
+  // not_going / out_sick — quiet, low-emphasis, still a real 44px target.
+  return active
+    ? `min-h-11 rounded-full bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-700 disabled:opacity-60 ${pop}`
+    : `min-h-11 rounded-full px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600 disabled:opacity-60 ${pop}`;
 }
 
 export default function EventCardShell({
@@ -74,33 +81,43 @@ export default function EventCardShell({
     : optimisticStatus === "going"
       ? "border-rose-200 bg-rose-50/60"
       : "border-zinc-200 bg-white";
-  const cardClass = `scroll-mt-4 rounded-2xl border p-4 transition-colors ${baseClass} ${duringNap ? "opacity-70" : ""}`;
+  const cardClass = `scroll-mt-4 rounded-2xl border p-4 transition-colors ${baseClass} ${duringNap ? "opacity-85" : ""}`;
+
+  function statusButton(status: RsvpStatus) {
+    const active = optimisticStatus === status;
+    return (
+      <button
+        key={status}
+        type="button"
+        disabled={isPending}
+        onClick={() => handleClick(status)}
+        className={buttonClass(status, active)}
+      >
+        {active ? STATUS_LABELS[status].activeLabel : STATUS_LABELS[status].label}
+      </button>
+    );
+  }
 
   return (
     <div id={`event-${eventId}`} className={cardClass}>
-      {duringNap && <p className="mb-2 text-xs font-medium text-zinc-500">🌙 During nap window</p>}
+      {duringNap && (
+        <p className="mb-2 rounded-lg bg-zinc-50 px-2.5 py-1.5 text-xs font-medium text-zinc-600">
+          🌙 Overlaps nap — here if plans change
+        </p>
+      )}
       {children}
 
       {disabled ? (
         <p className="mt-4 text-sm text-zinc-400">This meetup was cancelled.</p>
       ) : (
         <>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {(["going", "maybe", "not_going", "out_sick"] as const).map((status) => {
-              const active = optimisticStatus === status;
-              const muted = status === "not_going" || status === "out_sick";
-              return (
-                <button
-                  key={status}
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => handleClick(status)}
-                  className={buttonClass(status, active, muted)}
-                >
-                  {active ? STATUS_LABELS[status].activeLabel : STATUS_LABELS[status].label}
-                </button>
-              );
-            })}
+          <div className="mt-4 flex items-center gap-2">
+            {statusButton("going")}
+            {statusButton("maybe")}
+          </div>
+          <div className="mt-1.5 flex items-center gap-1">
+            {statusButton("not_going")}
+            {statusButton("out_sick")}
           </div>
 
           {optimisticStatus && (
