@@ -84,7 +84,6 @@ export default function EventCard({ event, currentUserId, currentUserName, curre
             {goodAgeFit && <AgeFitBadge />}
           </div>}
           <div className="mt-1.5"><IndoorOutdoorTag isOutdoor={event.is_outdoor} /></div>
-          {event.description && <p className="mt-1.5 line-clamp-1 text-xs text-zinc-400">{event.description}</p>}
           {proposedBy && <p className="mt-1.5 text-xs italic text-zinc-400">Proposed by {proposedBy.user_id === currentUserId ? "you" : proposedBy.display_name}</p>}
         </div>
       </div>
