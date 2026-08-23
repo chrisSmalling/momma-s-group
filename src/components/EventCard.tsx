@@ -25,16 +25,10 @@ function formatTime(event: FeedEvent) {
 }
 
 function CostPill({ cost }: { cost: string | null }) {
-  // Unknown cost must never be presented as free. Only an explicit free/$0
-  // value gets the green Free treatment; null remains neutral and truthful.
   const normalized = cost?.trim().toLowerCase() ?? "";
   const isFree = normalized === "free" || normalized === "$0" || normalized === "$0.00" || normalized === "no cost";
-  if (isFree) {
-    return <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">Free</span>;
-  }
-  if (!normalized) {
-    return <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-semibold text-zinc-600">Cost unknown</span>;
-  }
+  if (isFree) return <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">Free</span>;
+  if (!normalized) return <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-semibold text-zinc-600">Cost unknown</span>;
   return <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">{cost}</span>;
 }
 
@@ -90,7 +84,7 @@ export default function EventCard({ event, currentUserId, currentUserName, curre
             {goodAgeFit && <AgeFitBadge />}
           </div>}
           <div className="mt-1.5"><IndoorOutdoorTag isOutdoor={event.is_outdoor} /></div>
-          {event.description && <p className="mt-1.5 line-clamp-2 text-xs text-zinc-400">{event.description}</p>}
+          {event.description && <p className="mt-1.5 line-clamp-1 text-xs text-zinc-400">{event.description}</p>}
           {proposedBy && <p className="mt-1.5 text-xs italic text-zinc-400">Proposed by {proposedBy.user_id === currentUserId ? "you" : proposedBy.display_name}</p>}
         </div>
       </div>
