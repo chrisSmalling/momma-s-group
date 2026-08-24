@@ -28,28 +28,39 @@ export async function updateNapSettings(formData: FormData) {
 }
 
 export async function updateHomeLocation(formData: FormData) {
-  const address = String(formData.get("home_address") ?? "").trim();
+  const street = String(formData.get("home_street") ?? "").trim();
+  const city = String(formData.get("home_city") ?? "").trim();
+  const state = String(formData.get("home_state") ?? "").trim().toUpperCase();
+  const zip = String(formData.get("home_zip") ?? "").trim();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  if (!address) {
+  if (!street && !city && !state && !zip) {
     const { error } = await supabase
       .from("profiles")
-      .update({ home_address: null, home_lat: null, home_lng: null })
+      .update({ home_address: null, home_street: null, home_city: null, home_state: null, home_zip: null, home_lat: null, home_lng: null })
       .eq("id", user.id);
     if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
     redirect("/settings?address_saved=cleared");
   }
 
-  // The member-entered address is the source of truth. Save it even when the
-  // geocoder is unavailable; coordinates are only a routing cache and can be
-  // populated later without asking the member to enter coordinates.
+  if (!street || !city || !state || !zip) {
+    redirect("/settings?address_error=Please%20enter%20your%20street%2C%20city%2C%20state%2C%20and%20ZIP%20code");
+  }
+  if (!/^[A-Z]{2}$/.test(state)) redirect("/settings?address_error=Use%20a%20two-letter%20state%20code");
+  if (!/^\d{5}(?:-\d{4})?$/.test(zip)) redirect("/settings?address_error=Enter%20a%20valid%20ZIP%20code");
+
+  const address = `${street}, ${city}, ${state} ${zip}`;
   const geocoded = await geocodeAddress(address);
   const { error } = await supabase
     .from("profiles")
     .update({
       home_address: address,
+      home_street: street,
+      home_city: city,
+      home_state: state,
+      home_zip: zip,
       home_lat: geocoded?.lat ?? null,
       home_lng: geocoded?.lng ?? null,
     })
