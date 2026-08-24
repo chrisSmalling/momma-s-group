@@ -4,13 +4,14 @@ export type GeocodedAddress = {
   label?: string;
 };
 
-const GEOCODE_URL = "https://api.openrouteservice.org/geocode/search";
+const GEOCODE_URL = "https://api.heigit.org/pelias/v1/search";
 const REQUEST_TIMEOUT_MS = 5000;
 
 /**
  * Geocodes a member-entered street address server-side.
- * The address is the source of truth; coordinates are only the transient
- * representation required by routing/weather providers.
+ * The address is the source of truth; coordinates are only the representation
+ * required by routing. HeiGIT's current Pelias endpoint is used here because
+ * api.openrouteservice.org was shut off on August 24, 2026.
  */
 export async function geocodeAddress(address: string): Promise<GeocodedAddress | null> {
   const apiKey = process.env.OPENROUTESERVICE_API_KEY;
