@@ -1,1 +1,0 @@
-Server-side address geocoding uses the existing OpenRouteService integration. Member-entered address remains the user-facing source of truth.
