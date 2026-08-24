@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Nav from "@/components/Nav";
 import Explorer from "@/components/Explorer";
+import ExplorerAssistant from "@/components/ExplorerAssistant";
 import type { Place, PlaceTip } from "@/types";
 
 export default async function PlacesPage() {
@@ -40,16 +41,24 @@ export default async function PlacesPage() {
     <div className="flex flex-1 flex-col items-center px-4 py-10">
       <div className="w-full max-w-2xl">
         <Nav email={user.email ?? ""} />
-        <Explorer
-          places={placeList}
-          groupId={activeGroupId}
-          groupName={activeGroupName}
-          currentUserId={user.id}
-          tipsByPlace={tipsByPlace}
-          childAgeMonths={profile?.child_age_months ?? null}
-          homeLat={profile?.home_lat ?? null}
-          homeLng={profile?.home_lng ?? null}
-        />
+        <div className="flex flex-col gap-5">
+          <ExplorerAssistant
+            places={placeList}
+            childAgeMonths={profile?.child_age_months ?? null}
+            homeLat={profile?.home_lat ?? null}
+            homeLng={profile?.home_lng ?? null}
+          />
+          <Explorer
+            places={placeList}
+            groupId={activeGroupId}
+            groupName={activeGroupName}
+            currentUserId={user.id}
+            tipsByPlace={tipsByPlace}
+            childAgeMonths={profile?.child_age_months ?? null}
+            homeLat={profile?.home_lat ?? null}
+            homeLng={profile?.home_lng ?? null}
+          />
+        </div>
       </div>
     </div>
   );
