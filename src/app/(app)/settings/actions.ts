@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { geocodeAddress } from "@/lib/geocoding";
 
 export async function updateNapSettings(formData: FormData) {
   const napStart = String(formData.get("nap_start") ?? "").trim();
@@ -17,9 +18,7 @@ export async function updateNapSettings(formData: FormData) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
   const { error } = await supabase
     .from("profiles")
@@ -30,46 +29,44 @@ export async function updateNapSettings(formData: FormData) {
     })
     .eq("id", user.id);
 
-  if (error) {
-    redirect(`/settings?error=${encodeURIComponent(error.message)}`);
-  }
-
+  if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
   redirect("/settings?saved=1");
 }
 
 export async function updateHomeLocation(formData: FormData) {
-  const latRaw = String(formData.get("home_lat") ?? "").trim();
-  const lngRaw = String(formData.get("home_lng") ?? "").trim();
-
-  const homeLat = latRaw ? Number(latRaw) : null;
-  const homeLng = lngRaw ? Number(lngRaw) : null;
-
-  if (latRaw && (Number.isNaN(homeLat) || homeLat! < -90 || homeLat! > 90)) {
-    redirect("/settings?error=Latitude%20must%20be%20between%20-90%20and%2090");
-  }
-  if (lngRaw && (Number.isNaN(homeLng) || homeLng! < -180 || homeLng! > 180)) {
-    redirect("/settings?error=Longitude%20must%20be%20between%20-180%20and%20180");
-  }
-  if ((homeLat === null) !== (homeLng === null)) {
-    redirect("/settings?error=Enter%20both%20latitude%20and%20longitude%2C%20or%20neither");
-  }
+  const address = String(formData.get("home_address") ?? "").trim();
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    redirect("/login");
+  if (!user) redirect("/login");
+
+  if (!address) {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ home_address: null, home_lat: null, home_lng: null })
+      .eq("id", user.id);
+    if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
+    redirect("/settings?saved=1");
+  }
+
+  const geocoded = await geocodeAddress(address);
+  if (!geocoded) {
+    redirect("/settings?error=We%20couldn%27t%20find%20that%20address.%20Check%20the%20street%20address%20and%20ZIP%20code%20and%20try%20again.");
   }
 
   const { error } = await supabase
     .from("profiles")
-    .update({ home_lat: homeLat, home_lng: homeLng })
+    .update({
+      home_address: address,
+      // These coordinates are an internal geocoding cache derived from the
+      // address. Members never enter or manage coordinates themselves.
+      home_lat: geocoded.lat,
+      home_lng: geocoded.lng,
+    })
     .eq("id", user.id);
 
-  if (error) {
-    redirect(`/settings?error=${encodeURIComponent(error.message)}`);
-  }
-
+  if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
   redirect("/settings?saved=1");
 }
