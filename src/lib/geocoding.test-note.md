@@ -1,0 +1,1 @@
+This file intentionally documents that geocoding is exercised through the existing OpenRouteService integration in server-side settings action; no browser-side geocoding is used.
