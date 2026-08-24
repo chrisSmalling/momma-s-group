@@ -37,16 +37,6 @@ function CancelledPill() {
   return <span className="shrink-0 rounded-full bg-zinc-200 px-2.5 py-1 text-xs font-semibold text-zinc-600">Cancelled</span>;
 }
 
-function NoteLine({ label, value }: { label: string; value: string | null }) {
-  if (!value) return null;
-  return (
-    <p className="text-xs text-zinc-500">
-      <span className="font-medium text-zinc-600">{label}: </span>
-      {value}
-    </p>
-  );
-}
-
 function FitChips({
   goodAgeFit,
   isOutdoor,
@@ -187,46 +177,54 @@ export default function EventCard({
           </div>
         </div>
         <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3">
-          <span className="text-xs font-bold text-rose-700">View full event</span>
+          <span className="text-sm font-bold text-rose-700">View full event</span>
           <span aria-hidden="true" className="text-lg font-semibold text-rose-600 transition-transform group-hover:translate-x-0.5">→</span>
         </div>
       </Link>
 
       {event.registration_required && event.registration_url && (
         <div className="mt-3">
-          <a href={event.registration_url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-rose-700 underline underline-offset-2">Register →</a>
+          <a href={event.registration_url} target="_blank" rel="noopener noreferrer" className="min-h-11 inline-flex items-center text-sm font-semibold text-rose-700 underline underline-offset-2">Register →</a>
         </div>
       )}
 
-      {bring.length > 0 && <p className="mt-3 text-sm font-semibold text-rose-700">Bring: {bring.join(", ")}</p>}
+      <details className="mt-3 rounded-xl border border-zinc-100 bg-zinc-50/70 px-3">
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between text-sm font-bold text-zinc-700">
+          <span>More about this event</span>
+          <span aria-hidden="true" className="text-zinc-400">⌄</span>
+        </summary>
+        <div className="pb-3">
+          {bring.length > 0 && <p className="mt-1 text-sm font-semibold text-rose-700">Bring: {bring.join(", ")}</p>}
 
-      {place && (
-        <div className="mt-2 flex flex-col gap-1.5">
-          <PracticalityIcons practicalities={place} />
-          <NoteLine label="Parking" value={place.parking_notes} />
-          <NoteLine label="Best time" value={place.best_time_note} />
-          <NoteLine label="Typical crowd" value={place.typical_crowd_note} />
-        </div>
-      )}
+          {place && (
+            <div className="mt-3 flex flex-col gap-1.5">
+              <PracticalityIcons practicalities={place} />
+              {place.parking_notes && <p className="text-xs text-zinc-500"><span className="font-medium text-zinc-600">Parking: </span>{place.parking_notes}</p>}
+              {place.best_time_note && <p className="text-xs text-zinc-500"><span className="font-medium text-zinc-600">Best time: </span>{place.best_time_note}</p>}
+              {place.typical_crowd_note && <p className="text-xs text-zinc-500"><span className="font-medium text-zinc-600">Typical crowd: </span>{place.typical_crowd_note}</p>}
+            </div>
+          )}
 
-      <AskGroupButton eventId={event.id} groupId={activeGroupId} groupName={activeGroupName} />
-      <GroupAvailability eventId={event.id} groupId={activeGroupId} />
+          <AskGroupButton eventId={event.id} groupId={activeGroupId} groupName={activeGroupName} />
+          <GroupAvailability eventId={event.id} groupId={activeGroupId} />
 
-      <div className="mt-4">
-        <LiveAttendees eventId={event.id} currentUserId={currentUserId} hasActiveGroup={hasActiveGroup} activeGroupName={activeGroupName} activeGroupMemberIds={activeGroupMemberIds} roster={roster} initialAttendees={attendees} />
-      </div>
+          <div className="mt-4">
+            <LiveAttendees eventId={event.id} currentUserId={currentUserId} hasActiveGroup={hasActiveGroup} activeGroupName={activeGroupName} activeGroupMemberIds={activeGroupMemberIds} roster={roster} initialAttendees={attendees} />
+          </div>
 
-      <details className="mt-4 border-t border-zinc-100 pt-3">
-        <summary className="cursor-pointer text-xs font-semibold text-zinc-500">Comments {comments.length > 0 ? `(${comments.length})` : ""}</summary>
-        <div className="mt-3">
-          <EventComments eventId={event.id} groupId={activeGroupId} currentUserId={currentUserId} currentUserName={currentUserName} initialComments={comments} roster={Object.fromEntries(Object.entries(roster).map(([id, p]) => [id, p.display_name]))} />
-        </div>
-      </details>
+          <details className="mt-4 border-t border-zinc-100 pt-3">
+            <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-zinc-600">Comments {comments.length > 0 ? `(${comments.length})` : ""}</summary>
+            <div className="mt-1">
+              <EventComments eventId={event.id} groupId={activeGroupId} currentUserId={currentUserId} currentUserName={currentUserName} initialComments={comments} roster={Object.fromEntries(Object.entries(roster).map(([id, p]) => [id, p.display_name]))} />
+            </div>
+          </details>
 
-      <details className="mt-3 border-t border-zinc-100 pt-3">
-        <summary className="cursor-pointer text-xs font-semibold text-zinc-500">Tips {tips.length > 0 ? `(${tips.length})` : ""}</summary>
-        <div className="mt-3">
-          <TipsSection placeId={event.place_id ?? undefined} eventId={event.place_id ? undefined : event.id} groupId={activeGroupId} groupName={activeGroupName} currentUserId={currentUserId} tips={tips} />
+          <details className="mt-2 border-t border-zinc-100 pt-3">
+            <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-zinc-600">Tips {tips.length > 0 ? `(${tips.length})` : ""}</summary>
+            <div className="mt-1">
+              <TipsSection placeId={event.place_id ?? undefined} eventId={event.place_id ? undefined : event.id} groupId={activeGroupId} groupName={activeGroupName} currentUserId={currentUserId} tips={tips} />
+            </div>
+          </details>
         </div>
       </details>
     </EventCardShell>
