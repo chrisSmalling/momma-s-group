@@ -4,33 +4,43 @@ export type GeocodedAddress = {
   label?: string;
 };
 
-const GEOCODE_URL = "https://api.heigit.org/pelias/v1/search";
-const REQUEST_TIMEOUT_MS = 5000;
+const GEOCODE_URL = "https://api.heigit.org/pelias/v1/search/structured";
+const REQUEST_TIMEOUT_MS = 8000;
 
 /**
- * Geocodes a member-entered street address server-side.
- * The address is the source of truth; coordinates are only the representation
- * required by routing. HeiGIT's current Pelias endpoint is used here because
- * api.openrouteservice.org was shut off on August 24, 2026.
+ * Geocodes the structured member-entered address server-side.
+ * The address remains the source of truth; coordinates are only the internal
+ * representation required by routing.
  */
-export async function geocodeAddress(address: string): Promise<GeocodedAddress | null> {
+export async function geocodeAddress(input: {
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+}): Promise<GeocodedAddress | null> {
   const apiKey = process.env.OPENROUTESERVICE_API_KEY;
-  const normalized = address.trim();
-  if (!apiKey || !normalized) return null;
+  if (!apiKey || !input.street || !input.city || !input.state || !input.zip) return null;
 
   const url = new URL(GEOCODE_URL);
   url.searchParams.set("api_key", apiKey);
-  url.searchParams.set("text", normalized);
+  url.searchParams.set("address", input.street);
+  url.searchParams.set("locality", input.city);
+  url.searchParams.set("region", input.state);
+  url.searchParams.set("postalcode", input.zip);
+  url.searchParams.set("country", "USA");
+  url.searchParams.set("boundary.country", "USA");
+  url.searchParams.set("layers", "address");
   url.searchParams.set("size", "1");
-  url.searchParams.set("boundary.country", "US");
 
   try {
     const response = await fetch(url, {
-      headers: { Authorization: apiKey },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       next: { revalidate: 86400 },
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.warn("GEOCODING_PROVIDER_ERROR", response.status);
+      return null;
+    }
 
     const data = await response.json() as {
       features?: Array<{
@@ -40,12 +50,16 @@ export async function geocodeAddress(address: string): Promise<GeocodedAddress |
     };
     const feature = data.features?.[0];
     const coordinates = feature?.geometry?.coordinates;
-    if (!coordinates || coordinates.length < 2) return null;
+    if (!coordinates || coordinates.length < 2) {
+      console.warn("GEOCODING_NO_ADDRESS_MATCH");
+      return null;
+    }
 
     const [lng, lat] = coordinates;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
     return { lat, lng, label: feature.properties?.label };
-  } catch {
+  } catch (error) {
+    console.warn("GEOCODING_REQUEST_FAILED", error instanceof Error ? error.name : "unknown");
     return null;
   }
 }
