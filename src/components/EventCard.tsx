@@ -19,10 +19,6 @@ function dateBadgeParts(event: FeedEvent) {
   return { weekday: d.toLocaleDateString(undefined, { weekday: "short" }), day: d.getDate() };
 }
 
-// time_unknown (time_precision = 'date_only') means the source only gave
-// us a date, not a real start time — starts_at is midnight-filled to
-// satisfy the NOT NULL constraint, not an actual time, so it must never
-// be rendered as one.
 function formatTime(event: FeedEvent) {
   if (event.time_unknown) return "Check times";
   return new Date(event.starts_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
@@ -50,11 +46,6 @@ function NoteLine({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-// A single emoji-chip row that explains why an event fits, instead of
-// scoring or ranking it. Every chip is conditional on real data — nothing
-// here is invented when a value is unavailable (e.g. no drive-time chip
-// when `distance` wasn't computed, no age-fit chip when the viewer's
-// child's age is unknown).
 function FitChips({
   goodAgeFit,
   isOutdoor,
@@ -127,15 +118,11 @@ export default function EventCard({
   duringNap: boolean;
   comments: CommentDisplay[];
   tips: TipDisplay[];
-  // Viewer's profiles.child_age_months, when set — drives the "Great for
-  // their age" chip. Omit when unknown so nothing renders (see isGoodAgeFit).
   childAgeMonths?: number | null;
-  // Real per-viewer drive time, when computed by the caller. The member's
-  // saved home address is the source of truth; geocoded coordinates are an
-  // internal routing cache only. Never fall back to straight-line distance.
   distance?: { km: number; driveMinutes?: number };
-  // Forecast at the event's own location and event start time.
-  weatherSummary: string | null;
+  // Forecast at the event's own location and event start time. Calendar and
+  // other shared EventCard consumers may omit it when no forecast is loaded.
+  weatherSummary?: string | null;
 }) {
   const { weekday, day } = dateBadgeParts(event);
   const cancelled = event.status === "cancelled";
@@ -198,14 +185,7 @@ export default function EventCard({
 
       {event.registration_required && event.registration_url && (
         <div className="mt-3">
-          <a
-            href={event.registration_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs font-semibold text-rose-700 underline underline-offset-2"
-          >
-            Register →
-          </a>
+          <a href={event.registration_url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-rose-700 underline underline-offset-2">Register →</a>
         </div>
       )}
 
@@ -224,46 +204,20 @@ export default function EventCard({
       <GroupAvailability eventId={event.id} groupId={activeGroupId} />
 
       <div className="mt-4">
-        <LiveAttendees
-          eventId={event.id}
-          currentUserId={currentUserId}
-          hasActiveGroup={hasActiveGroup}
-          activeGroupName={activeGroupName}
-          activeGroupMemberIds={activeGroupMemberIds}
-          roster={roster}
-          initialAttendees={attendees}
-        />
+        <LiveAttendees eventId={event.id} currentUserId={currentUserId} hasActiveGroup={hasActiveGroup} activeGroupName={activeGroupName} activeGroupMemberIds={activeGroupMemberIds} roster={roster} initialAttendees={attendees} />
       </div>
 
       <details className="mt-4 border-t border-zinc-100 pt-3">
-        <summary className="cursor-pointer text-xs font-semibold text-zinc-500">
-          Comments {comments.length > 0 ? `(${comments.length})` : ""}
-        </summary>
+        <summary className="cursor-pointer text-xs font-semibold text-zinc-500">Comments {comments.length > 0 ? `(${comments.length})` : ""}</summary>
         <div className="mt-3">
-          <EventComments
-            eventId={event.id}
-            groupId={activeGroupId}
-            currentUserId={currentUserId}
-            currentUserName={currentUserName}
-            initialComments={comments}
-            roster={Object.fromEntries(Object.entries(roster).map(([id, p]) => [id, p.display_name]))}
-          />
+          <EventComments eventId={event.id} groupId={activeGroupId} currentUserId={currentUserId} currentUserName={currentUserName} initialComments={comments} roster={Object.fromEntries(Object.entries(roster).map(([id, p]) => [id, p.display_name]))} />
         </div>
       </details>
 
       <details className="mt-3 border-t border-zinc-100 pt-3">
-        <summary className="cursor-pointer text-xs font-semibold text-zinc-500">
-          Tips {tips.length > 0 ? `(${tips.length})` : ""}
-        </summary>
+        <summary className="cursor-pointer text-xs font-semibold text-zinc-500">Tips {tips.length > 0 ? `(${tips.length})` : ""}</summary>
         <div className="mt-3">
-          <TipsSection
-            placeId={event.place_id ?? undefined}
-            eventId={event.place_id ? undefined : event.id}
-            groupId={activeGroupId}
-            groupName={activeGroupName}
-            currentUserId={currentUserId}
-            tips={tips}
-          />
+          <TipsSection placeId={event.place_id ?? undefined} eventId={event.place_id ? undefined : event.id} groupId={activeGroupId} groupName={activeGroupName} currentUserId={currentUserId} tips={tips} />
         </div>
       </details>
     </EventCardShell>
