@@ -11,12 +11,6 @@
   --font-sans: var(--font-nunito-sans), "Nunito Sans", Arial, Helvetica, sans-serif;
   --font-display: var(--font-fraunces), "Fraunces", Georgia, serif;
   --font-mono: var(--font-geist-mono);
-
-  /* Warm palette remap: existing zinc, rose, and emerald utility classes
-     already used across the app render warm without touching call sites.
-     zinc -> warm stone, rose -> berry (brand/primary), emerald -> sage
-     (positive/"free"/"go"). amber/red intentionally untouched -- they stay
-     the universal warning/error signal. */
   --color-zinc-50: #faf6f2;
   --color-zinc-100: #f4ece4;
   --color-zinc-200: #e7d9cd;
@@ -28,7 +22,6 @@
   --color-zinc-800: #43352c;
   --color-zinc-900: #2f251f;
   --color-zinc-950: #1e1712;
-
   --color-rose-50: #fdf1f5;
   --color-rose-100: #fbdfe9;
   --color-rose-200: #f6bdd2;
@@ -39,7 +32,6 @@
   --color-rose-700: #8a2250;
   --color-rose-800: #6f1c41;
   --color-rose-900: #5c1937;
-
   --color-emerald-50: #f0f9f1;
   --color-emerald-100: #dcf0de;
   --color-emerald-200: #bae2c0;
@@ -52,14 +44,14 @@
   --color-emerald-900: #1d4126;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 html {
   background: var(--background);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-x: none;
 }
 
 body {
@@ -68,41 +60,36 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  overflow-x: hidden;
 }
 
-h1,
-h2 {
-  font-family: var(--font-display);
-}
-
-.font-display {
-  font-family: var(--font-display);
-}
-
-button,
-input,
-textarea,
-select {
-  font: inherit;
-}
+h1, h2 { font-family: var(--font-display); }
+.font-display { font-family: var(--font-display); }
+button, input, textarea, select { font: inherit; }
 
 a {
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
-::selection {
-  background: rgba(168, 44, 95, 0.16);
-}
+button, [role="button"] { touch-action: manipulation; }
 
-/* Bottom clearance for pages sitting behind the fixed bottom tab bar
-   (Nav.tsx). env(safe-area-inset-bottom) covers the home-indicator area
-   on iOS; the flat 72px covers the bar's own height. */
+::selection { background: rgba(168, 44, 95, 0.16); }
+
+/* Fixed mobile navigation clearance. Includes the iOS home-indicator area. */
 .has-tabbar {
-  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Keep interactive controls comfortable for thumb use without forcing
+   oversized desktop controls. */
+@media (max-width: 639px) {
+  button, [role="button"] { min-height: 44px; }
+  input, textarea, select { font-size: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;

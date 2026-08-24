@@ -25,14 +25,14 @@ function NavIcon({ name, active }: { name: NavIconName; active: boolean }) {
     viewBox: "0 0 24 24",
     fill: "none",
     stroke: "currentColor",
-    strokeWidth: 1.9,
+    strokeWidth: active ? 2.1 : 1.8,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
     "aria-hidden": true,
   };
 
   return (
-    <svg {...common} className={active ? "scale-105" : ""}>
+    <svg {...common} className="transition-transform duration-150" style={{ transform: active ? "scale(1.04)" : "scale(1)" }}>
       {name === "today" && <><path d="M12 3v2" /><path d="M5.64 5.64 7.05 7.05" /><path d="M3 12h2" /><path d="M17 12h4" /><path d="M16.95 7.05l1.41-1.41" /><path d="M6.5 16.5a6 6 0 1 1 11 0" /></>}
       {name === "explore" && <><circle cx="12" cy="12" r="9" /><path d="m15.5 8.5-2.2 4.8-4.8 2.2 2.2-4.8 4.8-2.2Z" /></>}
       {name === "calendar" && <><rect x="3.5" y="5" width="17" height="16" rx="2" /><path d="M7 3v4M17 3v4M3.5 9h17" /><path d="M8 13h2M12 13h2M16 13h.01M8 17h2M12 17h2" /></>}
@@ -48,11 +48,11 @@ export default function Nav({ email }: { email: string }) {
   return (
     <>
       <header className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white/90 p-3 shadow-sm backdrop-blur">
-        <Link href="/today" prefetch className="shrink-0" aria-label="Momma's Meetup home">
+        <Link href="/today" prefetch className="min-w-0 shrink" aria-label="Momma's Meetup home">
           <div className="font-display text-base font-bold tracking-tight text-zinc-950">Momma&apos;s Meetup</div>
           <div className="hidden text-[11px] font-medium text-zinc-400 sm:block">Find something worth doing. See who&apos;s in.</div>
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <span className="hidden max-w-40 truncate text-xs text-zinc-500 lg:block" title={email}>{email}</span>
           <SignOutButton />
         </div>
@@ -60,10 +60,10 @@ export default function Nav({ email }: { email: string }) {
 
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200/90 bg-white/95 shadow-[0_-8px_24px_rgba(42,26,31,0.06)] backdrop-blur-md"
+        className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200/90 bg-white/97 shadow-[0_-8px_24px_rgba(42,26,31,0.08)] backdrop-blur-md"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
-        <div className="mx-auto grid max-w-2xl grid-cols-5 px-1">
+        <div className="mx-auto grid h-[76px] max-w-2xl grid-cols-5 px-1 sm:h-[72px]">
           {links.map(([href, label, icon]) => {
             const active = isActive(pathname, href);
             return (
@@ -72,11 +72,11 @@ export default function Nav({ email }: { email: string }) {
                 href={href}
                 prefetch
                 aria-current={active ? "page" : undefined}
-                className={`relative flex min-h-14 flex-col items-center justify-center gap-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-rose-500 ${active ? "font-bold text-rose-600" : "font-semibold text-zinc-500 hover:text-zinc-800"}`}
+                className={`relative flex min-h-[44px] flex-col items-center justify-center gap-1 rounded-xl py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-rose-500 ${active ? "font-bold text-rose-600" : "font-semibold text-zinc-500 active:bg-zinc-100 hover:text-zinc-800"}`}
               >
-                {active && <span aria-hidden="true" className="absolute top-0 h-0.5 w-9 rounded-full bg-rose-600" />}
+                {active && <span aria-hidden="true" className="absolute top-0 h-1 w-10 rounded-b-full bg-rose-600" />}
                 <NavIcon name={icon} active={active} />
-                <span className="text-[11px] leading-none">{label}</span>
+                <span className="text-[11px] leading-none sm:text-xs">{label}</span>
               </Link>
             );
           })}
