@@ -74,7 +74,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
             <label className="flex flex-col gap-1 text-sm text-zinc-600">City<input type="text" name="home_city" defaultValue={city} autoComplete="address-level2" placeholder="Wesley Chapel" required className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
             <label className="flex flex-col gap-1 text-sm text-zinc-600">State<input type="text" name="home_state" defaultValue={state} autoComplete="address-level1" placeholder="FL" maxLength={2} required className="rounded-md border border-zinc-300 px-3 py-2 text-sm uppercase text-zinc-900 outline-none focus:border-zinc-500" /></label>
           </div>
-          <label className="flex flex-col gap-1 text-sm text-zinc-600">ZIP code<input type="text" name="home_zip" defaultValue={zip} inputMode="numeric" autoComplete="postal-code" placeholder="33543" pattern="\\d{5}(-\\d{4})?" required className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">ZIP code<input type="text" name="home_zip" defaultValue={zip} inputMode="numeric" autoComplete="postal-code" placeholder="33543" pattern="[0-9]{5}(-[0-9]{4})?" required className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
 
           <div className="rounded-xl bg-zinc-50 px-3 py-2.5">
             <p className="text-xs font-semibold text-zinc-700">Your complete address</p>
