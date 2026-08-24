@@ -98,8 +98,7 @@ export default function TodayFeed({
       ) : (
         <div className="flex flex-col gap-4">
           {visible.map((b) => (
-            <div key={b.event.id} className="flex flex-col gap-2">
-              {b.weatherSummary && <div className="px-1 text-xs font-medium text-zinc-600">{b.weatherSummary}</div>}
+            <div key={b.event.id}>
               <EventCard
                 event={b.event}
                 currentUserId={currentUserId}
@@ -119,6 +118,7 @@ export default function TodayFeed({
                 tips={b.tips}
                 childAgeMonths={childAgeMonths}
                 distance={b.distance}
+                weatherSummary={b.weatherSummary}
               />
             </div>
           ))}
