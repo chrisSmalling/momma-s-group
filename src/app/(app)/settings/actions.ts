@@ -52,7 +52,7 @@ export async function updateHomeLocation(formData: FormData) {
   if (!/^\d{5}(?:-\d{4})?$/.test(zip)) redirect("/settings?address_error=Enter%20a%20valid%20ZIP%20code");
 
   const address = `${street}, ${city}, ${state} ${zip}`;
-  const geocoded = await geocodeAddress(address);
+  const geocoded = await geocodeAddress({ street, city, state, zip });
   const { error } = await supabase
     .from("profiles")
     .update({
