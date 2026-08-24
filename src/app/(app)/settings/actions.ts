@@ -15,18 +15,12 @@ export async function updateNapSettings(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const { error } = await supabase
     .from("profiles")
-    .update({
-      nap_start: napStart || null,
-      nap_end: napEnd || null,
-      child_age_months: childAgeMonths,
-    })
+    .update({ nap_start: napStart || null, nap_end: napEnd || null, child_age_months: childAgeMonths })
     .eq("id", user.id);
 
   if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
@@ -35,11 +29,8 @@ export async function updateNapSettings(formData: FormData) {
 
 export async function updateHomeLocation(formData: FormData) {
   const address = String(formData.get("home_address") ?? "").trim();
-
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   if (!address) {
@@ -48,25 +39,22 @@ export async function updateHomeLocation(formData: FormData) {
       .update({ home_address: null, home_lat: null, home_lng: null })
       .eq("id", user.id);
     if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
-    redirect("/settings?saved=1");
+    redirect("/settings?address_saved=cleared");
   }
 
+  // The member-entered address is the source of truth. Save it even when the
+  // geocoder is unavailable; coordinates are only a routing cache and can be
+  // populated later without asking the member to enter coordinates.
   const geocoded = await geocodeAddress(address);
-  if (!geocoded) {
-    redirect("/settings?error=We%20couldn%27t%20find%20that%20address.%20Check%20the%20street%20address%20and%20ZIP%20code%20and%20try%20again.");
-  }
-
   const { error } = await supabase
     .from("profiles")
     .update({
       home_address: address,
-      // These coordinates are an internal geocoding cache derived from the
-      // address. Members never enter or manage coordinates themselves.
-      home_lat: geocoded.lat,
-      home_lng: geocoded.lng,
+      home_lat: geocoded?.lat ?? null,
+      home_lng: geocoded?.lng ?? null,
     })
     .eq("id", user.id);
 
   if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
-  redirect("/settings?saved=1");
+  redirect(`/settings?address_saved=${geocoded ? "verified" : "saved"}`);
 }
