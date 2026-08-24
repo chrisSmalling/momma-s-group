@@ -8,7 +8,7 @@ type NavIconName = "today" | "explore" | "calendar" | "groups" | "me";
 
 const links: readonly [string, string, NavIconName][] = [
   ["/today", "Today", "today"],
-  ["/places", "Explore", "explore"],
+  ["/places", "Explorer", "explore"],
   ["/calendar", "Calendar", "calendar"],
   ["/groups", "Groups", "groups"],
   ["/settings", "Me", "me"],
@@ -53,6 +53,14 @@ export default function Nav({ email }: { email: string }) {
           <div className="hidden text-[11px] font-medium text-zinc-400 sm:block">Find something worth doing. See who&apos;s in.</div>
         </Link>
         <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href="/places"
+            prefetch
+            className="rounded-full bg-rose-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
+            aria-label="Ask Explorer what to do"
+          >
+            ✨ Ask Explorer
+          </Link>
           <span className="hidden max-w-40 truncate text-xs text-zinc-500 lg:block" title={email}>{email}</span>
           <SignOutButton />
         </div>
