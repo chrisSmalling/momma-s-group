@@ -129,7 +129,7 @@ export default async function FreePage(props: PageProps<"/free">) {
       <div className="w-full max-w-2xl">
         <Nav email={user.email ?? ""} />
 
-        <h1 className="mb-1 text-xl font-bold text-zinc-900">We&apos;re Free</h1>
+        <h1 className="font-display mb-1 text-2xl font-bold text-zinc-900">We&apos;re free</h1>
         <p className="mb-6 text-sm text-zinc-500">
           Mark a window when you&apos;re free to meet up, and see who else in
           your group overlaps.

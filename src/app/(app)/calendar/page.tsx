@@ -296,7 +296,9 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
 
         <div className="mt-8 flex flex-col gap-4">
           {eventList.length === 0 && (
-            <p className="text-sm text-zinc-500">No outings yet this month.</p>
+            <p className="rounded-xl border border-dashed border-zinc-200 px-4 py-5 text-sm text-zinc-500">
+              Nothing on the calendar this month yet — peek at Explore, or ask your group what they&apos;re up to.
+            </p>
           )}
           {eventList.map((event) => {
             const proposedBy =

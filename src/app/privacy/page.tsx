@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import SiteFooter from "@/components/SiteFooter";
 
 export const metadata: Metadata = {
   title: "Privacy Policy · Momma's Meetup",
@@ -10,6 +11,7 @@ const updated = "August 22, 2026";
 
 export default function PrivacyPage() {
   return (
+    <>
     <main className="mx-auto w-full max-w-3xl px-5 py-10 text-slate-900">
       <p className="text-sm font-medium text-pink-700">Momma&apos;s Meetup</p>
       <h1 className="mt-2 text-3xl font-semibold tracking-tight">Privacy Policy</h1>
@@ -42,5 +44,7 @@ export default function PrivacyPage() {
         <p>For privacy questions or data concerns, use the support channel provided in the application.</p>
       </div>
     </main>
+    <SiteFooter />
+    </>
   );
 }

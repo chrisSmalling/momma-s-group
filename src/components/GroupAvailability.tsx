@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getGroupEventAvailability } from "@/app/groups/actions";
+import { getGroupEventAvailability } from "@/app/(app)/groups/actions";
 
 export default function GroupAvailability({ eventId, groupId }: { eventId: string; groupId: string | null }) {
   const [data, setData] = useState<{ free: string[]; going: string[] } | null>(null);

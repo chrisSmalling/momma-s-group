@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
+import SiteFooter from "@/components/SiteFooter";
 
 const benefits = [
   ["Today-first", "A short list of genuinely good options instead of a giant calendar."],
@@ -48,9 +49,10 @@ export default function LoginPage() {
   }
 
   return (
+    <>
     <main className="flex flex-1 items-center justify-center bg-gradient-to-b from-rose-50 via-white to-white px-4 py-10">
       <div className="grid w-full max-w-4xl overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-xl shadow-zinc-200/50 md:grid-cols-[1.1fr_.9fr]">
-        <section className="hidden flex-col justify-between bg-zinc-950 p-10 text-white md:flex">
+        <section className="hidden flex-col justify-between bg-gradient-to-br from-rose-900 via-rose-800 to-zinc-900 p-10 text-white md:flex">
           <div>
             <div className="mb-12 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold tracking-wide text-rose-200">MOMMA&apos;S MEETUP</div>
             <h1 className="max-w-md text-4xl font-extrabold leading-tight tracking-tight">Make today easier to figure out.</h1>
@@ -100,5 +102,7 @@ export default function LoginPage() {
         </section>
       </div>
     </main>
+    <SiteFooter />
+    </>
   );
 }

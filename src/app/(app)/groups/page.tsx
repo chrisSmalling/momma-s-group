@@ -68,6 +68,8 @@ export default async function GroupsPage(props: PageProps<"/groups">) {
       <div className="w-full max-w-2xl">
         <Nav email={user.email ?? ""} />
 
+        <h1 className="font-display mb-6 text-2xl font-bold text-zinc-900">Groups</h1>
+
         <div className="mb-8 grid gap-6 sm:grid-cols-2">
           <form action={createGroup} className="flex flex-col gap-2">
             <label className="text-sm font-medium text-zinc-700">

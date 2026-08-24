@@ -60,11 +60,13 @@ export default async function PlacesPage() {
       <div className="w-full max-w-2xl">
         <Nav email={user.email ?? ""} />
 
-        <h1 className="mb-6 text-xl font-bold text-zinc-900">Places</h1>
+        <h1 className="font-display mb-6 text-2xl font-bold text-zinc-900">Explore</h1>
 
         <div className="flex flex-col gap-4">
           {placeList.length === 0 && (
-            <p className="text-sm text-zinc-500">No places yet.</p>
+            <p className="rounded-xl border border-dashed border-zinc-200 px-4 py-5 text-sm text-zinc-500">
+              No curated places yet in your market — check back soon, or propose one from a group meetup.
+            </p>
           )}
           {placeList.map((place) => (
             <PlaceCard

@@ -1,4 +1,4 @@
-import { addTip } from "@/app/places/actions";
+import { addTip } from "@/app/(app)/places/actions";
 import type { PlaceTip, TipCategory } from "@/types";
 
 const CATEGORY_LABELS: Record<TipCategory, string> = {

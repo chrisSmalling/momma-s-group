@@ -1,15 +1,55 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fafafa;
-  --foreground: #18181b;
+  --background: #fdf8f4;
+  --foreground: #2a1a1f;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-nunito-sans), "Nunito Sans", Arial, Helvetica, sans-serif;
+  --font-display: var(--font-fraunces), "Fraunces", Georgia, serif;
   --font-mono: var(--font-geist-mono);
+
+  /* Warm palette remap: existing zinc, rose, and emerald utility classes
+     already used across the app render warm without touching call sites.
+     zinc -> warm stone, rose -> berry (brand/primary), emerald -> sage
+     (positive/"free"/"go"). amber/red intentionally untouched -- they stay
+     the universal warning/error signal. */
+  --color-zinc-50: #faf6f2;
+  --color-zinc-100: #f4ece4;
+  --color-zinc-200: #e7d9cd;
+  --color-zinc-300: #d5c0ae;
+  --color-zinc-400: #b3937c;
+  --color-zinc-500: #8f715d;
+  --color-zinc-600: #715a4a;
+  --color-zinc-700: #5a473b;
+  --color-zinc-800: #43352c;
+  --color-zinc-900: #2f251f;
+  --color-zinc-950: #1e1712;
+
+  --color-rose-50: #fdf1f5;
+  --color-rose-100: #fbdfe9;
+  --color-rose-200: #f6bdd2;
+  --color-rose-300: #ee92b4;
+  --color-rose-400: #e0648e;
+  --color-rose-500: #c93f70;
+  --color-rose-600: #a82c5f;
+  --color-rose-700: #8a2250;
+  --color-rose-800: #6f1c41;
+  --color-rose-900: #5c1937;
+
+  --color-emerald-50: #f0f9f1;
+  --color-emerald-100: #dcf0de;
+  --color-emerald-200: #bae2c0;
+  --color-emerald-300: #8ecc98;
+  --color-emerald-400: #5fb16d;
+  --color-emerald-500: #3f9750;
+  --color-emerald-600: #2f7a3f;
+  --color-emerald-700: #276234;
+  --color-emerald-800: #224e2c;
+  --color-emerald-900: #1d4126;
 }
 
 * {
@@ -27,7 +67,16 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+h1,
+h2 {
+  font-family: var(--font-display);
+}
+
+.font-display {
+  font-family: var(--font-display);
 }
 
 button,
@@ -42,5 +91,21 @@ a {
 }
 
 ::selection {
-  background: rgba(192, 53, 110, 0.16);
+  background: rgba(168, 44, 95, 0.16);
+}
+
+/* Bottom clearance for pages sitting behind the fixed bottom tab bar
+   (Nav.tsx). env(safe-area-inset-bottom) covers the home-indicator area
+   on iOS; the flat 72px covers the bar's own height. */
+.has-tabbar {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
