@@ -1,1 +1,0 @@
-ZIP validation fix requested for 5-digit US ZIP codes.
