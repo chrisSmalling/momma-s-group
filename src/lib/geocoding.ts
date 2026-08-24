@@ -15,7 +15,8 @@ type PeliasResponse = {
   }>;
 };
 
-function firstAddress(data: PeliasResponse): GeocodedAddress | null {
+function firstAddress(data: PeliasResponse | null): GeocodedAddress | null {
+  if (!data) return null;
   const feature = data.features?.find((item) => item.properties?.layer === "address") ?? data.features?.[0];
   const coordinates = feature?.geometry?.coordinates;
   if (!coordinates || coordinates.length < 2) return null;
