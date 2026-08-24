@@ -1,0 +1,1 @@
+Address entry replaces manual coordinate entry. Server-side geocoding resolves the address for routing.
