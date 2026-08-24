@@ -109,6 +109,7 @@ export default function EventCard({
   tips,
   childAgeMonths,
   distance,
+  weatherSummary,
 }: {
   event: FeedEvent;
   currentUserId: string;
@@ -129,16 +130,18 @@ export default function EventCard({
   // Viewer's profiles.child_age_months, when set — drives the "Great for
   // their age" chip. Omit when unknown so nothing renders (see isGoodAgeFit).
   childAgeMonths?: number | null;
-  // Real per-viewer drive time, when computed by the caller (needs both
-  // the viewer's home location and the event's own lat/lng). Omitted
-  // gracefully — never falls back to inventing minutes from straight-line
-  // distance.
+  // Real per-viewer drive time, when computed by the caller. The member's
+  // saved home address is the source of truth; geocoded coordinates are an
+  // internal routing cache only. Never fall back to straight-line distance.
   distance?: { km: number; driveMinutes?: number };
+  // Forecast at the event's own location and event start time.
+  weatherSummary: string | null;
 }) {
   const { weekday, day } = dateBadgeParts(event);
   const cancelled = event.status === "cancelled";
   const bring = event.what_to_bring.length > 0 ? event.what_to_bring : (place?.what_to_bring ?? []);
   const goodAgeFit = isGoodAgeFit(childAgeMonths, event.age_min_months, event.age_max_months);
+  const miles = distance?.km != null ? distance.km * 0.621371 : null;
 
   return (
     <EventCardShell eventId={event.id} currentStatus={currentStatus} currentNote={currentNote} disabled={cancelled} duringNap={duringNap}>
@@ -173,6 +176,17 @@ export default function EventCard({
               driveMinutes={distance?.driveMinutes}
               registrationRequired={event.registration_required}
             />
+          )}
+          {!cancelled && (weatherSummary || distance) && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-700 ring-1 ring-zinc-100">
+              {weatherSummary && <span>{weatherSummary}</span>}
+              {distance && (
+                <span>
+                  🚗 {distance.driveMinutes != null ? `${Math.round(distance.driveMinutes)} min` : "Drive time unavailable"}
+                  {miles != null ? ` · ${miles < 10 ? miles.toFixed(1) : Math.round(miles)} mi` : ""}
+                </span>
+              )}
+            </div>
           )}
           {proposedBy && (
             <p className="mt-1.5 text-xs italic text-zinc-400">
