@@ -16,7 +16,6 @@ type Props = {
 };
 
 type Mood = "all" | "outdoor" | "indoor" | "water" | "active" | "learn" | "create" | "animals";
-
 type LocationMode = "home" | "current" | "anywhere";
 
 const moods: { id: Mood; label: string; icon: string }[] = [
@@ -38,7 +37,7 @@ function distanceMiles(lat1: number, lng1: number, lat2: number, lng2: number) {
 }
 
 function textFor(place: Place) {
-  return `${place.name} ${place.description ?? ""} ${place.toddler_notes ?? ""}`.toLowerCase();
+  return `${place.name} ${place.description ?? ""} ${place.toddler_notes ?? ""} ${place.address ?? ""}`.toLowerCase();
 }
 
 function matchesMood(place: Place, mood: Mood) {
@@ -62,10 +61,36 @@ function ageFit(place: Place, childAgeMonths: number | null) {
   return -25;
 }
 
-function score(place: Place, mood: Mood, childAgeMonths: number | null, origin: { lat: number; lng: number } | null) {
+function queryScore(place: Place, query: string) {
+  const tokens = query
+    .toLowerCase()
+    .replace(/[^a-z0-9$]+/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length >= 3 && !["the", "and", "for", "with", "near", "some", "want", "need", "today", "have"].includes(token));
+  if (!tokens.length) return 0;
+
+  const text = textFor(place);
+  let score = 0;
+  for (const token of tokens) {
+    if (text.includes(token)) score += 8;
+    if (["indoor", "inside", "rain", "raining", "hot"].includes(token) && !place.is_outdoor) score += 6;
+    if (["outside", "outdoor", "park", "nature"].includes(token) && place.is_outdoor) score += 6;
+    if (["cheap", "free", "budget"].includes(token) && /free|no cost|\$0|cheap|low cost/i.test(place.price_note ?? "")) score += 8;
+    if (["toddler", "baby", "kid", "kids"].includes(token) && place.toddler_notes) score += 4;
+    if (["stroller"].includes(token) && place.stroller_accessible) score += 5;
+    if (["changing", "diaper"].includes(token) && place.has_changing_table) score += 5;
+    if (["quiet", "calm", "sensory"].includes(token) && place.quiet_or_sensory_friendly) score += 5;
+    if (["water", "splash", "swim", "pool"].includes(token) && /water|splash|lagoon|pool|aquatic|swim|spray/i.test(text)) score += 7;
+    if (["animal", "animals", "farm", "zoo"].includes(token) && /animal|farm|zoo|petting|ranch|wildlife/i.test(text)) score += 7;
+  }
+  return score;
+}
+
+function score(place: Place, mood: Mood, childAgeMonths: number | null, origin: { lat: number; lng: number } | null, query: string) {
   let value = 0;
   value += ageFit(place, childAgeMonths);
   if (matchesMood(place, mood)) value += mood === "all" ? 0 : 28;
+  value += queryScore(place, query);
   if (place.toddler_notes) value += 8;
   if (place.restrooms) value += 3;
   if (place.stroller_accessible) value += 3;
@@ -85,7 +110,6 @@ export default function Explorer({ places, groupId, groupName, currentUserId, ti
   const [locationMode, setLocationMode] = useState<LocationMode>(homeLat != null && homeLng != null ? "home" : "anywhere");
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
-  const [view, setView] = useState<"list" | "map">("list");
   const [showFilters, setShowFilters] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
 
@@ -120,16 +144,15 @@ export default function Explorer({ places, groupId, groupName, currentUserId, ti
     const q = query.trim().toLowerCase();
     return places
       .filter((place) => matchesMood(place, mood))
-      .filter((place) => {
-        if (!q) return true;
-        return textFor(place).includes(q) || (place.address ?? "").toLowerCase().includes(q);
-      })
       .map((place) => ({
         place,
         miles: origin && place.lat != null && place.lng != null ? distanceMiles(origin.lat, origin.lng, place.lat, place.lng) : null,
-        score: score(place, mood, childAgeMonths, origin),
+        score: score(place, mood, childAgeMonths, origin, q),
       }))
-      .filter(({ miles }) => miles == null || miles <= distanceLimit)
+      .filter(({ place, miles, score: matchScore }) => {
+        if (miles != null && miles > distanceLimit) return false;
+        return !q || matchScore > ageFit(place, childAgeMonths) - 1;
+      })
       .sort((a, b) => b.score - a.score);
   }, [places, mood, query, distanceLimit, origin, childAgeMonths]);
 
@@ -156,7 +179,7 @@ export default function Explorer({ places, groupId, groupName, currentUserId, ti
 
         <div className="mt-4 flex flex-wrap gap-2">
           {moods.map((item) => (
-            <button key={item.id} type="button" onClick={() => setMood(mood === item.id ? "all" : item.id)} className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${mood === item.id ? "border-rose-500 bg-rose-600 text-white" : "border-zinc-200 bg-white text-zinc-700 hover:border-rose-200"}`}>
+            <button key={item.id} type="button" onClick={() => setMood(mood === item.id ? "all" : item.id)} className={`min-h-11 rounded-full border px-3 py-2 text-sm font-semibold transition ${mood === item.id ? "border-rose-500 bg-rose-600 text-white" : "border-zinc-200 bg-white text-zinc-700 hover:border-rose-200"}`}>
               {item.icon} {item.label}
             </button>
           ))}
@@ -170,48 +193,45 @@ export default function Explorer({ places, groupId, groupName, currentUserId, ti
       </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-sm font-bold text-zinc-900">Where are you today?</div>
             <div className="mt-1 text-xs text-zinc-500">Use home, your current location, or explore without a location.</div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setLocationMode("home")} disabled={homeLat == null || homeLng == null} className={`rounded-full border px-3 py-2 text-xs font-semibold ${locationMode === "home" ? "border-rose-500 bg-rose-50 text-rose-700" : "border-zinc-200 text-zinc-600"}`}>🏠 Home</button>
-            <button type="button" onClick={useCurrentLocation} className={`rounded-full border px-3 py-2 text-xs font-semibold ${locationMode === "current" ? "border-rose-500 bg-rose-50 text-rose-700" : "border-zinc-200 text-zinc-600"}`}>📍 I&apos;m somewhere else</button>
-            <button type="button" onClick={() => setLocationMode("anywhere")} className={`rounded-full border px-3 py-2 text-xs font-semibold ${locationMode === "anywhere" ? "border-rose-500 bg-rose-50 text-rose-700" : "border-zinc-200 text-zinc-600"}`}>🗺️ Anywhere</button>
+            <button type="button" onClick={() => setLocationMode("home")} disabled={homeLat == null || homeLng == null} className={`min-h-11 rounded-full border px-3 py-2 text-xs font-semibold ${locationMode === "home" ? "border-rose-500 bg-rose-50 text-rose-700" : "border-zinc-200 text-zinc-600 disabled:cursor-not-allowed disabled:opacity-40"}`}>🏠 Home</button>
+            <button type="button" onClick={useCurrentLocation} className={`min-h-11 rounded-full border px-3 py-2 text-xs font-semibold ${locationMode === "current" ? "border-rose-500 bg-rose-50 text-rose-700" : "border-zinc-200 text-zinc-600"}`}>📍 I&apos;m somewhere else</button>
+            <button type="button" onClick={() => setLocationMode("anywhere")} className={`min-h-11 rounded-full border px-3 py-2 text-xs font-semibold ${locationMode === "anywhere" ? "border-rose-500 bg-rose-50 text-rose-700" : "border-zinc-200 text-zinc-600"}`}>🗺️ Anywhere</button>
           </div>
         </div>
         {locationMessage && <p className="mt-3 rounded-xl bg-zinc-50 px-3 py-2 text-xs text-zinc-600">{locationMessage}</p>}
       </section>
 
-      <section className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+      <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-bold text-zinc-900">{origin ? "Near you" : "Explore"}</span>
-          <select aria-label="Maximum distance" value={distanceLimit} onChange={(e) => setDistanceLimit(Number(e.target.value))} className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700">
+          <select aria-label="Maximum distance" value={distanceLimit} onChange={(e) => setDistanceLimit(Number(e.target.value))} className="min-h-11 rounded-full border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700">
             {[5, 10, 20, 30, 45].map((m) => <option key={m} value={m}>{m} mi</option>)}
           </select>
-          <button type="button" onClick={() => setShowFilters(!showFilters)} className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700">Filters</button>
+          <button type="button" onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters} className="min-h-11 rounded-full border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700">{showFilters ? "Hide filters" : "Filters"}</button>
         </div>
-        <div className="flex rounded-full border border-zinc-200 bg-white p-1">
-          <button type="button" onClick={() => setView("list")} className={`rounded-full px-3 py-1.5 text-xs font-bold ${view === "list" ? "bg-zinc-900 text-white" : "text-zinc-500"}`}>List</button>
-          <button type="button" onClick={() => setView("map")} className={`rounded-full px-3 py-1.5 text-xs font-bold ${view === "map" ? "bg-zinc-900 text-white" : "text-zinc-500"}`}>Map</button>
-        </div>
+        <span className="text-xs font-semibold text-zinc-500">{filtered.length} match{filtered.length === 1 ? "" : "es"}</span>
       </section>
 
       {showFilters && (
         <section className="grid gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:grid-cols-2">
           <div><div className="text-xs font-bold uppercase tracking-wide text-zinc-400">Age</div><p className="mt-1 text-sm text-zinc-600">Recommendations automatically favor the child age saved on your profile.</p></div>
-          <div><div className="text-xs font-bold uppercase tracking-wide text-zinc-400">Mom essentials</div><div className="mt-2 flex flex-wrap gap-2 text-xs text-zinc-600"><span className="rounded-full bg-zinc-100 px-2 py-1">✓ Fenced where known</span><span className="rounded-full bg-zinc-100 px-2 py-1">✓ Restrooms</span><span className="rounded-full bg-zinc-100 px-2 py-1">✓ Stroller</span><span className="rounded-full bg-zinc-100 px-2 py-1">✓ Changing table</span><span className="rounded-full bg-zinc-100 px-2 py-1">✓ Sensory friendly</span></div></div>
+          <div><div className="text-xs font-bold uppercase tracking-wide text-zinc-400">Mom essentials</div><div className="mt-2 flex flex-wrap gap-2 text-xs text-zinc-600"><span className="rounded-full bg-zinc-100 px-2 py-1">✓ Restrooms</span><span className="rounded-full bg-zinc-100 px-2 py-1">✓ Stroller</span><span className="rounded-full bg-zinc-100 px-2 py-1">✓ Changing table</span><span className="rounded-full bg-zinc-100 px-2 py-1">✓ Sensory friendly</span></div></div>
         </section>
       )}
 
       <section>
-        <div className="mb-3 flex items-end justify-between gap-3">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div><h2 className="font-display text-xl font-bold text-zinc-950">⭐ Best matches for you</h2><p className="text-xs text-zinc-500">A few strong choices — not an endless feed.</p></div>
-          <button type="button" onClick={() => setPlanOpen(!planOpen)} className="rounded-full bg-zinc-900 px-3 py-2 text-xs font-bold text-white">✨ Build my day</button>
+          <button type="button" onClick={() => setPlanOpen(!planOpen)} aria-expanded={planOpen} className="min-h-11 self-start rounded-full bg-zinc-900 px-4 py-2 text-xs font-bold text-white">✨ Build my day</button>
         </div>
         {planOpen && recommendations.length > 0 && (
-          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4"><div className="text-sm font-bold text-zinc-900">A simple outing plan</div><div className="mt-2 grid gap-2 text-sm text-zinc-700">{recommendations.slice(0, 3).map((r, i) => <div key={r.place.id} className="flex gap-3"><span className="font-bold text-amber-700">{i + 1}</span><span><b>{r.place.name}</b>{r.miles != null ? ` · ${Math.round(r.miles)} mi away` : ""}{i === 0 ? " · Start here" : i === 1 ? " · Add a second stop if you have time" : " · Optional final stop"}</span></div>)}</div><p className="mt-3 text-xs text-zinc-500">This is a starting plan from your current filters. We can make it weather-aware and time-aware as the Explorer grows.</p></div>
+          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4"><div className="text-sm font-bold text-zinc-900">A simple outing plan</div><div className="mt-2 grid gap-2 text-sm text-zinc-700">{recommendations.slice(0, 3).map((r, i) => <div key={r.place.id} className="flex gap-3"><span className="font-bold text-amber-700">{i + 1}</span><span><b>{r.place.name}</b>{r.miles != null ? ` · ${Math.round(r.miles)} mi away` : ""}{i === 0 ? " · Start here" : i === 1 ? " · Add a second stop if you have time" : " · Optional final stop"}</span></div>)}</div><p className="mt-3 text-xs text-zinc-500">This is a starting plan from your current filters. It will respect the same recommendations you see below.</p></div>
         )}
         {recommendations.length === 0 ? <p className="rounded-2xl border border-dashed border-zinc-200 p-5 text-sm text-zinc-500">I couldn&apos;t find a good match with those filters. Try a wider distance or a different vibe.</p> : (
           <div className="flex flex-col gap-4">
@@ -219,8 +239,6 @@ export default function Explorer({ places, groupId, groupName, currentUserId, ti
           </div>
         )}
       </section>
-
-      {view === "map" && <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 p-5 text-sm text-zinc-600"><b>Map view is next.</b> The location model is ready; this view will use the same filtered results and place coordinates without changing the recommendation logic.</div>}
 
       <section>
         <div className="mb-3 flex items-end justify-between"><div><h2 className="font-display text-xl font-bold text-zinc-950">More ideas</h2><p className="text-xs text-zinc-500">{morePlaces.length} more curated places match your current search.</p></div></div>
