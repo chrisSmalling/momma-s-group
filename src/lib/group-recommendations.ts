@@ -18,14 +18,8 @@ export function scoreGroupCandidate(candidate:GroupCandidate,members:GroupMember
  return score;
 }
 export function rankGroupCandidates(candidates:GroupCandidate[],members:GroupMember[],constraints:GroupConstraints={}):GroupCandidate[]{return [...candidates].map(c=>({candidate:c,score:scoreGroupCandidate(c,members,constraints)})).filter(x=>x.score>-999).sort((a,b)=>b.score-a.score).map(x=>x.candidate);}
-
 export function groupRecommendationReason(candidate:GroupCandidate,members:GroupMember[],constraints:GroupConstraints={}):string{
- const selected=constraints.memberIds?.length?members.filter(m=>constraints.memberIds!.includes(m.id)):members;const children=selected.flatMap(m=>m.children);const reasons:string[]=[];
- const lo=candidate.ageMinMonths??0,hi=candidate.ageMaxMonths??144;const fit=children.filter(c=>c.ageMonths>=lo&&c.ageMonths<=hi).length;
- if(children.length&&fit===children.length)reasons.push("works for all the kids");else if(fit)reasons.push(`works for ${fit} of ${children.length} kids");
- if(constraints.budget==="free"&&/free|\$0|no cost/i.test(candidate.priceText??""))reasons.push("fits a free-day budget");
- if(candidate.hasChangingTable||candidate.restrooms)reasons.push("has useful parent amenities");
- if(candidate.strollerAccessible)reasons.push("stroller-friendly");
- if(candidate.enclosed)reasons.push("easier to manage little runners");
- return reasons.length?reasons.join(" · "):"a strong fit for your group";
+ const selected=constraints.memberIds?.length?members.filter(m=>constraints.memberIds!.includes(m.id)):members;const children=selected.flatMap(m=>m.children);const reasons:string[]=[];const lo=candidate.ageMinMonths??0,hi=candidate.ageMaxMonths??144;const fit=children.filter(c=>c.ageMonths>=lo&&c.ageMonths<=hi).length;
+ if(children.length&&fit===children.length)reasons.push("works for all the kids");else if(fit)reasons.push(`works for ${fit} of ${children.length} kids`);
+ if(constraints.budget==="free"&&/free|\$0|no cost/i.test(candidate.priceText??""))reasons.push("fits a free-day budget");if(candidate.hasChangingTable||candidate.restrooms)reasons.push("has useful parent amenities");if(candidate.strollerAccessible)reasons.push("stroller-friendly");if(candidate.enclosed)reasons.push("easier to manage little runners");return reasons.length?reasons.join(" · "):"a strong fit for your group";
 }
