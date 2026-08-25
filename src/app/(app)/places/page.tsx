@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import Nav from "@/components/Nav";
 import Explorer from "@/components/Explorer";
 import ExplorerAssistant from "@/components/ExplorerAssistant";
+import WeatherContextCard from "@/components/WeatherContextCard";
+import { getWeatherContext } from "@/lib/weather-context";
 import type { Event, Place, PlaceTip } from "@/types";
 
 export default async function PlacesPage() {
@@ -32,8 +34,14 @@ export default async function PlacesPage() {
   const tipsByPlace: Record<string, (PlaceTip & { display_name: string })[]> = {};
   for (const tip of tipRows) { if (!tip.place_id) continue; const list = tipsByPlace[tip.place_id] ?? []; list.push({ ...tip, display_name: nameById.get(tip.user_id) ?? "Someone" }); tipsByPlace[tip.place_id] = list; }
 
+  let weather = null;
+  if (profile?.home_lat != null && profile?.home_lng != null) {
+    try { weather = await getWeatherContext(profile.home_lat, profile.home_lng); } catch { weather = null; }
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center px-4 py-10"><div className="w-full max-w-2xl"><Nav email={user.email ?? ""} /><div className="flex flex-col gap-5">
+      <WeatherContextCard weather={weather} />
       <ExplorerAssistant places={placeList} events={eventList} childAgeMonths={profile?.child_age_months ?? null} homeLat={profile?.home_lat ?? null} homeLng={profile?.home_lng ?? null} />
       <Explorer places={placeList} groupId={activeGroupId} groupName={activeGroupName} currentUserId={user.id} tipsByPlace={tipsByPlace} childAgeMonths={profile?.child_age_months ?? null} homeLat={profile?.home_lat ?? null} homeLng={profile?.home_lng ?? null} />
     </div></div></div>
