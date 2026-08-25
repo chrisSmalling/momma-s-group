@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Nav from "@/components/Nav";
 import Explorer from "@/components/Explorer";
-import ExplorerAssistant from "@/components/ExplorerAssistant";
+import ExplorerAssistantV2 from "@/components/ExplorerAssistantV2";
 import WeatherContextCard from "@/components/WeatherContextCard";
 import { getWeatherContext } from "@/lib/weather-context";
 import type { Event, Place, PlaceTip } from "@/types";
@@ -54,7 +54,7 @@ export default async function PlacesPage() {
         <Nav email={user.email ?? ""} />
         <div className="flex flex-col gap-5">
           <WeatherContextCard weather={weather} />
-          <ExplorerAssistant
+          <ExplorerAssistantV2
             places={placeList}
             events={eventList}
             childAgeMonths={profile?.child_age_months ?? null}
