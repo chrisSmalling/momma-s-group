@@ -24,6 +24,9 @@ jobs:
     env:
       BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
       QA_BASE_URL: ${{ inputs.base_url }}
+      QA_EMAIL: ${{ secrets.QA_EMAIL }}
+      QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+      QA_AUTH_SECRET: ${{ secrets.QA_AUTH_SECRET }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,9 +40,12 @@ jobs:
       - name: Install audit dependencies
         run: npm install --no-save @browserbasehq/sdk playwright-core
 
-      - name: Verify Browserbase credential
+      - name: Verify QA credentials
         run: |
           test -n "$BROWSERBASE_API_KEY" || { echo "BROWSERBASE_API_KEY GitHub Actions secret is missing."; exit 1; }
+          test -n "$QA_EMAIL" || { echo "QA_EMAIL GitHub Actions secret is missing."; exit 1; }
+          test -n "$QA_PASSWORD" || { echo "QA_PASSWORD GitHub Actions secret is missing."; exit 1; }
+          test -n "$QA_AUTH_SECRET" || { echo "QA_AUTH_SECRET GitHub Actions secret is missing."; exit 1; }
 
-      - name: Run read-only production UI audit
+      - name: Run authenticated read-only production UI audit
         run: node qa/browserbase-phase1-readonly.mjs
