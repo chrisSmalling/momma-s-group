@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 /**
  * Test-only authentication bootstrap for Browserbase QA.
  * It establishes a normal Supabase session for the dedicated QA account.
+ * Keep this route gated by QA_AUTH_SECRET and remove it after the audit pass.
  */
 export async function POST(request: Request) {
   const configuredSecret = process.env.QA_AUTH_SECRET;
