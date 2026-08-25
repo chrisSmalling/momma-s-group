@@ -1,7 +1,7 @@
 import { chromium } from "playwright-core";
 import Browserbase from "@browserbasehq/sdk";
 
-const BASE_URL = process.env.QA_BASE_URL || "https://mommas-group.vercel.app";
+const BASE_URL = process.env.QA_BASE_URL || "https://momma-s-group.vercel.app";
 const bb = new Browserbase({ apiKey: process.env.BROWSERBASE_API_KEY });
 
 const results = [];
