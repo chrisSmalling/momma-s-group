@@ -39,10 +39,65 @@ export default async function GroupsPage(props: PageProps<"/groups">) {
   const { data: places } = await supabase.from("places").select("id, name, is_outdoor, lat, lng, age_min_months, age_max_months, price_note, has_changing_table, restrooms, stroller_accessible, is_enclosed").eq("active", true);
   const candidates: GroupCandidate[] = (places ?? []).map((p) => ({ id: p.id, name: p.name, isOutdoor: p.is_outdoor, lat: p.lat, lng: p.lng, ageMinMonths: p.age_min_months, ageMaxMonths: p.age_max_months, priceText: p.price_note, hasChangingTable: p.has_changing_table, restrooms: p.restrooms, strollerAccessible: p.stroller_accessible, enclosed: p.is_enclosed }));
 
-  return <div className="flex flex-1 flex-col items-center px-4 py-10"><div className="w-full max-w-2xl"><Nav email={user.email ?? ""} /><h1 className="font-display mb-6 text-2xl font-bold text-zinc-900">Groups</h1>
-    {groupList.map((group) => <GroupMeetupPlanner key={`planner-${group.id}`} groupName={group.name} members={recommendationMembersByGroup[group.id] ?? []} candidates={candidates} />)}
-    <div className="mb-8 grid gap-6 sm:grid-cols-2"><form action={createGroup} className="flex flex-col gap-2"><label className="text-sm font-medium text-zinc-700">Create a group</label><input name="name" required placeholder="The Mommas" className="rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500" /><button type="submit" className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white">Create</button></form><form action={joinGroup} className="flex flex-col gap-2"><label className="text-sm font-medium text-zinc-700">Join a group</label><input name="code" required placeholder="Invite code" className="rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500" /><button type="submit" className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-900">Join</button></form></div>
-    {paramError && <p className="mb-6 text-sm text-red-600">{paramError}</p>}
-    <div className="flex flex-col gap-6">{groupList.length === 0 && <p className="text-sm text-zinc-500">You&apos;re not in any groups yet.</p>}{groupList.map((group) => { const members = membersByGroup[group.id] ?? []; const me = members.find((m) => m.user_id === user.id); return <div key={group.id} className="rounded-md border border-zinc-200 p-4"><div className="mb-2 flex items-baseline justify-between gap-2"><h2 className="text-lg font-semibold">{group.name}</h2><span className="font-mono text-xs text-zinc-500">invite code: {group.invite_code}</span></div><ul className="flex flex-col gap-2">{members.map((member) => <li key={member.user_id} className="text-sm text-zinc-700"><div className="flex items-center gap-2"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: member.avatar_color }} />{member.display_name}{member.user_id === user.id && <span className="text-zinc-400">(you)</span>}</div>{member.things_to_know && <p className="ml-4 mt-0.5 text-xs text-zinc-500">{member.things_to_know}</p>}</li>)}</ul><details className="mt-3 border-t border-zinc-100 pt-3"><summary className="cursor-pointer text-xs font-semibold text-zinc-500">{me?.things_to_know ? "Edit your notes for this group" : "Add notes for this group (allergies, medical, optional)"}</summary><form action={updateThingsToKnow} className="mt-2 flex flex-col gap-2"><input type="hidden" name="group_id" value={group.id} /><textarea name="things_to_know" maxLength={300} rows={2} defaultValue={me?.things_to_know ?? ""} placeholder="e.g. peanut allergy, we bring our own snacks" className="rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500" /><button type="submit" className="self-start rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white">Save</button></form></details></div>; })}</div>
-  </div></div>;
+  return (
+    <div className="flex flex-1 flex-col items-center px-4 py-6 sm:py-10">
+      <div className="w-full max-w-2xl">
+        <Nav email={user.email ?? ""} />
+        <div className="mb-6">
+          <h1 className="font-display text-2xl font-bold tracking-tight text-zinc-950">Groups</h1>
+          <p className="mt-1 text-sm text-zinc-500">See who&apos;s in, plan something together, and keep the little details in one place.</p>
+        </div>
+
+        {groupList.map((group) => <GroupMeetupPlanner key={`planner-${group.id}`} groupName={group.name} members={recommendationMembersByGroup[group.id] ?? []} candidates={candidates} />)}
+
+        <section aria-label="Group actions" className="mb-8 rounded-3xl border border-rose-100 bg-gradient-to-br from-rose-50 via-white to-amber-50 p-4 shadow-sm sm:p-5">
+          <div className="mb-4"><h2 className="font-display text-lg font-bold text-zinc-950">Grow your group</h2><p className="mt-1 text-xs text-zinc-500">Create a new circle or join one with an invite code.</p></div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <form action={createGroup} className="rounded-2xl border border-white bg-white/90 p-4 shadow-sm">
+              <label className="text-sm font-bold text-zinc-800">Create a group</label>
+              <input name="name" required placeholder="The Mommas" className="mt-2 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" />
+              <button type="submit" className="mt-2 min-h-11 w-full rounded-xl bg-zinc-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">Create group</button>
+            </form>
+            <form action={joinGroup} className="rounded-2xl border border-white bg-white/90 p-4 shadow-sm">
+              <label className="text-sm font-bold text-zinc-800">Join a group</label>
+              <input name="code" required placeholder="Enter invite code" autoCapitalize="characters" className="mt-2 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm uppercase tracking-wider outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" />
+              <button type="submit" className="mt-2 min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-bold text-zinc-900 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">Join group</button>
+            </form>
+          </div>
+        </section>
+
+        {paramError && <p role="alert" className="mb-6 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{paramError}</p>}
+
+        <section aria-label="Your groups" className="flex flex-col gap-4">
+          {groupList.length === 0 && <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-5 text-sm text-zinc-600">You&apos;re not in any groups yet. Create one above or join with an invite code.</div>}
+          {groupList.map((group) => {
+            const members = membersByGroup[group.id] ?? [];
+            const me = members.find((m) => m.user_id === user.id);
+            return (
+              <article key={group.id} className="rounded-3xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div><h2 className="font-display text-xl font-bold text-zinc-950">{group.name}</h2><p className="mt-1 text-xs text-zinc-500">{members.length} member{members.length === 1 ? "" : "s"}</p></div>
+                  <div className="rounded-xl bg-zinc-50 px-3 py-2 text-left ring-1 ring-zinc-100"><div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Invite code</div><div className="mt-0.5 font-mono text-sm font-bold tracking-wider text-zinc-800">{group.invite_code}</div></div>
+                </div>
+
+                <ul className="mt-4 divide-y divide-zinc-100 rounded-2xl border border-zinc-100" aria-label={`${group.name} members`}>
+                  {members.map((member) => <li key={member.user_id} className="flex items-start gap-3 px-3 py-3"><span aria-hidden="true" className="mt-1 h-3 w-3 shrink-0 rounded-full ring-2 ring-white" style={{ backgroundColor: member.avatar_color }} /><div className="min-w-0"><div className="text-sm font-semibold text-zinc-800">{member.display_name}{member.user_id === user.id && <span className="ml-1.5 font-medium text-zinc-400">(you)</span>}</div>{member.things_to_know && <p className="mt-0.5 text-xs leading-5 text-zinc-500">{member.things_to_know}</p>}</div></li>)}
+                </ul>
+
+                <details className="mt-4 border-t border-zinc-100 pt-3">
+                  <summary className="flex min-h-11 cursor-pointer items-center justify-between text-sm font-bold text-zinc-600"><span>{me?.things_to_know ? "Edit your notes for this group" : "Add notes for this group"}</span><span aria-hidden="true">⌄</span></summary>
+                  <p className="mb-2 text-xs text-zinc-500">Optional notes other group members may need to know.</p>
+                  <form action={updateThingsToKnow} className="flex flex-col gap-2">
+                    <input type="hidden" name="group_id" value={group.id} />
+                    <textarea name="things_to_know" maxLength={300} rows={2} defaultValue={me?.things_to_know ?? ""} placeholder="Anything helpful for the group" className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" />
+                    <button type="submit" className="min-h-11 self-start rounded-xl bg-zinc-900 px-4 py-2 text-sm font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">Save notes</button>
+                  </form>
+                </details>
+              </article>
+            );
+          })}
+        </section>
+      </div>
+    </div>
+  );
 }
