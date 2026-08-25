@@ -89,11 +89,15 @@ export default function Explorer({ places, groupId, groupName, currentUserId, ti
   const [showFilters, setShowFilters] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
 
-  const origin = locationMode === "home" && homeLat != null && homeLng != null
-    ? { lat: homeLat, lng: homeLng }
-    : locationMode === "current"
-      ? currentLocation
-      : null;
+  const origin = useMemo(
+    () =>
+      locationMode === "home" && homeLat != null && homeLng != null
+        ? { lat: homeLat, lng: homeLng }
+        : locationMode === "current"
+          ? currentLocation
+          : null,
+    [locationMode, homeLat, homeLng, currentLocation],
+  );
 
   function useCurrentLocation() {
     if (!navigator.geolocation) {
