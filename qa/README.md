@@ -1,5 +1,5 @@
 # UI QA
 
-The production UI audit is intentionally read-only. It does not require a Supabase QA account.
+The production UI audit is read-only. It uses a dedicated non-real QA identity and runs the protected UI through a normal Supabase session.
 
-The Browserbase audit checks the public routes on a mobile viewport, captures screenshots, detects console errors and failed requests, and exits non-zero when any assertion fails.
+The Browserbase workflow waits for production to become reachable, authenticates, tests the current application routes, captures mobile screenshots, and fails the job when assertions fail.
