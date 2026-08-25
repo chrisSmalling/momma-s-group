@@ -211,7 +211,7 @@ create index if not exists content_sources_community_rotation_idx
 -- pg_cron 1.6.4
 -- pg_net 0.20.4
 -- pg_stat_statements 1.11
--- pg_trgm 1.6
+-- pg_trgm 1.6 (schema: extensions — moved out of public 2026-08-25, unused by app code)
 -- pgcrypto 1.3
 -- plpgsql 1.0
 -- supabase_vault 0.3.1
