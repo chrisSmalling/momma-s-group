@@ -6,7 +6,7 @@ on:
       base_url:
         description: Production URL to audit
         required: true
-        default: https://mommas-group.vercel.app
+        default: https://momma-s-group.vercel.app
         type: string
 
 permissions:
