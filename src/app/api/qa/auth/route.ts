@@ -1,5 +1,15 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+
+// Constant-time compare — a plain !== leaks how many leading characters of
+// the secret an attacker guessed right via response timing.
+function secretsMatch(supplied: string, configured: string): boolean {
+  const suppliedBuf = Buffer.from(supplied);
+  const configuredBuf = Buffer.from(configured);
+  if (suppliedBuf.length !== configuredBuf.length) return false;
+  return timingSafeEqual(suppliedBuf, configuredBuf);
+}
 
 /**
  * Test-only authentication bootstrap for Browserbase QA.
@@ -8,10 +18,11 @@ import { createClient } from "@/lib/supabase/server";
  */
 export async function POST(request: Request) {
   const configuredSecret = process.env.QA_AUTH_SECRET;
-  const suppliedSecret = request.headers.get("x-qa-auth-secret");
+  const suppliedSecret = request.headers.get("x-qa-auth-secret") ?? "";
 
-  if (!configuredSecret) return new NextResponse(null, { status: 404 });
-  if (!suppliedSecret || suppliedSecret !== configuredSecret) {
+  // Same response either way — an unset secret returning 404 previously let
+  // a prober distinguish "route disabled" from "route live, wrong secret".
+  if (!configuredSecret || !secretsMatch(suppliedSecret, configuredSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

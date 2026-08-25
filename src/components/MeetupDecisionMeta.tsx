@@ -39,7 +39,7 @@ export default function MeetupDecisionMeta({
           </span>
         )}
         {hasDistance && distance && (
-          <span>🚗 {distance.driveMinutes !== undefined ? `${Math.round(distance.driveMinutes)} min` : `${distance.km.toFixed(1)} mi`}</span>
+          <span>🚗 {distance.driveMinutes !== undefined ? `${Math.round(distance.driveMinutes)} min` : `${(distance.km * 0.621371).toFixed(1)} mi`}</span>
         )}
       </div>
       {hasWeather && weather && (

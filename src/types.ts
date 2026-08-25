@@ -88,6 +88,11 @@ export interface Place extends VenuePracticalities {
   what_to_bring: string[];
   typical_crowd_note: string | null;
   best_time_note: string | null;
+  place_type: string | null;
+  // Real, already-populated ingestion taxonomy (playground, outdoor, indoor,
+  // animals, storytime, arts_learning, water_play, active_play) — use this
+  // for mood/intent matching instead of guessing from free-text description.
+  category_tags: string[];
 }
 
 export interface RecurringProgram {

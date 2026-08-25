@@ -6,7 +6,8 @@ import EventComments from "@/components/EventComments";
 import TipsSection from "@/components/TipsSection";
 import AskGroupButton from "@/components/AskGroupButton";
 import GroupAvailability from "@/components/GroupAvailability";
-import { isGoodAgeFit } from "@/lib/ageFit";
+import { isGoodAgeFit, formatAgeRange } from "@/lib/ageFit";
+import { isFreeCost } from "@/lib/cost";
 import type { FeedEvent, Place, PlaceTip, RsvpStatus, EventComment } from "@/types";
 
 type Attendee = { user_id: string; status: RsvpStatus; display_name: string; avatar_color: string };
@@ -31,10 +32,8 @@ function formatTime(event: FeedEvent) {
 }
 
 function CostPill({ cost }: { cost: string | null }) {
-  const normalized = cost?.trim().toLowerCase() ?? "";
-  const isFree = normalized === "free" || normalized === "$0" || normalized === "$0.00" || normalized === "no cost";
-  if (isFree) return <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">Free</span>;
-  if (!normalized) return <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">Cost unknown</span>;
+  if (isFreeCost(cost)) return <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">Free</span>;
+  if (!cost?.trim()) return <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">Cost unknown</span>;
   return <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">{cost}</span>;
 }
 
@@ -84,6 +83,12 @@ export default function EventCard({ event, currentUserId, currentUserName, curre
   const bring = event.what_to_bring.length > 0 ? event.what_to_bring : (place?.what_to_bring ?? []);
   const goodAgeFit = isGoodAgeFit(childAgeMonths, event.age_min_months, event.age_max_months);
   const miles = distance?.km != null ? distance.km * 0.621371 : null;
+  // Numeric bounds are the source of truth goodAgeFit itself checks
+  // against, so prefer that derived label over the separately-scraped
+  // age_tags text — the two can disagree, and only one should reach the
+  // viewer. Tags are shown only when there's no numeric range to derive
+  // from at all.
+  const ageLabel = formatAgeRange(event.age_min_months, event.age_max_months) ?? (event.age_tags.length > 0 ? event.age_tags.join(" · ") : null);
 
   return (
     <EventCardShell eventId={event.id} currentStatus={currentStatus} currentNote={currentNote} disabled={cancelled} duringNap={duringNap}>
@@ -94,7 +99,7 @@ export default function EventCard({ event, currentUserId, currentUserName, curre
             <div className="flex items-start justify-between gap-2"><h3 className={cancelled ? "font-display text-xl font-bold leading-tight text-zinc-400 line-through" : "font-display text-xl font-bold leading-tight text-zinc-900 group-hover:text-rose-700"}>{event.title}</h3>{cancelled ? <CancelledPill /> : <CostPill cost={event.cost} />}</div>
             <p className="mt-1 text-sm font-semibold text-zinc-600">{formatTime(event)}</p>
             {event.venue && <p className="mt-0.5 line-clamp-2 text-sm text-zinc-500">{event.venue}{event.room_name ? ` · ${event.room_name}` : ""}</p>}
-            {event.age_tags.length > 0 && <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><span className="inline-block rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">{event.age_tags.join(" · ")}</span></div>}
+            {ageLabel && <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><span className="inline-block rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">{ageLabel}</span></div>}
             {!cancelled && <FitChips goodAgeFit={goodAgeFit} isOutdoor={event.is_outdoor} driveMinutes={distance?.driveMinutes} registrationRequired={event.registration_required} />}
             {!cancelled && (weatherSummary || distance) && <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-700 ring-1 ring-zinc-100">{weatherSummary && <span>{weatherSummary}</span>}{distance && <span>🚗 {distance.driveMinutes != null ? `${Math.round(distance.driveMinutes)} min` : "Drive time unavailable"}{miles != null ? ` · ${miles < 10 ? miles.toFixed(1) : Math.round(miles)} mi` : ""}</span>}</div>}
             {proposedBy && <p className="mt-1.5 text-xs italic text-zinc-400">Proposed by {proposedBy.user_id === currentUserId ? "you" : proposedBy.display_name}</p>}
