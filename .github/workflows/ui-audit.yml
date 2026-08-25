@@ -1,12 +1,14 @@
 name: Phase 1 UI Audit — Browserbase
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       base_url:
         description: Production URL to audit
-        required: true
-        default: https://mommas-group.vercel.app
+        required: false
+        default: https://momma-s-group.vercel.app
         type: string
 
 permissions:
@@ -23,7 +25,7 @@ jobs:
     timeout-minutes: 20
     env:
       BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
-      QA_BASE_URL: ${{ inputs.base_url }}
+      QA_BASE_URL: ${{ inputs.base_url || 'https://momma-s-group.vercel.app' }}
       QA_EMAIL: ${{ secrets.QA_EMAIL }}
       QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
       QA_AUTH_SECRET: ${{ secrets.QA_AUTH_SECRET }}
@@ -49,3 +51,12 @@ jobs:
 
       - name: Run authenticated read-only production UI audit
         run: node qa/browserbase-phase1-readonly.mjs
+
+      - name: Upload UI audit screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-ui-audit-screenshots
+          path: /tmp/*.png
+          if-no-files-found: ignore
+          retention-days: 7
