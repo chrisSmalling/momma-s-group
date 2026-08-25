@@ -56,6 +56,7 @@ const ageScore = (min: number | null, max: number | null, age: number | null) =>
 export default function ExplorerAssistant({ places, events, childAgeMonths, homeLat, homeLng, weather = null }: Props) {
   const [prompt, setPrompt] = useState(""); const [submitted, setSubmitted] = useState(""); const [mood, setMood] = useState<Mood>("all");
   const [origin, setOrigin] = useState<Origin>(homeLat != null && homeLng != null ? { lat: homeLat, lng: homeLng } : null); const [usingCurrent, setUsingCurrent] = useState(false); const [message, setMessage] = useState<string | null>(null); const [planOpen, setPlanOpen] = useState(false);
+  const [queryNow] = useState(() => Date.now());
   const parsed = useMemo(() => infer(submitted), [submitted]); const effectiveMood = mood === "all" ? parsed.mood : mood;
   const results = useMemo<Result[]>(() => {
     const placeResults: Result[] = places.filter(p => matchesPlace(p, effectiveMood)).map((place): Result => {
@@ -65,12 +66,12 @@ export default function ExplorerAssistant({ places, events, childAgeMonths, home
       return { type: "place", item: place, distance, score };
     }).filter(r => r.distance == null || r.distance <= parsed.maxMiles);
     const eventResults: Result[] = events.filter(e => e.status === "published" && e.is_kid_relevant && matchesEvent(e, effectiveMood)).map((event): Result => {
-      const distance = miles(origin, event); const minutesUntil = (new Date(event.starts_at).getTime() - Date.now()) / 60000; let score = ageScore(event.age_min_months, event.age_max_months, childAgeMonths) + weatherScore(weather, event.is_outdoor); const t = eventText(event);
+      const distance = miles(origin, event); const minutesUntil = (new Date(event.starts_at).getTime() - queryNow) / 60000; let score = ageScore(event.age_min_months, event.age_max_months, childAgeMonths) + weatherScore(weather, event.is_outdoor); const t = eventText(event);
       if (effectiveMood !== "all") score += 35; if (parsed.budget && /free|no cost|\$0/.test(t)) score += 15; if (parsed.now) score += 10; if (parsed.maxMinutes != null && minutesUntil >= 0 && minutesUntil <= parsed.maxMinutes) score += 15; if (distance != null) score += Math.max(0, 25 - distance * 1.1);
       return { type: "event", item: event, distance, score };
-    }).filter(r => r.distance == null || r.distance <= parsed.maxMiles).filter(r => parsed.maxMinutes == null || (r.type === "event" && (new Date(r.item.starts_at).getTime() - Date.now()) >= 0 && (new Date(r.item.starts_at).getTime() - Date.now()) / 60000 <= parsed.maxMinutes));
+    }).filter(r => r.distance == null || r.distance <= parsed.maxMiles).filter(r => parsed.maxMinutes == null || (r.type === "event" && (new Date(r.item.starts_at).getTime() - queryNow) >= 0 && (new Date(r.item.starts_at).getTime() - queryNow) / 60000 <= parsed.maxMinutes));
     return [...placeResults, ...eventResults].sort((a, b) => b.score - a.score).slice(0, 5);
-  }, [places, events, childAgeMonths, origin, effectiveMood, parsed, weather]);
+  }, [places, events, childAgeMonths, origin, effectiveMood, parsed, weather, queryNow]);
   function locate() { if (!navigator.geolocation) { setMessage("Location isn't available. I'll use your saved home location instead."); return; } setMessage("Finding you…"); navigator.geolocation.getCurrentPosition(p => { setOrigin({ lat: p.coords.latitude, lng: p.coords.longitude }); setUsingCurrent(true); setMessage("I'm using your current location for this search only — I don't continuously track you."); }, () => setMessage("I couldn't get your location. You can still search from home."), { maximumAge: 300000, timeout: 10000, enableHighAccuracy: false }); }
   function submit() { setSubmitted(prompt.trim()); setPlanOpen(false); setMessage(prompt.trim() ? "Searching places and today's events…" : "Tell me a little about what you need and I'll narrow it down."); }
   const intro = submitted ? `I matched your request against verified places and today's kid-relevant events${usingCurrent ? " near your current location" : ""}${parsed.maxMinutes != null ? ` within about ${parsed.maxMinutes} minutes of your time window` : ""}.` : childAgeMonths != null ? `I'll keep your ${Math.floor(childAgeMonths / 12)}-year-old in mind and prioritize what's useful today.` : "Tell me what you need and I'll narrow it down.";
