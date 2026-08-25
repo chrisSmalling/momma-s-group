@@ -14,7 +14,7 @@ export default function ExplorerIntentBar() {
     const params = new URLSearchParams();
     if (text.trim()) params.set("q", text.trim());
     if (nextIntent) params.set("intent", nextIntent);
-    window.location.href = `/explore?${params.toString()}`;
+    window.location.href = `/places?${params.toString()}`;
   }
   return (
     <section className="rounded-3xl border border-rose-100 bg-gradient-to-br from-rose-50 via-white to-amber-50 p-5 shadow-sm">
