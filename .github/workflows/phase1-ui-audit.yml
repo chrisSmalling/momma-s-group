@@ -1,0 +1,43 @@
+name: Phase 1 UI Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Production URL to audit
+        required: true
+        default: https://mommas-group.vercel.app
+        type: string
+
+jobs:
+  ui-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASE_URL: ${{ inputs.base_url }}
+      BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Phase 1 UI audit
+        run: npm run test:ui-audit
+
+      - name: Upload audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase-1-ui-audit
+          path: |
+            test-results/**
+            playwright-report/**
+          if-no-files-found: ignore
