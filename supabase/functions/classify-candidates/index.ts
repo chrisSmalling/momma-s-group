@@ -19,9 +19,12 @@ const db = createClient(
 
 // Env-configurable so a silent free-tier model rename doesn't take us down.
 // Accept whichever secret name is set (secret names are case-sensitive in Supabase).
+// "gemeni_key" (misspelled) is the actual name it was created under in this
+// project — kept as a fallback rather than requiring a rename right now.
 const GEMINI_KEY =
   Deno.env.get("GEMINI_API_KEY") ??
   Deno.env.get("gemini_key") ??
+  Deno.env.get("gemeni_key") ??
   Deno.env.get("GEMINI_KEY") ??
   "";
 const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash-lite";
