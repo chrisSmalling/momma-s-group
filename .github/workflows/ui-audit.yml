@@ -1,18 +1,29 @@
-name: Phase 1 UI Audit
+name: Phase 1 UI Audit — Browserbase
 
 on:
   workflow_dispatch:
     inputs:
       base_url:
         description: Production URL to audit
-        required: false
+        required: true
         default: https://mommas-group.vercel.app
         type: string
 
+permissions:
+  contents: read
+
+concurrency:
+  group: phase1-ui-audit
+  cancel-in-progress: false
+
 jobs:
   browserbase-audit:
+    name: Browserbase mobile UI audit
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
+    env:
+      BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
+      QA_BASE_URL: ${{ inputs.base_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,12 +32,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
 
-      - name: Install browser audit dependencies
+      - name: Install audit dependencies
         run: npm install --no-save @browserbasehq/sdk playwright-core
 
+      - name: Verify Browserbase credential
+        run: |
+          test -n "$BROWSERBASE_API_KEY" || { echo "BROWSERBASE_API_KEY GitHub Actions secret is missing."; exit 1; }
+
       - name: Run read-only production UI audit
-        env:
-          BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
-          QA_BASE_URL: ${{ inputs.base_url }}
         run: node qa/browserbase-phase1-readonly.mjs
