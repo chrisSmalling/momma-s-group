@@ -21,7 +21,7 @@ const miles = (a: Origin, b: { lat: number | null; lng: number | null }) => {
   const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
   return 2 * r * Math.asin(Math.sqrt(x));
 };
-const placeText = (p: Place) => `${p.name} ${p.description ?? ""} ${p.toddler_notes ?? ""} ${p.price_note ?? ""} ${(p.category_tags ?? []).join(" ")}`.toLowerCase();
+const placeText = (p: Place) => `${p.name} ${p.description ?? ""} ${p.toddler_notes ?? ""} ${p.price_note ?? ""}`.toLowerCase();
 const eventText = (e: Event) => `${e.title} ${e.description ?? ""} ${e.venue_name ?? ""} ${e.cost ?? ""} ${(e.age_tags ?? []).join(" ")}`.toLowerCase();
 
 function infer(q: string) {
@@ -58,13 +58,13 @@ export default function ExplorerAssistant({ places, events, childAgeMonths, home
   const [origin, setOrigin] = useState<Origin>(homeLat != null && homeLng != null ? { lat: homeLat, lng: homeLng } : null); const [usingCurrent, setUsingCurrent] = useState(false); const [message, setMessage] = useState<string | null>(null); const [planOpen, setPlanOpen] = useState(false);
   const parsed = useMemo(() => infer(submitted), [submitted]); const effectiveMood = mood === "all" ? parsed.mood : mood;
   const results = useMemo<Result[]>(() => {
-    const placeResults: Result[] = places.filter(p => matchesPlace(p, effectiveMood)).map(place => {
+    const placeResults: Result[] = places.filter(p => matchesPlace(p, effectiveMood)).map((place): Result => {
       const distance = miles(origin, place); let score = ageScore(place.age_min_months, place.age_max_months, childAgeMonths) + weatherScore(weather, place.is_outdoor);
       if (effectiveMood !== "all") score += 35; if (place.toddler_notes) score += 8; if (place.restrooms) score += 3; if (place.stroller_accessible) score += 3; if (place.has_changing_table) score += 4;
       if (parsed.budget && /free|\$0|no cost|free entry/.test(placeText(place))) score += 15; if (parsed.easy && (place.stroller_accessible || place.restrooms || place.is_enclosed)) score += 5; if (distance != null) score += Math.max(0, 25 - distance * 1.1);
       return { type: "place", item: place, distance, score };
     }).filter(r => r.distance == null || r.distance <= parsed.maxMiles);
-    const eventResults: Result[] = events.filter(e => e.status === "published" && e.is_kid_relevant && matchesEvent(e, effectiveMood)).map(event => {
+    const eventResults: Result[] = events.filter(e => e.status === "published" && e.is_kid_relevant && matchesEvent(e, effectiveMood)).map((event): Result => {
       const distance = miles(origin, event); const minutesUntil = (new Date(event.starts_at).getTime() - Date.now()) / 60000; let score = ageScore(event.age_min_months, event.age_max_months, childAgeMonths) + weatherScore(weather, event.is_outdoor); const t = eventText(event);
       if (effectiveMood !== "all") score += 35; if (parsed.budget && /free|no cost|\$0/.test(t)) score += 15; if (parsed.now) score += 10; if (parsed.maxMinutes != null && minutesUntil >= 0 && minutesUntil <= parsed.maxMinutes) score += 15; if (distance != null) score += Math.max(0, 25 - distance * 1.1);
       return { type: "event", item: event, distance, score };
