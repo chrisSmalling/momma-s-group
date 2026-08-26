@@ -11,6 +11,16 @@ function formatWhen(candidate: RecommendationCandidate): string | null {
   return `${day} · ${time}`;
 }
 
+function formatVerifiedAt(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const ageHours = (Date.now() - date.getTime()) / 3_600_000;
+  if (ageHours < 24) return "Verified today";
+  if (ageHours < 24 * 7) return `Verified ${Math.floor(ageHours / 24)}d ago`;
+  return `Last verified ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date)}`;
+}
+
 function PricePill({ candidate }: { candidate: RecommendationCandidate }) {
   if (candidate.isFree) return <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">Free</span>;
   if (candidate.price?.trim()) return <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">{candidate.price}</span>;
@@ -21,11 +31,19 @@ export default function PoppyCandidateCard({ candidate, rankLabel }: { candidate
   const when = formatWhen(candidate);
   const venue = candidate.address?.trim() || null;
   const description = candidate.description?.trim() || null;
+  const verifiedLabel = formatVerifiedAt(candidate.lastVerifiedAt);
 
   return (
     <article className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition hover:border-rose-200 hover:shadow-md">
       <div className="p-4">
-        <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-rose-600">{rankLabel}</div>
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-rose-600">{rankLabel}</div>
+          {verifiedLabel ? (
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">✓ {verifiedLabel}</span>
+          ) : (
+            <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-semibold text-zinc-500">Details may have changed</span>
+          )}
+        </div>
         <div className="flex items-start justify-between gap-3">
           <h3 className="font-display text-lg font-bold leading-tight text-zinc-950">{candidate.title}</h3>
           <PricePill candidate={candidate} />
