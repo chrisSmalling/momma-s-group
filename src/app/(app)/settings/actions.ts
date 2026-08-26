@@ -27,6 +27,49 @@ export async function updateNapSettings(formData: FormData) {
   redirect("/settings?saved=1");
 }
 
+// The interest tokens Poppy understands. Anything the form submits outside
+// this allow-list is dropped (defense against tampered form posts).
+const ALLOWED_INTERESTS = new Set([
+  "animals", "arts_and_crafts", "water", "sports", "trains", "flying",
+  "playgrounds", "books", "music", "adventure", "science", "food",
+]);
+
+export async function updatePoppyProfile(formData: FormData) {
+  const childName = String(formData.get("child_name") ?? "").trim().slice(0, 60);
+  const budgetNote = String(formData.get("family_budget_note") ?? "").trim().slice(0, 200);
+  const indoorPrefRaw = String(formData.get("indoor_preference") ?? "either");
+  const indoorPreference = ["indoor", "outdoor", "either"].includes(indoorPrefRaw) ? indoorPrefRaw : "either";
+  const interests = formData.getAll("child_interests").map(String).filter((v) => ALLOWED_INTERESTS.has(v));
+
+  const maxDistanceRaw = String(formData.get("max_distance_miles") ?? "").trim();
+  let maxDistanceMiles: number | null = null;
+  if (maxDistanceRaw) {
+    const parsed = Number(maxDistanceRaw);
+    if (Number.isNaN(parsed) || parsed <= 0 || parsed > 200) {
+      redirect("/settings?error=Distance%20must%20be%20between%201%20and%20200%20miles");
+    }
+    maxDistanceMiles = Math.round(parsed);
+  }
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      child_name: childName || null,
+      child_interests: interests,
+      family_budget_note: budgetNote || null,
+      indoor_preference: indoorPreference,
+      max_distance_miles: maxDistanceMiles,
+    })
+    .eq("id", user.id);
+
+  if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
+  redirect("/settings?poppy_saved=1");
+}
+
 export async function updateHomeLocation(formData: FormData) {
   const street = String(formData.get("home_street") ?? "").trim();
   const city = String(formData.get("home_city") ?? "").trim();

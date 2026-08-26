@@ -10,6 +10,17 @@ export interface Profile {
   child_age_months: number | null;
   home_lat: number | null;
   home_lng: number | null;
+  // Poppy personalization (see migration 20260826120000). Ranking signals,
+  // not hard filters (except where a live request makes them explicit).
+  child_name: string | null;
+  child_interests: string[];
+  child_activity_preferences: string[];
+  family_budget_note: string | null;
+  preferred_categories: string[];
+  preferred_place_types: string[];
+  indoor_preference: "indoor" | "outdoor" | "either";
+  max_distance_miles: number | null;
+  discovery_view: "poppy" | "list";
 }
 
 // A geographic market — e.g. Wesley Chapel + a 45-minute drive radius.
