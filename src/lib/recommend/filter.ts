@@ -6,7 +6,7 @@
 import { isFreeCost } from "@/lib/cost";
 import { distanceKm } from "@/lib/distance";
 import type { FeedEvent, Place } from "@/types";
-import type { Mood, RecommendationConstraints, Timeframe } from "./types";
+import type { Mood, RecommendationConstraints, Timeframe, TimeOfDay } from "./types";
 
 const KM_PER_MILE = 1.609344;
 
@@ -70,6 +70,19 @@ export function eventWithinTimeframe(e: FeedEvent, timeframe: Timeframe, now: Da
   const monStart = new Date(satStart.getTime() + 2 * dayMs);
   const rangeStart = day === 0 ? startOfToday : satStart; // if today is Sunday, include today
   return start.getTime() >= rangeStart.getTime() && start.getTime() < monStart.getTime();
+}
+
+export function eventMatchesTimeOfDay(e: FeedEvent, timeOfDay: TimeOfDay): boolean {
+  if (timeOfDay === "any") return true;
+  const start = new Date(e.starts_at);
+  const end = new Date(e.ends_at ?? e.starts_at);
+  const dayStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const dayMs = 24 * 60 * 60 * 1000;
+  const windowStartHour = timeOfDay === "morning" ? 6 : timeOfDay === "afternoon" ? 12 : 17;
+  const windowEndHour = timeOfDay === "morning" ? 12 : timeOfDay === "afternoon" ? 17 : 21;
+  const windowStart = new Date(dayStart.getTime() + windowStartHour * 60 * 60 * 1000);
+  const windowEnd = new Date(dayStart.getTime() + windowEndHour * 60 * 60 * 1000);
+  return start.getTime() < windowEnd.getTime() && end.getTime() > windowStart.getTime();
 }
 
 function passesIndoorHardFilter(isOutdoor: boolean | null, c: RecommendationConstraints): boolean {
@@ -136,6 +149,7 @@ export function filterEvents(
   for (const event of events) {
     if (event.status === "cancelled") { dropped++; continue; }
     if (!eventWithinTimeframe(event, c.timeframe, now)) { dropped++; continue; }
+    if (!eventMatchesTimeOfDay(event, c.timeOfDay)) { dropped++; continue; }
     if (!moodMatchesEvent(event, c.mood)) { dropped++; continue; }
     if (!passesIndoorHardFilter(event.is_outdoor, c)) { dropped++; continue; }
     if (!passesBudgetHardFilter(event.cost, c)) { dropped++; continue; }
