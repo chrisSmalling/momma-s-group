@@ -22,7 +22,7 @@ export function buildCacheKey(
 ): string {
   const inventoryDay = now.toISOString().slice(0, 10); // events change daily
   const parts = [
-    "v1",
+    "v2",
     userId,
     constraints.mood,
     constraints.indoor,
@@ -30,6 +30,7 @@ export function buildCacheKey(
     constraints.budget,
     constraints.maxMiles ?? "-",
     constraints.timeframe,
+    constraints.timeOfDay,
     profile.childAgeMonths ?? "-",
     [...profile.childInterests].sort().join("+") || "-",
     [...profile.preferredCategories].sort().join("+") || "-",
