@@ -15,6 +15,14 @@ import type {
   Timeframe,
 } from "./types";
 
+// Momma's Meetup is intentionally local-first. A request without an explicit
+// distance is capped at 20 straight-line miles from the user's origin. This is
+// a conservative geographic ceiling for the product's roughly 45-minute
+// service area; it prevents destinations that can be geographically nearby but
+// routinely take much longer to drive to from surfacing by default.
+const DEFAULT_SERVICE_RADIUS_MILES = 20;
+const CLOSE_RADIUS_MILES = 8;
+
 function detectMood(s: string): Mood {
   if (/animal|farm|zoo|petting|ranch|wildlife|butterfl/.test(s)) return "animals";
   if (/water|splash|pool|lagoon|swim|cool off|beach/.test(s)) return "water";
@@ -37,10 +45,10 @@ function detectMaxMiles(s: string): number | null {
   if (m) return Number(m[1]);
   // "within 20 minutes" is a drive-time phrase; we don't have live routing at
   // parse time, so treat it as a modest distance ceiling rather than pretend
-  // it's exact minutes. ~2.5 miles per minute of local driving is generous.
+  // it's exact minutes.
   const min = s.match(/(\d{1,3})\s*(?:minute|minutes|min|mins)\b/);
   if (min) return Math.max(3, Math.round(Number(min[1]) * 0.6));
-  if (/close by|closby|nearby|near me|near us|down the road|around the corner/.test(s)) return 8;
+  if (/close|closby|nearby|near me|near us|down the road|around the corner/.test(s)) return CLOSE_RADIUS_MILES;
   return null;
 }
 
@@ -67,11 +75,13 @@ function applyFollowUps(
 ): RecommendationConstraints {
   const next = { ...base };
   if (/closer|nearer|too far/.test(s)) {
-    const current = next.maxMiles ?? 15;
+    const current = next.maxMiles ?? CLOSE_RADIUS_MILES;
     next.maxMiles = Math.max(3, Math.round(current * 0.6));
   }
-  if (/farther|further|wider|expand|more options|anything nearby/.test(s)) {
-    const current = next.maxMiles ?? 15;
+  // "anything nearby" means nearby, not "expand the search". Expansion is
+  // reserved for explicit farther/wider requests.
+  if (/farther|further|wider|expand|more options/.test(s)) {
+    const current = next.maxMiles ?? DEFAULT_SERVICE_RADIUS_MILES;
     next.maxMiles = Math.min(60, Math.round(current * 1.75));
   }
   if (/cheaper|less expensive|too expensive|lower cost/.test(s)) {
@@ -99,7 +109,7 @@ export function parseIntent(
     mood: previous?.mood ?? "all",
     indoor: previous?.indoor ?? "either",
     budget: previous?.budget ?? "any",
-    maxMiles: previous?.maxMiles ?? null,
+    maxMiles: previous?.maxMiles ?? DEFAULT_SERVICE_RADIUS_MILES,
     timeframe: previous?.timeframe ?? "any",
     indoorExplicit: previous?.indoorExplicit ?? false,
   };
