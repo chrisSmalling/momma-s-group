@@ -1,0 +1,105 @@
+name: Poppy Verification Helper
+
+on:
+  push:
+    branches:
+      - feat/poppy-server-recommendations
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Production build
+        run: npm run build
+
+      - name: Update schema snapshot for Poppy foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >> db/schema-snapshot.sql <<'EOF'
+
+-- ============================================================
+-- Poppy recommendation foundation — live production additions
+-- 2026-08-26
+-- ============================================================
+
+-- Authoritative candidate inventory used by /api/poppy/recommend.
+create or replace view public.poppy_recommendation_candidates as
+select id, title, display_title, description, venue_name, venue_display,
+  address, location_city, location_state, location_zip, lat, lng,
+  location_latitude, location_longitude, starts_at, ends_at,
+  age_min_months, age_max_months, age_band, age_tags, cost, source,
+  source_url, registration_required, registration_url, is_outdoor,
+  experience_type, weather_fit, is_kid_relevant, verification_tier,
+  verification_score, content_review_status, last_verified_at, place_id,
+  program_id
+from public.events
+where starts_at > now()
+  and coalesce(is_suppressed, false) = false
+  and status <> 'cancelled'
+  and content_review_status <> 'rejected'
+  and verification_tier = any(array['trusted'::text, 'high'::text]);
+
+-- Per-user Poppy response cache. RLS is owner-scoped.
+create table if not exists public.poppy_recommendation_cache (
+  cache_key text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  response jsonb not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+alter table public.poppy_recommendation_cache enable row level security;
+
+-- Per-request diagnostic audit. Insert-only for the owning user; no
+-- authenticated SELECT policy is intentionally granted.
+create table if not exists public.poppy_recommendation_audit (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  request jsonb not null,
+  candidate_count integer not null default 0,
+  filtered_out integer not null default 0,
+  returned jsonb not null default '[]'::jsonb,
+  cache_hit boolean not null default false,
+  created_at timestamptz not null default now()
+);
+alter table public.poppy_recommendation_audit enable row level security;
+
+-- Poppy profile personalization fields.
+-- Existing columns are preserved; these are the additive fields used by the
+-- server recommendation profile mapper.
+-- child_name, child_interests, child_activity_preferences,
+-- family_budget_note, preferred_categories, preferred_place_types,
+-- indoor_preference, max_distance_miles, discovery_view.
+EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add db/schema-snapshot.sql
+          git commit -m 'chore(schema): snapshot Poppy recommendation foundation'
+          git push origin HEAD:feat/poppy-server-recommendations
