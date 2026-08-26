@@ -28,7 +28,8 @@ jobs:
       QA_BASE_URL: ${{ inputs.base_url || 'https://momma-s-group.vercel.app' }}
       QA_EMAIL: ${{ secrets.QA_EMAIL }}
       QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
-      QA_AUTH_SECRET: ${{ secrets.QA_AUTH_SECRET }}
+      SUPABASE_URL: https://uiuibwufzhirpntdtqpj.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_vVfbSkh1Fner08lqWJfJ4w_P9b_4gw2
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,7 +48,6 @@ jobs:
           test -n "$BROWSERBASE_API_KEY" || { echo "BROWSERBASE_API_KEY GitHub Actions secret is missing."; exit 1; }
           test -n "$QA_EMAIL" || { echo "QA_EMAIL GitHub Actions secret is missing."; exit 1; }
           test -n "$QA_PASSWORD" || { echo "QA_PASSWORD GitHub Actions secret is missing."; exit 1; }
-          test -n "$QA_AUTH_SECRET" || { echo "QA_AUTH_SECRET GitHub Actions secret is missing."; exit 1; }
 
       - name: Run authenticated read-only production UI audit
         run: node qa/browserbase-phase1-readonly.mjs
