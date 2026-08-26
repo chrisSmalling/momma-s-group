@@ -52,18 +52,20 @@ export async function completeOnboarding(formData: FormData) {
   const state = String(formData.get("home_state") ?? "").trim().toUpperCase();
   const zip = String(formData.get("home_zip") ?? "").trim();
   const hasAnyAddress = Boolean(street || city || state || zip);
+  const hasValidAddress = Boolean(
+    street &&
+    city &&
+    /^[A-Z]{2}$/.test(state) &&
+    /^\d{5}(?:-\d{4})?$/.test(zip),
+  );
 
-  if (hasAnyAddress && (!street || !city || !state || !zip)) {
-    redirect("/onboarding?error=If%20you%20add%20a%20home%20location%2C%20please%20complete%20the%20street%2C%20city%2C%20state%2C%20and%20ZIP.");
-  }
-  if (hasAnyAddress && (!/^[A-Z]{2}$/.test(state) || !/^\d{5}(?:-\d{4})?$/.test(zip))) {
-    redirect("/onboarding?error=Please%20enter%20a%20valid%20state%20and%20ZIP%20code.");
-  }
-
+  // Home location is optional. Never block a brand-new mom from completing onboarding
+  // because an optional address field was autofilled or entered incorrectly. A valid,
+  // complete address is saved and geocoded; otherwise onboarding completes without it.
   let homeAddress: string | null = null;
   let homeLat: number | null = null;
   let homeLng: number | null = null;
-  if (hasAnyAddress) {
+  if (hasValidAddress) {
     homeAddress = `${street}, ${city}, ${state} ${zip}`;
     const geocoded = await geocodeAddress({ street, city, state, zip });
     homeLat = geocoded?.lat ?? null;
@@ -83,10 +85,10 @@ export async function completeOnboarding(formData: FormData) {
     indoor_preference: indoorPreference,
     max_distance_miles: maxDistanceMiles,
     home_address: homeAddress,
-    home_street: hasAnyAddress ? street : null,
-    home_city: hasAnyAddress ? city : null,
-    home_state: hasAnyAddress ? state : null,
-    home_zip: hasAnyAddress ? zip : null,
+    home_street: hasValidAddress ? street : null,
+    home_city: hasValidAddress ? city : null,
+    home_state: hasValidAddress ? state : null,
+    home_zip: hasValidAddress ? zip : null,
     home_lat: homeLat,
     home_lng: homeLng,
     onboarding_completed_at: new Date().toISOString(),
