@@ -49,7 +49,9 @@ function detectMaxMiles(s: string): number | null {
   // it's exact minutes.
   const min = s.match(/(\d{1,3})\s*(?:minute|minutes|min|mins)\b/);
   if (min) return Math.max(3, Math.round(Number(min[1]) * 0.6));
-  if (/close|closby|nearby|near me|near us|down the road|around the corner/.test(s)) return CLOSE_RADIUS_MILES;
+  // Keep "closer" reserved for the follow-up reducer below; otherwise it is
+  // accidentally captured as the word "close" and over-tightened twice.
+  if (/\bclose\b|closby|nearby|near me|near us|down the road|around the corner/.test(s)) return CLOSE_RADIUS_MILES;
   return null;
 }
 
