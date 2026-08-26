@@ -53,6 +53,9 @@ export function deterministicWindow(text: string, now = new Date()): DateWindow 
     return { start_at: zoned(s.y, s.m, s.d, 0, 0), end_at: zoned(e.y, e.m, e.d, 0, 0) };
   }
 
+  // Preserve semantic time-of-day constraints for Gemini; this helper only owns the calendar day.
+  if (/\b(?:morning|afternoon|evening|tonight|night)\b/.test(t)) return null;
+
   const explicitNext = t.match(/\bnext\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|wed|thu|fri|sat)\b/);
   if (explicitNext) {
     const target = short.findIndex(x => x.toLowerCase() === explicitNext[1].slice(0, 3).toLowerCase());
@@ -60,7 +63,6 @@ export function deterministicWindow(text: string, now = new Date()): DateWindow 
     return dayWindow(p, n + (n < 7 ? 7 : 0));
   }
 
-  if (/\b(?:morning|afternoon|evening|tonight|night)\b/.test(t)) return null;
   const explicitDay = t.match(/\b(?:on\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|wed|thu|fri|sat)\b/);
   if (explicitDay) {
     const target = short.findIndex(x => x.toLowerCase() === explicitDay[1].slice(0, 3).toLowerCase());
