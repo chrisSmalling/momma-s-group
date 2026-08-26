@@ -1,8 +1,4 @@
-// Deterministic hard filters (Phase 4). Applied BEFORE scoring/ranking, and
-// never overridden by any model output. Matching reuses the taxonomy the
-// discovery pipeline already populates (places.category_tags/place_type,
-// feed_events.experience_type/weather_fit) rather than inventing a second one.
-
+// Deterministic hard filters. Applied BEFORE scoring/ranking and never overridden by model output.
 import { isFreeCost } from "@/lib/cost";
 import { distanceKm } from "@/lib/distance";
 import type { FeedEvent, Place } from "@/types";
@@ -11,10 +7,7 @@ import type { Mood, RecommendationConstraints, Timeframe, TimeOfDay } from "./ty
 const KM_PER_MILE = 1.609344;
 const APP_TIME_ZONE = "America/New_York";
 
-export function milesBetween(
-  origin: { lat: number; lng: number } | null,
-  point: { lat: number | null; lng: number | null },
-): number | null {
+export function milesBetween(origin: { lat: number; lng: number } | null, point: { lat: number | null; lng: number | null }): number | null {
   if (!origin || point.lat == null || point.lng == null) return null;
   return distanceKm(origin.lat, origin.lng, point.lat, point.lng) / KM_PER_MILE;
 }
@@ -41,106 +34,75 @@ export function moodMatchesEvent(e: FeedEvent, mood: Mood): boolean {
   return e.experience_type === "animal";
 }
 
-// Inclusive day boundaries in the app's operating timezone are approximated
-// with local Date math, matching how the rest of the app treats event times
-// (see src/lib/nap.ts — wall-clock, no explicit tz conversion).
 export function eventWithinTimeframe(e: FeedEvent, timeframe: Timeframe, now: Date): boolean {
   const start = new Date(e.starts_at);
   const end = e.ends_at ? new Date(e.ends_at) : start;
-  // Always exclude events that have already ended.
   if (end.getTime() < now.getTime()) return false;
   if (timeframe === "any") return true;
-
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const dayMs = 24 * 60 * 60 * 1000;
-
-  if (timeframe === "today") {
-    const endOfToday = new Date(startOfToday.getTime() + dayMs);
-    return start.getTime() < endOfToday.getTime();
-  }
+  if (timeframe === "today") return start.getTime() < startOfToday.getTime() + dayMs;
   if (timeframe === "tomorrow") {
     const startOfTomorrow = new Date(startOfToday.getTime() + dayMs);
-    const endOfTomorrow = new Date(startOfToday.getTime() + 2 * dayMs);
-    return start.getTime() >= startOfTomorrow.getTime() && start.getTime() < endOfTomorrow.getTime();
+    return start.getTime() >= startOfTomorrow.getTime() && start.getTime() < startOfTomorrow.getTime() + dayMs;
   }
-  // weekend: the coming Saturday + Sunday (or the current one if it's already
-  // the weekend).
-  const day = now.getDay(); // 0 Sun ... 6 Sat
+  const day = now.getDay();
   const daysUntilSat = (6 - day + 7) % 7;
   const satStart = new Date(startOfToday.getTime() + daysUntilSat * dayMs);
   const monStart = new Date(satStart.getTime() + 2 * dayMs);
-  const rangeStart = day === 0 ? startOfToday : satStart; // if today is Sunday, include today
+  const rangeStart = day === 0 ? startOfToday : satStart;
   return start.getTime() >= rangeStart.getTime() && start.getTime() < monStart.getTime();
 }
 
 function easternMinutes(date: Date): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: APP_TIME_ZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
-  return hour * 60 + minute;
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: APP_TIME_ZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
+  return Number(parts.find((p) => p.type === "hour")?.value ?? 0) * 60 + Number(parts.find((p) => p.type === "minute")?.value ?? 0);
 }
 
 export function eventMatchesTimeOfDay(e: FeedEvent, timeOfDay: TimeOfDay): boolean {
   if (timeOfDay === "any") return true;
   const startMinutes = easternMinutes(new Date(e.starts_at));
   const endMinutes = easternMinutes(new Date(e.ends_at ?? e.starts_at));
-  const windowStart = timeOfDay === "morning" ? 6 * 60 : timeOfDay === "afternoon" ? 12 * 60 : 17 * 60;
-  const windowEnd = timeOfDay === "morning" ? 12 * 60 : timeOfDay === "afternoon" ? 17 * 60 : 21 * 60;
+  const windowStart = timeOfDay === "morning" ? 360 : timeOfDay === "afternoon" ? 720 : 1020;
+  const windowEnd = timeOfDay === "morning" ? 720 : timeOfDay === "afternoon" ? 1020 : 1260;
   if (endMinutes < startMinutes) return startMinutes < windowEnd || endMinutes > windowStart;
   return startMinutes < windowEnd && endMinutes > windowStart;
 }
 
 function passesIndoorHardFilter(isOutdoor: boolean | null, c: RecommendationConstraints): boolean {
   if (!c.indoorExplicit || c.indoor === "either") return true;
-  if (isOutdoor == null) return true; // unknown — don't drop, let it rank lower
-  return c.indoor === "outdoor" ? isOutdoor === true : isOutdoor === false;
+  if (isOutdoor == null) return true;
+  return c.indoor === "outdoor" ? isOutdoor : !isOutdoor;
 }
 
-// budget === "free" is a hard filter only against *reliable* data: keep items
-// that are known-free or whose cost is unknown; drop items known to cost
-// money. "budget"/cheap stays a ranking signal (we have no numeric prices).
+function parseMaxPrice(cost: string | null): number | null {
+  if (!cost?.trim()) return null;
+  if (isFreeCost(cost)) return 0;
+  const values = [...cost.matchAll(/\$\s*(\d+(?:\.\d{1,2})?)/g)].map((m) => Number(m[1])).filter(Number.isFinite);
+  return values.length ? Math.max(...values) : null;
+}
+
 function passesBudgetHardFilter(cost: string | null, c: RecommendationConstraints): boolean {
-  if (c.budget !== "free") return true;
-  if (isFreeCost(cost)) return true;
-  const hasKnownCost = Boolean(cost && cost.trim()) && !isFreeCost(cost);
-  return !hasKnownCost;
+  if (c.budget === "free" && isFreeCost(cost)) return true;
+  if (c.budget === "free" && parseMaxPrice(cost) !== null) return false;
+  if (c.budget === "free") return true;
+  if (c.maxPriceDollars == null) return true;
+  const price = parseMaxPrice(cost);
+  return price == null || price <= c.maxPriceDollars;
 }
 
-function passesDistanceHardFilter(
-  miles: number | null,
-  c: RecommendationConstraints,
-): boolean {
-  if (c.maxMiles == null) return true;
-  if (miles == null) return true; // unknown distance — keep, rank lower
-  return miles <= c.maxMiles;
+function passesDistanceHardFilter(miles: number | null, c: RecommendationConstraints): boolean {
+  return c.maxMiles == null || miles == null || miles <= c.maxMiles;
 }
 
-export interface FilteredPlace {
-  place: Place;
-  miles: number | null;
-}
-export interface FilteredEvent {
-  event: FeedEvent;
-  miles: number | null;
-}
+export interface FilteredPlace { place: Place; miles: number | null; }
+export interface FilteredEvent { event: FeedEvent; miles: number | null; }
 
-export function filterPlaces(
-  places: Place[],
-  c: RecommendationConstraints,
-  origin: { lat: number; lng: number } | null,
-): { kept: FilteredPlace[]; droppedCount: number } {
+export function filterPlaces(places: Place[], c: RecommendationConstraints, origin: { lat: number; lng: number } | null): { kept: FilteredPlace[]; droppedCount: number } {
   let dropped = 0;
   const kept: FilteredPlace[] = [];
   for (const place of places) {
-    if (!place.active) { dropped++; continue; }
-    if (!moodMatchesPlace(place, c.mood)) { dropped++; continue; }
-    if (!passesIndoorHardFilter(place.is_outdoor, c)) { dropped++; continue; }
-    if (!passesBudgetHardFilter(place.price_note, c)) { dropped++; continue; }
+    if (!place.active || !moodMatchesPlace(place, c.mood) || !passesIndoorHardFilter(place.is_outdoor, c) || !passesBudgetHardFilter(place.price_note, c)) { dropped++; continue; }
     const miles = milesBetween(origin, place);
     if (!passesDistanceHardFilter(miles, c)) { dropped++; continue; }
     kept.push({ place, miles });
@@ -148,21 +110,11 @@ export function filterPlaces(
   return { kept, droppedCount: dropped };
 }
 
-export function filterEvents(
-  events: FeedEvent[],
-  c: RecommendationConstraints,
-  origin: { lat: number; lng: number } | null,
-  now: Date,
-): { kept: FilteredEvent[]; droppedCount: number } {
+export function filterEvents(events: FeedEvent[], c: RecommendationConstraints, origin: { lat: number; lng: number } | null, now: Date): { kept: FilteredEvent[]; droppedCount: number } {
   let dropped = 0;
   const kept: FilteredEvent[] = [];
   for (const event of events) {
-    if (event.status === "cancelled") { dropped++; continue; }
-    if (!eventWithinTimeframe(event, c.timeframe, now)) { dropped++; continue; }
-    if (!eventMatchesTimeOfDay(event, c.timeOfDay)) { dropped++; continue; }
-    if (!moodMatchesEvent(event, c.mood)) { dropped++; continue; }
-    if (!passesIndoorHardFilter(event.is_outdoor, c)) { dropped++; continue; }
-    if (!passesBudgetHardFilter(event.cost, c)) { dropped++; continue; }
+    if (event.status === "cancelled" || !eventWithinTimeframe(event, c.timeframe, now) || !eventMatchesTimeOfDay(event, c.timeOfDay) || !moodMatchesEvent(event, c.mood) || !passesIndoorHardFilter(event.is_outdoor, c) || !passesBudgetHardFilter(event.cost, c)) { dropped++; continue; }
     const miles = milesBetween(origin, event);
     if (!passesDistanceHardFilter(miles, c)) { dropped++; continue; }
     kept.push({ event, miles });
