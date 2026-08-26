@@ -193,6 +193,13 @@ create index if not exists content_sources_community_rotation_idx
   on public.content_sources(active, discovery_channel, last_attempted_at,
                             community_batch_rank, source_priority desc);
 
+-- ---------- Feedback additions -------------------------------
+
+-- Post-activity sentiment is intentionally nullable for backwards compatibility.
+-- Values: loved | good | not_for_us.
+alter table public.outing_feedback
+  add column if not exists sentiment text;
+
 -- ---------- Live cron jobs -----------------------------------
 
 -- job 1: materialize-programs-nightly       10 7 * * *
