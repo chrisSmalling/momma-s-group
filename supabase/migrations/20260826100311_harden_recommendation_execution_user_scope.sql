@@ -34,7 +34,7 @@ begin
   values (
     p_user_id,
     left(p_raw_prompt, 2000),
-    left(p_intent, 100),
+    left(p_intent, 100)::public.recommendation_intent,
     coalesce(p_constraints, '{}'::jsonb),
     greatest(coalesce(p_candidate_count, 0), 0),
     p_selected_ids,
@@ -45,3 +45,7 @@ begin
   return rid;
 end;
 $$;
+
+-- Recommendation audit is developer diagnostics, not member-facing data.
+-- Keep it insert-only under the existing request-owner policy.
+drop policy if exists recommendation_audit_select_own on public.recommendation_audit;
