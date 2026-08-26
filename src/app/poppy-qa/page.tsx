@@ -21,12 +21,14 @@ export default function PoppyQaPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function submit(e?: FormEvent) {
+  async function submit(e?: FormEvent, selectedMessage?: string) {
     e?.preventDefault();
-    if (!message.trim() || loading) return;
+    const nextMessage = selectedMessage ?? message;
+    if (!nextMessage.trim() || loading) return;
+    setMessage(nextMessage);
     setLoading(true); setError(null);
     try {
-      const res = await fetch("/api/poppy/qa-recommend", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) });
+      const res = await fetch("/api/poppy/qa-recommend", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: nextMessage }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Something went wrong while Poppy was looking.");
       setResult(data);
@@ -41,7 +43,7 @@ export default function PoppyQaPage() {
       <h1 style={{ marginBottom: 6 }}>Poppy</h1>
       <p style={{ marginTop: 0, color: "#64748b" }}>Preview-only acceptance testing. Uses the same recommendation core and production candidate inventory.</p>
       <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "12px 0" }}>
-        {prompts.map((p) => <button key={p} onClick={() => { setMessage(p); void submit(); }} style={{ whiteSpace: "nowrap", border: "1px solid #d7dde7", borderRadius: 999, padding: "9px 12px", background: "white" }}>{p}</button>)}
+        {prompts.map((p) => <button key={p} onClick={() => { void submit(undefined, p); }} style={{ whiteSpace: "nowrap", border: "1px solid #d7dde7", borderRadius: 999, padding: "9px 12px", background: "white" }}>{p}</button>)}
       </div>
       <form onSubmit={submit} style={{ display: "flex", gap: 8 }}>
         <input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Ask Poppy…" aria-label="Ask Poppy" style={{ flex: 1, minWidth: 0, padding: 14, border: "1px solid #cbd5e1", borderRadius: 12, fontSize: 16 }} />
@@ -61,7 +63,7 @@ export default function PoppyQaPage() {
             <a href={c.href} style={{ display: "inline-block", marginTop: 10, fontWeight: 700 }}>Open</a>
           </article>)}
         </div>
-        {result.candidates.length === 0 && <div style={{ marginTop: 12 }}>{result.fallbacks.map((f) => <button key={f.label} onClick={() => { setMessage(f.label); void submit(); }} style={{ marginRight: 8, marginBottom: 8, padding: "10px 12px", borderRadius: 10, border: "1px solid #cbd5e1", background: "white" }}>{f.label}</button>)}</div>}
+        {result.candidates.length === 0 && <div style={{ marginTop: 12 }}>{result.fallbacks.map((f) => <button key={f.label} onClick={() => { void submit(undefined, f.label); }} style={{ marginRight: 8, marginBottom: 8, padding: "10px 12px", borderRadius: 10, border: "1px solid #cbd5e1", background: "white" }}>{f.label}</button>)}</div>}
       </section>}
     </main>
   );
