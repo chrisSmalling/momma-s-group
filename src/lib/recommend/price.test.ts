@@ -13,7 +13,7 @@ const event = (cost: string | null, isFree = false): FeedEvent => ({
   id: crypto.randomUUID(), title: "Test", description: null, venue: "Venue", room_name: null,
   organizer: null, address: "1 Main St", lat: 28.2, lng: -82.4, location_latitude: null, location_longitude: null,
   starts_at: "2026-08-27T14:00:00-04:00", ends_at: "2026-08-27T15:00:00-04:00", time_precision: "exact", time_unknown: false,
-  cost, is_free, age_tags: [], age_min_months: null, age_max_months: null, age_band: null, is_outdoor: false,
+  cost, is_free: isFree, age_tags: [], age_min_months: null, age_max_months: null, age_band: null, is_outdoor: false,
   what_to_bring: [], registration_required: false, registration_url: null, source: "test", source_id: null, source_url: null,
   content_status: "keep", geography_tier: "pasco", experience_type: "general", weather_fit: "indoor", place_id: null,
   program_id: null, proposed_by_group: null, metro_area: "pasco", status: "published", last_verified_at: null, added_by: null,
@@ -26,9 +26,7 @@ describe("explicit price constraints", () => {
   });
 
   it("filters known prices above the ceiling while retaining unknown prices", () => {
-    const { kept } = filterEvents([
-      event("$8"), event("$15"), event(null), event("$10-$18"), event("Free", true),
-    ], { ...base, maxPriceDollars: 12 }, origin, new Date("2026-08-26T12:00:00Z"));
+    const { kept } = filterEvents([event("$8"), event("$15"), event(null), event("$10-$18"), event("Free", true)], { ...base, maxPriceDollars: 12 }, origin, new Date("2026-08-26T12:00:00Z"));
     expect(kept.map(({ event: e }) => e.cost)).toEqual(["$8", null, "Free"]);
   });
 
