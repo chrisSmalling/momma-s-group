@@ -9,6 +9,7 @@ describe("parseIntent", () => {
       budget: "any",
       maxMiles: 20,
       timeframe: "any",
+      timeOfDay: "any",
       indoorExplicit: false,
     });
   });
@@ -21,11 +22,18 @@ describe("parseIntent", () => {
       budget: "budget",
       maxMiles: 10,
       timeframe: "today",
+      timeOfDay: "any",
     });
   });
 
   it("recognizes near-me requests as a close local radius", () => {
-    expect(parseIntent("What's near me right now?")).toMatchObject({ maxMiles: 8, timeframe: "today" });
+    expect(parseIntent("What's near me right now?")).toMatchObject({ maxMiles: 8, timeframe: "today", timeOfDay: "any" });
+  });
+
+  it("recognizes morning, afternoon, and evening windows", () => {
+    expect(parseIntent("something fun this morning")).toMatchObject({ timeframe: "today", timeOfDay: "morning" });
+    expect(parseIntent("something fun after lunch")).toMatchObject({ timeframe: "any", timeOfDay: "afternoon" });
+    expect(parseIntent("something fun tonight")).toMatchObject({ timeframe: "today", timeOfDay: "evening" });
   });
 
   it("preserves prior constraints for follow-up requests", () => {
@@ -35,11 +43,13 @@ describe("parseIntent", () => {
       budget: "any",
       maxMiles: 20,
       timeframe: "weekend",
+      timeOfDay: "morning",
       indoorExplicit: true,
     })).toMatchObject({
       mood: "outdoor",
       indoor: "outdoor",
       timeframe: "weekend",
+      timeOfDay: "morning",
       maxMiles: 12,
       indoorExplicit: true,
     });
