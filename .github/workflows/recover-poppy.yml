@@ -1,7 +1,0 @@
-name: Recover Poppy Patch
-
-on:
-  workflow_dispatch:
-
-# Temporary recovery helper. The Poppy implementation has been recovered;
-# this workflow intentionally has no automatic trigger.
