@@ -184,20 +184,31 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
-    const requestId = randomUUID();
+    const fallbackRequestId = randomUUID();
     const cacheKey = buildCacheKey(user.id, constraints, profile, origin, now);
 
-    const { data: cached } = await supabase
-      .from("poppy_recommendation_cache")
+    const { data: cached, error: cacheReadError } = await supabase
+      .from("recommendation_response_cache")
       .select("response, expires_at")
-      .eq("cache_key", cacheKey)
+      .eq("request_hash", cacheKey)
+      .eq("user_id", user.id)
       .gt("expires_at", now.toISOString())
       .maybeSingle();
 
+    if (cacheReadError) console.error("[poppy] cache read failed", cacheReadError.message);
+
     if (cached?.response) {
       const payload = cached.response as RecommendationResult;
-      recordAudit(supabase, user.id, constraints, payload.candidates.length, 0, payload.candidates, true);
-      return NextResponse.json({ ...payload, requestId, cacheHit: true });
+      const requestId = await recordRecommendationRequest(
+        supabase,
+        user.id,
+        message,
+        constraints,
+        payload.candidates,
+        "poppy-cache",
+      );
+      if (requestId) await recordRecommendationAudit(supabase, requestId, constraints, payload.candidates);
+      return NextResponse.json({ ...payload, requestId: requestId ?? fallbackRequestId, cacheHit: true });
     }
 
     // The production Poppy inventory is the authoritative candidate pool.
@@ -234,13 +245,27 @@ export async function POST(request: Request) {
     await enrichDriveTimes(candidates, origin, eventList);
 
     let responseText = buildResponseText(candidates, constraints, childName);
+    let model = "poppy-deterministic";
     if (candidates.length > 0) {
       const enhanced = await generatePoppyLine({ candidates, constraints, childName, message });
-      if (enhanced) responseText = enhanced;
+      if (enhanced) {
+        responseText = enhanced;
+        model = "poppy-gemini";
+      }
     }
 
+    const requestId = await recordRecommendationRequest(
+      supabase,
+      user.id,
+      message,
+      constraints,
+      candidates,
+      model,
+    );
+    const effectiveRequestId = requestId ?? fallbackRequestId;
+
     const result: RecommendationResult = {
-      requestId,
+      requestId: effectiveRequestId,
       intent: constraints,
       candidates,
       responseText,
@@ -248,14 +273,28 @@ export async function POST(request: Request) {
       cacheHit: false,
     };
 
-    const expiresAt = new Date(now.getTime() + CACHE_TTL_MINUTES * 60 * 1000).toISOString();
-    void supabase
-      .from("poppy_recommendation_cache")
-      .upsert({ cache_key: cacheKey, user_id: user.id, response: result, created_at: now.toISOString(), expires_at: expiresAt })
-      .then(({ error }) => { if (error) console.error("[poppy] cache write failed", error.message); });
+    if (requestId) {
+      await recordRecommendationAudit(supabase, requestId, constraints, candidates);
 
-    recordAudit(supabase, user.id, constraints, candidates.length, droppedCount, candidates, false);
+      const expiresAt = new Date(now.getTime() + CACHE_TTL_MINUTES * 60 * 1000).toISOString();
+      const { error: cacheWriteError } = await supabase
+        .from("recommendation_response_cache")
+        .upsert(
+          {
+            request_hash: cacheKey,
+            user_id: user.id,
+            request_id: requestId,
+            response: result,
+            model,
+            created_at: now.toISOString(),
+            expires_at: expiresAt,
+          },
+          { onConflict: "request_hash" },
+        );
+      if (cacheWriteError) console.error("[poppy] cache write failed", cacheWriteError.message);
+    }
 
+    void droppedCount;
     return NextResponse.json(result);
   } catch (err) {
     console.error("[poppy] recommendation failed", err);
@@ -264,27 +303,53 @@ export async function POST(request: Request) {
 }
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+type RecommendationCandidate = RecommendationResult["candidates"][number];
 
-function recordAudit(
+async function recordRecommendationRequest(
   supabase: SupabaseClient,
   userId: string,
+  message: string,
   constraints: RecommendationConstraints,
-  candidateCount: number,
-  filteredOut: number,
-  returned: { type: string; id: string; score: number }[],
-  cacheHit: boolean,
+  candidates: RecommendationResult["candidates"],
+  model: string,
+): Promise<string | null> {
+  const { data, error } = await supabase.rpc("record_recommendation_execution", {
+    p_user_id: userId,
+    p_raw_prompt: message,
+    p_intent: "discover",
+    p_constraints: constraints,
+    p_candidate_count: candidates.length,
+    p_selected_ids: candidates.map((candidate) => candidate.id),
+    p_model: model,
+  });
+  if (error) {
+    console.error("[poppy] recommendation request audit failed", error.message);
+    return null;
+  }
+  return typeof data === "string" ? data : null;
+}
+
+async function recordRecommendationAudit(
+  supabase: SupabaseClient,
+  requestId: string,
+  constraints: RecommendationConstraints,
+  candidates: RecommendationResult["candidates"],
 ) {
-  void supabase
-    .from("poppy_recommendation_audit")
-    .insert({
-      user_id: userId,
-      request: constraints,
-      candidate_count: candidateCount,
-      filtered_out: filteredOut,
-      returned: returned.map((c) => ({ type: c.type, id: c.id, score: c.score })),
-      cache_hit: cacheHit,
-    })
-    .then(({ error }) => { if (error) console.error("[poppy] audit write failed", error.message); });
+  if (candidates.length === 0) return;
+  const rows = candidates.map((candidate, index) => ({
+    request_id: requestId,
+    candidate_kind: candidate.type,
+    candidate_id: candidate.id,
+    hard_filters: constraints,
+    score: candidate.score,
+    explanation: { rank: index + 1 },
+    passed_hard_filters: true,
+    filter_reasons: [],
+    source_kind: candidate.type,
+    source_snapshot: {},
+  }));
+  const { error } = await supabase.from("recommendation_audit").insert(rows);
+  if (error) console.error("[poppy] recommendation audit failed", error.message);
 }
 
 async function enrichDriveTimes(
@@ -297,7 +362,7 @@ async function enrichDriveTimes(
   if (!provider) return;
 
   const eventById = new Map(events.map((e) => [e.id, e]));
-  const points: { candidate: (typeof candidates)[number]; lat: number; lng: number }[] = [];
+  const points: { candidate: RecommendationCandidate; lat: number; lng: number }[] = [];
   for (const c of candidates) {
     const src = eventById.get(c.id);
     const lat = src?.lat ?? null;
