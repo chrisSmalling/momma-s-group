@@ -2,7 +2,31 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import Nav from "@/components/Nav";
-import { updateNapSettings, updateHomeLocation } from "./actions";
+import { updateNapSettings, updateHomeLocation, updatePoppyProfile } from "./actions";
+
+const INTERESTS: { value: string; label: string }[] = [
+  { value: "animals", label: "🐒 Animals" },
+  { value: "arts_and_crafts", label: "🎨 Arts & crafts" },
+  { value: "water", label: "💦 Water" },
+  { value: "sports", label: "⚽ Sports" },
+  { value: "trains", label: "🚂 Trains" },
+  { value: "flying", label: "✈️ Things that fly" },
+  { value: "playgrounds", label: "🛝 Playgrounds" },
+  { value: "books", label: "📚 Books" },
+  { value: "music", label: "🎵 Music" },
+  { value: "adventure", label: "🧗 Adventure" },
+  { value: "science", label: "🧪 Science" },
+  { value: "food", label: "🍦 Food/treats" },
+];
+
+const CATEGORIES: { value: string; label: string }[] = [
+  { value: "playground", label: "🛝 Playgrounds" },
+  { value: "storytime", label: "📚 Storytime" },
+  { value: "animals", label: "🐾 Animal outings" },
+  { value: "water_play", label: "💦 Water play" },
+  { value: "active_play", label: "🏃 Active play" },
+  { value: "arts_learning", label: "🎨 Arts & learning" },
+];
 
 function parseLegacyAddress(value: string | null | undefined) {
   if (!value) return { street: "", city: "", state: "", zip: "" };
@@ -20,6 +44,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
   const paramError = typeof searchParams.error === "string" ? searchParams.error : undefined;
   const addressError = typeof searchParams.address_error === "string" ? searchParams.address_error : undefined;
   const saved = searchParams.saved === "1";
+  const poppySaved = searchParams.poppy_saved === "1";
   const addressSaved = typeof searchParams.address_saved === "string" ? searchParams.address_saved : undefined;
 
   const supabase = await createClient();
@@ -28,7 +53,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("nap_start, nap_end, child_age_months, home_address, home_street, home_city, home_state, home_zip, home_lat, home_lng")
+    .select("display_name, nap_start, nap_end, child_age_months, child_name, child_interests, child_activity_preferences, preferred_categories, family_budget_note, indoor_preference, max_distance_miles, home_address, home_street, home_city, home_state, home_zip, home_lat, home_lng")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -44,6 +69,67 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
     <div className="flex flex-1 flex-col items-center px-4 py-10">
       <div className="w-full max-w-md">
         <Nav email={user.email ?? ""} />
+
+        <h1 className="font-display mb-1 text-2xl font-bold text-zinc-900">Help Poppy get to know your family 🌼</h1>
+        <p className="mb-6 text-sm text-zinc-500">The more Poppy knows, the better her ideas. Everything here is optional — skip anything you like.</p>
+
+        {poppySaved && <p className="mb-4 text-sm text-emerald-700">Saved — Poppy will use this next time.</p>}
+
+        <form action={updatePoppyProfile} className="mb-10 flex flex-col gap-5">
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">Your name <span className="text-zinc-400">(optional)</span><input type="text" name="display_name" defaultValue={profile?.display_name ?? ""} maxLength={80} placeholder="Chris" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">What&apos;s your little one&apos;s name?<input type="text" name="child_name" defaultValue={profile?.child_name ?? ""} maxLength={60} placeholder="Emma" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-sm text-zinc-600">What do they love? <span className="text-zinc-400">(pick any)</span></legend>
+            <div className="flex flex-wrap gap-2">
+              {INTERESTS.map((interest) => {
+                const checked = (profile?.child_interests ?? []).includes(interest.value);
+                return (
+                  <label key={interest.value} className="cursor-pointer">
+                    <input type="checkbox" name="child_interests" value={interest.value} defaultChecked={checked} className="peer sr-only" />
+                    <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 peer-checked:border-rose-500 peer-checked:bg-rose-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-rose-300">{interest.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-sm text-zinc-600">Favorite outing styles <span className="text-zinc-400">(pick any)</span></legend>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIES.map((category) => {
+                const checked = (profile?.preferred_categories ?? []).includes(category.value);
+                return (
+                  <label key={category.value} className="cursor-pointer">
+                    <input type="checkbox" name="preferred_categories" value={category.value} defaultChecked={checked} className="peer sr-only" />
+                    <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 peer-checked:border-rose-500 peer-checked:bg-rose-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-rose-300">{category.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-sm text-zinc-600">Indoor or outdoor?</legend>
+            <div className="flex flex-wrap gap-2">
+              {[{ v: "either", l: "No preference" }, { v: "indoor", l: "🏠 Indoor" }, { v: "outdoor", l: "🌳 Outdoor" }].map((opt) => {
+                const current = profile?.indoor_preference ?? "either";
+                return (
+                  <label key={opt.v} className="cursor-pointer">
+                    <input type="radio" name="indoor_preference" value={opt.v} defaultChecked={current === opt.v} className="peer sr-only" />
+                    <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 peer-checked:border-rose-500 peer-checked:bg-rose-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-rose-300">{opt.l}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">How far are you usually willing to go? <span className="text-zinc-400">(miles, optional)</span><input type="number" name="max_distance_miles" min={1} max={200} defaultValue={profile?.max_distance_miles ?? ""} placeholder="e.g. 20" className="w-32 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">Anything about budget? <span className="text-zinc-400">(optional)</span><input type="text" name="family_budget_note" defaultValue={profile?.family_budget_note ?? ""} maxLength={200} placeholder="Trying to keep it mostly free" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+
+          <button type="submit" className="self-start rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white">Save for Poppy</button>
+        </form>
 
         <h1 className="font-display mb-1 text-2xl font-bold text-zinc-900">Nap window</h1>
         <p className="mb-6 text-sm text-zinc-500">Events that overlap this window show dimmed on your calendar (never hidden) so you can plan around nap time.</p>

@@ -1,60 +1,48 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Nav from "@/components/Nav";
-import ExplorerAssistantV3 from "@/components/ExplorerAssistantV3";
+import Poppy from "@/components/poppy/Poppy";
 import WeatherContextCard from "@/components/WeatherContextCard";
 import { getWeatherContext } from "@/lib/weather-context";
-import type { FeedEvent, Place, PlaceTip } from "@/types";
 
-export default async function PlacesPage() {
+// The recommendation candidate pool is retrieved server-side inside
+// /api/poppy/recommend, so this page no longer pulls the whole places/events
+// dataset into the browser. It only needs light context to render Poppy's
+// entry point plus the weather banner.
+export default async function PlacesPage(props: PageProps<"/places">) {
+  const searchParams = await props.searchParams;
+  const ask = typeof searchParams.ask === "string" ? searchParams.ask : null;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const now = new Date();
-  const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
-  const [{ data: places }, { data: groups }, { data: profile }, { data: events }] = await Promise.all([
-    supabase.from("places").select("*").eq("active", true).order("name", { ascending: true }),
-    supabase.from("groups").select("id, name").order("created_at", { ascending: true }),
-    supabase.from("profiles").select("child_age_months, home_lat, home_lng").eq("id", user.id).maybeSingle(),
-    // feed_events, not the raw events table — it already applies
-    // status='published' AND is_kid_relevant AND NOT is_suppressed AND
-    // duplicate_of IS NULL server-side (see the FeedEvent type comment).
-    // Querying events directly here previously let suppressed/duplicate
-    // rows leak onto Explore.
-    supabase.from("feed_events").select("*").gte("starts_at", now.toISOString()).lte("starts_at", todayEnd.toISOString()).order("starts_at", { ascending: true }).limit(30),
-  ]);
-  const placeList = (places ?? []) as Place[];
-  const eventList = (events ?? []) as FeedEvent[];
-  const activeGroupId = groups?.[0]?.id ?? null;
-  const activeGroupName = groups?.[0]?.name ?? null;
-  const placeIds = placeList.map((p) => p.id);
-  const { data: tips } = activeGroupId && placeIds.length ? await supabase.from("place_tips").select("*").eq("group_id", activeGroupId).in("place_id", placeIds) : { data: [] };
-  const tipRows = (tips ?? []) as PlaceTip[];
-  const userIds = [...new Set(tipRows.map((t) => t.user_id))];
-  const { data: profiles } = userIds.length ? await supabase.from("profiles").select("id, display_name").in("id", userIds) : { data: [] };
-  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
-  const tipsByPlace: Record<string, (PlaceTip & { display_name: string })[]> = {};
-  for (const tip of tipRows) { if (!tip.place_id) continue; const list = tipsByPlace[tip.place_id] ?? []; list.push({ ...tip, display_name: nameById.get(tip.user_id) ?? "Someone" }); tipsByPlace[tip.place_id] = list; }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("child_name, home_lat, home_lng")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const childName = profile?.child_name?.trim() ? profile.child_name.trim() : null;
+  const hasHome = profile?.home_lat != null && profile?.home_lng != null;
+
   let weather = null;
-  if (profile?.home_lat != null && profile?.home_lng != null) { try { weather = await getWeatherContext(profile.home_lat, profile.home_lng); } catch { weather = null; } }
+  if (profile?.home_lat != null && profile?.home_lng != null) {
+    try { weather = await getWeatherContext(profile.home_lat, profile.home_lng); } catch { weather = null; }
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center px-4 py-10">
       <div className="w-full max-w-2xl">
         <Nav email={user.email ?? ""} />
         <div className="flex flex-col gap-5">
           <WeatherContextCard weather={weather} />
-          <ExplorerAssistantV3
-            places={placeList}
-            events={eventList}
-            groupId={activeGroupId}
-            groupName={activeGroupName}
-            currentUserId={user.id}
-            tipsByPlace={tipsByPlace}
-            childAgeMonths={profile?.child_age_months ?? null}
-            homeLat={profile?.home_lat ?? null}
-            homeLng={profile?.home_lng ?? null}
-            weather={weather}
-          />
+          <Poppy childName={childName} hasHome={hasHome} initialMessage={ask} />
+          {!hasHome && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Add your home address in <a href="/settings" className="underline">Settings</a> so Poppy can sort ideas by how close they are.
+            </p>
+          )}
         </div>
       </div>
     </div>

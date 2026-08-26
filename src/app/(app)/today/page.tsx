@@ -5,6 +5,7 @@ import { getRoutingProvider, type DriveTimeResult } from "@/lib/routing";
 import { createClient } from "@/lib/supabase/server";
 import TodayFeed, { type EventBundle } from "@/components/TodayFeed";
 import PlaceCard from "@/components/PlaceCard";
+import PoppyTodayEntry from "@/components/poppy/PoppyTodayEntry";
 import Nav from "@/components/Nav";
 import type { FeedEvent, EventComment, Place, PlaceTip, RsvpStatus } from "@/types";
 
@@ -96,7 +97,7 @@ export default async function TodayPage(props: PageProps<"/today">) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: myProfile } = await supabase.from("profiles").select("display_name, nap_start, nap_end, home_lat, home_lng, child_age_months").eq("id", user.id).maybeSingle();
+  const { data: myProfile } = await supabase.from("profiles").select("display_name, nap_start, nap_end, home_lat, home_lng, child_age_months, child_name").eq("id", user.id).maybeSingle();
   const currentUserName = myProfile?.display_name ?? "You";
   const home = myProfile?.home_lat != null && myProfile?.home_lng != null ? { lat: myProfile.home_lat, lng: myProfile.home_lng } : null;
   const { data: groups } = await supabase.from("groups").select("id, name").order("created_at", { ascending: true });
@@ -179,6 +180,7 @@ export default async function TodayPage(props: PageProps<"/today">) {
         {paramError && <p className="mb-6 text-sm text-red-600">{paramError}</p>}
         {groupList.length > 1 && <div className="mb-6 flex flex-wrap items-center gap-2 text-sm"><span className="text-zinc-500">Group:</span>{groupList.map((g) => <a key={g.id} href={`/today?group=${g.id}`} className={g.id === activeGroupId ? "rounded-full bg-zinc-900 px-3 py-1 font-medium text-white" : "rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:border-zinc-500"}>{g.name}</a>)}</div>}
         {!home && <p className="mb-6 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Set your home location in <a href="/settings" className="underline">Settings</a> to see how far places are from you.</p>}
+        <div className="mb-8"><PoppyTodayEntry childName={myProfile?.child_name?.trim() ? myProfile.child_name.trim() : null} /></div>
         <section className="mb-8"><div className="mb-3 flex items-end justify-between gap-4"><div><h2 className="font-display text-lg font-bold text-zinc-900">Happening today</h2><p className="mt-1 text-xs text-zinc-500">A few picks, not a calendar.</p></div><a href="/calendar" className="text-xs font-medium text-zinc-600 underline underline-offset-2">See all</a></div><TodayFeed bundles={eventBundles} currentUserId={user.id} currentUserName={currentUserName} hasActiveGroup={Boolean(activeGroupId)} activeGroupId={activeGroupId} activeGroupName={activeGroupName} activeGroupMemberIds={activeGroupMemberIds} roster={roster} childAgeMonths={myProfile?.child_age_months ?? null} /></section>
         <section><div className="mb-3 flex items-end justify-between gap-4"><div><h2 className="font-display text-lg font-bold text-zinc-900">Good options for your family</h2><p className="mt-1 text-xs text-zinc-500">A few good ideas — Explorer has the full directory.</p></div><a href="/places" className="text-xs font-medium text-zinc-600 underline underline-offset-2">See all</a></div>{placeList.length === 0 ? <p className="rounded-xl border border-dashed border-zinc-200 px-4 py-5 text-sm text-zinc-500">No curated places yet in your market — check back soon, or ask your group for their favorites.</p> : <div className="flex flex-col gap-4">{placeList.map((place) => <PlaceCard key={place.id} place={place} groupId={activeGroupId} groupName={activeGroupName} currentUserId={user.id} tips={placeTipsByPlaceId[place.id] ?? []} distance={straightLineByPlaceId.has(place.id) ? { km: straightLineByPlaceId.get(place.id)!, driveMinutes: driveTimeByPlaceId.get(place.id)?.durationMinutes } : undefined} childAgeMonths={myProfile?.child_age_months ?? null} weather={weatherByPlaceId.get(place.id) ?? null} />)}</div>}</section>
       </div>
