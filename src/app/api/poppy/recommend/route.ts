@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getRoutingProvider } from "@/lib/routing";
 import { getWeatherContext, type WeatherContext } from "@/lib/weather-context";
-import type { FeedEvent, Place } from "@/types";
+import type { FeedEvent } from "@/types";
+import { isFreeCost } from "@/lib/cost";
 import { parseIntent } from "@/lib/recommend/intent";
 import { buildCacheKey } from "@/lib/recommend/cacheKey";
 import { buildFallbacks, buildResponseText, recommend } from "@/lib/recommend/recommend";
@@ -20,16 +21,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MESSAGE_MAX = 400;
-const CANDIDATE_POOL = 300;
-const EVENT_WINDOW_DAYS = 8;
+const CANDIDATE_POOL = 500;
 const CACHE_TTL_MINUTES = 15;
 
 const MOODS: Mood[] = ["all", "indoor", "outdoor", "water", "active", "learn", "create", "animals"];
 const INDOOR: IndoorPreference[] = ["indoor", "outdoor", "either"];
 
-// Only these fields of a client-supplied "previous" constraint set are
-// trusted, and only after being validated against the allowed value sets. A
-// malformed follow-up context can never inject arbitrary data.
 function sanitizePrevious(input: unknown): Partial<RecommendationConstraints> | undefined {
   if (!input || typeof input !== "object") return undefined;
   const raw = input as Record<string, unknown>;
@@ -65,6 +62,86 @@ function toProfile(row: Record<string, unknown> | null): PoppyProfile {
   };
 }
 
+type PoppyCandidateRow = {
+  id: string;
+  title: string | null;
+  display_title: string | null;
+  description: string | null;
+  venue_name: string | null;
+  venue_display: string | null;
+  address: string | null;
+  location_city: string | null;
+  location_state: string | null;
+  location_zip: string | null;
+  lat: number | null;
+  lng: number | null;
+  location_latitude: number | null;
+  location_longitude: number | null;
+  starts_at: string;
+  ends_at: string | null;
+  age_min_months: number | null;
+  age_max_months: number | null;
+  age_band: string | null;
+  age_tags: string[] | null;
+  cost: string | null;
+  source: string | null;
+  source_url: string | null;
+  registration_required: boolean;
+  registration_url: string | null;
+  is_outdoor: boolean;
+  experience_type: string | null;
+  weather_fit: string | null;
+  verification_tier: string | null;
+  content_review_status: string | null;
+  last_verified_at: string | null;
+  place_id: string | null;
+  program_id: string | null;
+};
+
+function candidateToFeedEvent(row: PoppyCandidateRow): FeedEvent {
+  return {
+    id: row.id,
+    title: row.display_title?.trim() || row.title?.trim() || "Family activity",
+    description: row.description,
+    venue: row.venue_display?.trim() || row.venue_name?.trim() || null,
+    room_name: null,
+    organizer: null,
+    address: row.address,
+    lat: row.lat ?? row.location_latitude,
+    lng: row.lng ?? row.location_longitude,
+    location_latitude: row.location_latitude ?? row.lat,
+    location_longitude: row.location_longitude ?? row.lng,
+    starts_at: row.starts_at,
+    ends_at: row.ends_at,
+    time_precision: "datetime",
+    time_unknown: false,
+    cost: row.cost,
+    is_free: isFreeCost(row.cost),
+    age_tags: row.age_tags ?? [],
+    age_min_months: row.age_min_months,
+    age_max_months: row.age_max_months,
+    age_band: row.age_band,
+    is_outdoor: row.is_outdoor,
+    what_to_bring: [],
+    registration_required: row.registration_required,
+    registration_url: row.registration_url,
+    source: row.source ?? "",
+    source_id: null,
+    source_url: row.source_url,
+    content_status: row.content_review_status,
+    geography_tier: row.verification_tier,
+    experience_type: row.experience_type,
+    weather_fit: row.weather_fit,
+    place_id: row.place_id,
+    program_id: row.program_id,
+    proposed_by_group: null,
+    metro_area: row.location_city ?? "",
+    status: "published",
+    last_verified_at: row.last_verified_at,
+    added_by: null,
+  };
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -82,7 +159,6 @@ export async function POST(request: Request) {
   const originMode = body.originMode === "current" ? "current" : "home";
 
   try {
-    // Profile is always the *current* user's own row (RLS + explicit eq).
     const { data: profileRow } = await supabase
       .from("profiles")
       .select(
@@ -94,8 +170,6 @@ export async function POST(request: Request) {
     const profile = toProfile(profileRow as Record<string, unknown> | null);
     const childName = typeof profileRow?.child_name === "string" && profileRow.child_name.trim() ? profileRow.child_name.trim() : null;
 
-    // Resolve origin. "current" is only honored with valid client coords;
-    // otherwise we fall back to the saved home location.
     let origin: { lat: number; lng: number } | null = profile.homeLat != null && profile.homeLng != null ? { lat: profile.homeLat, lng: profile.homeLng } : null;
     if (originMode === "current") {
       const o = body.origin as Record<string, unknown> | undefined;
@@ -104,8 +178,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Deterministic intent → constraints, then overlay the profile's default
-    // distance ceiling when the request didn't specify one.
     const constraints = parseIntent(message, previous);
     if (constraints.maxMiles == null && profile.maxDistanceMiles != null) {
       constraints.maxMiles = profile.maxDistanceMiles;
@@ -115,7 +187,6 @@ export async function POST(request: Request) {
     const requestId = randomUUID();
     const cacheKey = buildCacheKey(user.id, constraints, profile, origin, now);
 
-    // ---- Cache lookup (per-user, RLS-scoped) ----
     const { data: cached } = await supabase
       .from("poppy_recommendation_cache")
       .select("response, expires_at")
@@ -129,34 +200,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ ...payload, requestId, cacheHit: true });
     }
 
-    // ---- Candidate retrieval (server-side, bounded — never the whole DB
-    // to the browser). Runs under the user's RLS context. ----
-    const windowEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + EVENT_WINDOW_DAYS);
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // The production Poppy inventory is the authoritative candidate pool.
+    // Never fall back to places/feed_events here: doing so would create a
+    // second recommendation inventory with different quality/suppression
+    // semantics.
+    const { data: candidateRows, error: candidateError } = await supabase
+      .from("poppy_recommendation_candidates")
+      .select(
+        "id, title, display_title, description, venue_name, venue_display, address, location_city, location_state, location_zip, lat, lng, location_latitude, location_longitude, starts_at, ends_at, age_min_months, age_max_months, age_band, age_tags, cost, source, source_url, registration_required, registration_url, is_outdoor, experience_type, weather_fit, verification_tier, content_review_status, last_verified_at, place_id, program_id",
+      )
+      .gte("starts_at", now.toISOString())
+      .order("starts_at", { ascending: true })
+      .limit(CANDIDATE_POOL);
 
-    const [{ data: places }, { data: events }] = await Promise.all([
-      supabase.from("places").select("*").eq("active", true).limit(CANDIDATE_POOL),
-      supabase
-        .from("feed_events")
-        .select("*")
-        .gte("starts_at", startOfToday.toISOString())
-        .lte("starts_at", windowEnd.toISOString())
-        .order("starts_at", { ascending: true })
-        .limit(CANDIDATE_POOL),
-    ]);
+    if (candidateError) throw candidateError;
 
-    const placeList = (places ?? []) as Place[];
-    const eventList = (events ?? []) as FeedEvent[];
+    const eventList = ((candidateRows ?? []) as PoppyCandidateRow[]).map(candidateToFeedEvent);
 
-    // Weather at the search origin sharpens indoor/outdoor ranking (same
-    // source the Today/Explore pages already use).
     let weather: WeatherContext | null = null;
     if (origin) {
       try { weather = await getWeatherContext(origin.lat, origin.lng); } catch { weather = null; }
     }
 
     const { candidates, droppedCount } = recommend(
-      { places: placeList, events: eventList },
+      { places: [], events: eventList },
       constraints,
       profile,
       origin,
@@ -164,10 +231,8 @@ export async function POST(request: Request) {
       now,
     );
 
-    // ---- Drive-time enrichment for the short list only (bounded). ----
-    await enrichDriveTimes(candidates, origin, placeList, eventList);
+    await enrichDriveTimes(candidates, origin, eventList);
 
-    // ---- Poppy's conversational line (deterministic; optionally warmer). ----
     let responseText = buildResponseText(candidates, constraints, childName);
     if (candidates.length > 0) {
       const enhanced = await generatePoppyLine({ candidates, constraints, childName, message });
@@ -183,8 +248,6 @@ export async function POST(request: Request) {
       cacheHit: false,
     };
 
-    // ---- Persist cache + audit (best-effort; failures never break the
-    // response). ----
     const expiresAt = new Date(now.getTime() + CACHE_TTL_MINUTES * 60 * 1000).toISOString();
     void supabase
       .from("poppy_recommendation_cache")
@@ -195,9 +258,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result);
   } catch (err) {
-    // Never leak SQL/Supabase/model internals to the client.
     console.error("[poppy] recommendation failed", err);
-    return NextResponse.json({ error: "Poppy hit a snag while looking for ideas." }, { status: 500 });
+    return NextResponse.json({ error: "Something went wrong while Poppy was looking." }, { status: 500 });
   }
 }
 
@@ -228,18 +290,16 @@ function recordAudit(
 async function enrichDriveTimes(
   candidates: RecommendationResult["candidates"],
   origin: { lat: number; lng: number } | null,
-  places: Place[],
   events: FeedEvent[],
 ) {
   if (!origin || candidates.length === 0) return;
   const provider = getRoutingProvider();
   if (!provider) return;
 
-  const placeById = new Map(places.map((p) => [p.id, p]));
   const eventById = new Map(events.map((e) => [e.id, e]));
   const points: { candidate: (typeof candidates)[number]; lat: number; lng: number }[] = [];
   for (const c of candidates) {
-    const src = c.type === "place" ? placeById.get(c.id) : eventById.get(c.id);
+    const src = eventById.get(c.id);
     const lat = src?.lat ?? null;
     const lng = src?.lng ?? null;
     if (lat != null && lng != null) points.push({ candidate: c, lat, lng });
