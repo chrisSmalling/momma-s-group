@@ -151,9 +151,9 @@ describe("hard filters", () => {
   });
 
   it("enforces morning, afternoon, and evening windows as hard filters", () => {
-    const morning = makeEvent({ id: "morning", starts_at: "2026-08-27T08:00:00Z", ends_at: "2026-08-27T09:00:00Z" });
-    const afternoon = makeEvent({ id: "afternoon", starts_at: "2026-08-27T14:00:00Z", ends_at: "2026-08-27T15:00:00Z" });
-    const evening = makeEvent({ id: "evening", starts_at: "2026-08-27T18:00:00Z", ends_at: "2026-08-27T19:00:00Z" });
+    const morning = makeEvent({ id: "morning", starts_at: "2026-08-27T08:00:00-04:00", ends_at: "2026-08-27T09:00:00-04:00" });
+    const afternoon = makeEvent({ id: "afternoon", starts_at: "2026-08-27T14:00:00-04:00", ends_at: "2026-08-27T15:00:00-04:00" });
+    const evening = makeEvent({ id: "evening", starts_at: "2026-08-27T18:00:00-04:00", ends_at: "2026-08-27T19:00:00-04:00" });
     expect(eventMatchesTimeOfDay(morning, "morning")).toBe(true);
     expect(eventMatchesTimeOfDay(afternoon, "morning")).toBe(false);
     expect(eventMatchesTimeOfDay(afternoon, "afternoon")).toBe(true);
