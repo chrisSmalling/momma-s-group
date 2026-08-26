@@ -1,10 +1,4 @@
 // Poppy recommendation contract + internal types.
-//
-// This module is intentionally free of any Supabase / network dependency so
-// the intent parsing, filtering, scoring and ranking can be unit-tested as
-// pure functions. The route handler feeds already-fetched, typed rows into
-// these helpers.
-
 import type { FeedEvent, Place } from "@/types";
 
 export type IndoorPreference = "indoor" | "outdoor" | "either";
@@ -32,7 +26,8 @@ export interface RecommendationConstraints {
   indoor: IndoorPreference;
   budget: BudgetPreference;
   maxMiles: number | null;
-  maxPriceDollars: number | null;
+  // Optional for backwards-compatible callers; populated by parseIntent when explicit.
+  maxPriceDollars?: number | null;
   timeframe: Timeframe;
   timeOfDay: TimeOfDay;
   indoorExplicit: boolean;
@@ -48,7 +43,6 @@ export interface RecommendationRequest {
 }
 
 export type CandidateType = "place" | "event";
-
 export interface RecommendationCandidate {
   type: CandidateType;
   id: string;
@@ -81,13 +75,5 @@ export interface RecommendationResult {
   cacheHit: boolean;
 }
 
-export interface FallbackAction {
-  key: string;
-  label: string;
-  patch: Partial<RecommendationConstraints>;
-}
-
-export interface CandidateInputs {
-  places: Place[];
-  events: FeedEvent[];
-}
+export interface FallbackAction { key: string; label: string; patch: Partial<RecommendationConstraints>; }
+export interface CandidateInputs { places: Place[]; events: FeedEvent[]; }
