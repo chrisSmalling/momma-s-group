@@ -11,6 +11,7 @@ import type { FeedEvent, Place } from "@/types";
 export type IndoorPreference = "indoor" | "outdoor" | "either";
 export type BudgetPreference = "free" | "budget" | "any";
 export type Timeframe = "today" | "tomorrow" | "weekend" | "any";
+export type TimeOfDay = "morning" | "afternoon" | "evening" | "any";
 
 // The subset of profile columns the recommender actually reads. Kept narrow
 // on purpose (Phase 16 data-safety): only what materially affects ranking.
@@ -37,6 +38,7 @@ export interface RecommendationConstraints {
   budget: BudgetPreference;
   maxMiles: number | null;
   timeframe: Timeframe;
+  timeOfDay: TimeOfDay;
   // true only when the user's words made indoor/outdoor explicit — that
   // promotes indoor/outdoor from a soft signal to a hard filter.
   indoorExplicit: boolean;
