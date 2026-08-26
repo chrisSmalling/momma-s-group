@@ -146,6 +146,7 @@ export function recommend(
       goodAgeFit: fit,
       reason: placeReason(place, miles, fit, profile),
       href: `/places/${place.id}/propose`,
+      lastVerifiedAt: place.last_verified_at,
       score: scorePlace(place, miles, constraints, profile, weather),
     };
   });
@@ -171,6 +172,7 @@ export function recommend(
       goodAgeFit: fit,
       reason: eventReason(event, miles, fit, profile),
       href: `/events/${event.id}`,
+      lastVerifiedAt: event.last_verified_at,
       score: scoreEvent(event, miles, constraints, profile, weather),
     };
   });
