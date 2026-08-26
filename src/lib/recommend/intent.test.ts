@@ -56,8 +56,8 @@ describe("parseIntent", () => {
   });
 
   it("tightens cheaper follow-ups", () => {
-    expect(parseIntent("anything cheaper", { budget: "any", maxMiles: 20 })).toMatchObject({
-      budget: "budget",
+    expect(parseIntent("anything cheaper", { budget: "budget", maxMiles: 20 })).toMatchObject({
+      budget: "free",
       maxMiles: 20,
     });
   });
