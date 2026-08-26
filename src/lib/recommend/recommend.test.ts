@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FeedEvent, Place } from "@/types";
 import { parseIntent } from "./intent";
-import { filterEvents, filterPlaces, eventWithinTimeframe } from "./filter";
+import { filterEvents, filterPlaces, eventWithinTimeframe, eventMatchesTimeOfDay } from "./filter";
 import { recommend } from "./recommend";
 import { buildCacheKey } from "./cacheKey";
 import type { PoppyProfile, RecommendationConstraints } from "./types";
@@ -46,7 +46,7 @@ const baseProfile: PoppyProfile = {
 };
 
 const anyConstraints: RecommendationConstraints = {
-  mood: "all", indoor: "either", budget: "any", maxMiles: null, timeframe: "any", indoorExplicit: false,
+  mood: "all", indoor: "either", budget: "any", maxMiles: null, timeframe: "any", timeOfDay: "any", indoorExplicit: false,
 };
 
 const origin = { lat: 28.2, lng: -82.4 };
@@ -148,6 +148,19 @@ describe("hard filters", () => {
     const nextWeek = makeEvent({ starts_at: "2026-09-02T18:00:00Z", ends_at: "2026-09-02T19:00:00Z" });
     expect(eventWithinTimeframe(today, "today", NOW)).toBe(true);
     expect(eventWithinTimeframe(nextWeek, "today", NOW)).toBe(false);
+  });
+
+  it("enforces morning, afternoon, and evening windows as hard filters", () => {
+    const morning = makeEvent({ id: "morning", starts_at: "2026-08-27T08:00:00-04:00", ends_at: "2026-08-27T09:00:00-04:00" });
+    const afternoon = makeEvent({ id: "afternoon", starts_at: "2026-08-27T14:00:00-04:00", ends_at: "2026-08-27T15:00:00-04:00" });
+    const evening = makeEvent({ id: "evening", starts_at: "2026-08-27T18:00:00-04:00", ends_at: "2026-08-27T19:00:00-04:00" });
+    expect(eventMatchesTimeOfDay(morning, "morning")).toBe(true);
+    expect(eventMatchesTimeOfDay(afternoon, "morning")).toBe(false);
+    expect(eventMatchesTimeOfDay(afternoon, "afternoon")).toBe(true);
+    expect(eventMatchesTimeOfDay(evening, "afternoon")).toBe(false);
+    expect(eventMatchesTimeOfDay(evening, "evening")).toBe(true);
+    const { kept } = filterEvents([morning, afternoon, evening], { ...anyConstraints, timeOfDay: "morning" }, origin, NOW);
+    expect(kept.map((k) => k.event.id)).toEqual(["morning"]);
   });
 });
 

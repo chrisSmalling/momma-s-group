@@ -1,39 +1,5 @@
-// Deterministic Poppy voice. This is the guaranteed floor for the assistant's
-// conversational line; the route may replace it with model-generated text when
-// a key is configured, but that text is constrained to the same candidate
-// facts and can always fall back to this.
-
+// Deterministic Poppy voice. Guaranteed floor for the assistant's conversational line.
 import type { RecommendationCandidate, RecommendationConstraints } from "./types";
-
-function moodWord(c: RecommendationConstraints): string | null {
-  switch (c.mood) {
-    case "indoor": return "indoor";
-    case "outdoor": return "outdoor";
-    case "water": return "water play";
-    case "active": return "energy-burning";
-    case "learn": return "learning";
-    case "create": return "arts & crafts";
-    case "animals": return "animal";
-    default: return null;
-  }
-}
-
-export function buildResponseText(
-  candidates: RecommendationCandidate[],
-  constraints: RecommendationConstraints,
-  childName: string | null,
-): string {
-  if (candidates.length === 0) {
-    return "I'm not finding a great match nearby right now — want me to widen the search or try a different vibe?";
-  }
-  const n = candidates.length;
-  const mood = moodWord(constraints);
-  const forWho = childName ? ` for ${childName}` : "";
-  const lead = mood
-    ? `Looks like you're after something ${mood}${forWho}. `
-    : "";
-  const count = n === 1 ? "one good option" : `${n} good options`;
-  const closeness =
-    constraints.maxMiles != null ? " close by" : "";
-  return `${lead}I found ${count}${closeness}. Tap any to see details, or ask me to find something closer or cheaper.`;
-}
+function moodWord(c:RecommendationConstraints):string|null{switch(c.mood){case"indoor":return"indoor";case"outdoor":return"outdoor";case"water":return"water play";case"active":return"active";case"learn":return"learning";case"create":return"arts & crafts";case"animals":return"animal";default:return null;}}
+function timeWord(c:RecommendationConstraints):string|null{switch(c.timeOfDay){case"morning":return"this morning";case"afternoon":return"this afternoon";case"evening":return"this evening";default:return null;}}
+export function buildResponseText(candidates:RecommendationCandidate[],constraints:RecommendationConstraints,childName:string|null):string{if(candidates.length===0){const limit=constraints.maxPriceDollars!=null?` under $${constraints.maxPriceDollars}`:"";const when=timeWord(constraints);return `I'm not finding a strong match${when?` ${when}`:""}${limit}${constraints.distanceExplicit?" within your requested area":" nearby"}. Want me to widen one constraint or try a different vibe?`;}const mood=moodWord(constraints);const when=timeWord(constraints);const forWho=childName?` for ${childName}`:"";const lead=mood?`I found ${mood} ideas${forWho}${when?` ${when}`:""}. `:when?`I found options${forWho} ${when}. `:"";const count=candidates.length===1?"one good option":`${candidates.length} good options`;const closeness=constraints.maxMiles!=null?" close by":"";return `${lead}There ${candidates.length===1?"is":"are"} ${count}${closeness}. I prioritized your request first, then age fit, distance, weather, and family-friendly details. Tap one to see what to know before you go.`;}

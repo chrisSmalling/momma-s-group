@@ -1,214 +1,26 @@
-// Orchestrates the deterministic recommendation pipeline:
-// filter (hard constraints) -> score -> rank -> structured candidates.
-// Pure: the route handler fetches rows + weather and passes them in.
-
+// Deterministic recommendation pipeline: hard filters -> scoring -> ranking -> structured candidates.
 import { isFreeCost } from "@/lib/cost";
 import type { WeatherContext } from "@/lib/weather-context";
 import type { FeedEvent, Place } from "@/types";
 import { filterEvents, filterPlaces } from "./filter";
 import { goodAgeFit, scoreEvent, scorePlace } from "./score";
 import { buildResponseText } from "./text";
-import type {
-  CandidateInputs,
-  FallbackAction,
-  PoppyProfile,
-  RecommendationCandidate,
-  RecommendationConstraints,
-} from "./types";
+import type { CandidateInputs, FallbackAction, PoppyProfile, RecommendationCandidate, RecommendationConstraints } from "./types";
 
 const MAX_RESULTS = 5;
+function distanceLabel(miles: number | null): string | null { if (miles == null) return null; return `~${miles < 10 ? miles.toFixed(1) : Math.round(miles)} mi away`; }
+function interestLabel(interest: string): string { const labels: Record<string,string>={animals:"animals",water:"water play",playgrounds:"playgrounds",arts_and_crafts:"arts & crafts",books:"books",music:"music",sports:"sports",adventure:"adventure",science:"science",trains:"trains",flying:"things that fly",food:"food"}; return labels[interest] ?? interest.replaceAll("_"," "); }
+function matchedPlaceInterest(place: Place, profile: PoppyProfile): string | null { const matches: Record<string,string[]>={animals:["animals"],water:["water_play"],playgrounds:["playground"],arts_and_crafts:["arts_learning"],books:["storytime"],music:["arts_learning"],sports:["active_play","playground"],adventure:["active_play","outdoor"],science:["arts_learning"]}; return profile.childInterests.find(i=>(matches[i]??[]).some(t=>place.category_tags.includes(t))) ?? null; }
+function matchedEventInterest(event: FeedEvent, profile: PoppyProfile): string | null { const matches: Record<string,string[]>={animals:["animal"],sports:["music_movement"],arts_and_crafts:["hands_on"],books:["storytime_experience"],music:["music_movement"],science:["hands_on"],adventure:["music_movement"],trains:["vehicle"],flying:["vehicle"]}; return profile.childInterests.find(i=>event.experience_type!=null && (matches[i]??[]).includes(event.experience_type)) ?? null; }
+function placeReason(place: Place, miles: number | null, fit: boolean, profile: PoppyProfile): string { const bits:string[]=[]; if(fit&&profile.childAgeMonths!=null){const years=Math.floor(profile.childAgeMonths/12);bits.push(years>=1?`a good fit for your ${years}-year-old`:"a good fit for your little one");} const interest=matchedPlaceInterest(place,profile); if(interest) bits.push(`matches their interest in ${interestLabel(interest)}`); if(miles!=null&&miles<=10) bits.push(`only ${miles<10?miles.toFixed(1):Math.round(miles)} miles away`); if(isFreeCost(place.price_note)) bits.push("free"); if(bits.length===0)return place.is_outdoor?"A solid outdoor pick nearby.":"A solid nearby pick."; return `${bits[0][0].toUpperCase()}${bits[0].slice(1)}${bits.length>1?` — ${bits.slice(1).join(" · ")}`:"."}`; }
+function eventReason(event: FeedEvent,miles:number|null,fit:boolean,profile:PoppyProfile):string{const bits:string[]=[];if(fit&&profile.childAgeMonths!=null){const years=Math.floor(profile.childAgeMonths/12);bits.push(years>=1?`great for your ${years}-year-old`:"great for your little one");}const interest=matchedEventInterest(event,profile);if(interest)bits.push(`matches ${interestLabel(interest)}`);if(event.is_free)bits.push("free");if(miles!=null&&miles<=12)bits.push(`close by (~${miles<10?miles.toFixed(1):Math.round(miles)} mi)`);if(bits.length===0)return"Happening soon and worth a look.";return`Looks ${bits.join(" · ")}.`;}
 
-function distanceLabel(miles: number | null): string | null {
-  if (miles == null) return null;
-  const rounded = miles < 10 ? miles.toFixed(1) : String(Math.round(miles));
-  return `~${rounded} mi away`;
+export function recommend(inputs:CandidateInputs,constraints:RecommendationConstraints,profile:PoppyProfile,origin:{lat:number;lng:number}|null,weather:WeatherContext|null,now:Date):{candidates:RecommendationCandidate[];droppedCount:number}{
+ const placesFiltered=filterPlaces(inputs.places,constraints,origin); const eventsFiltered=filterEvents(inputs.events,constraints,origin,now);
+ const placeCandidates:RecommendationCandidate[]=placesFiltered.kept.map(({place,miles})=>{const fit=goodAgeFit(profile.childAgeMonths,place.age_min_months,place.age_max_months);return{type:"place",id:place.id,title:place.name,description:place.toddler_notes??place.description,address:place.address,distanceMiles:miles,driveMinutes:null,distanceLabel:distanceLabel(miles),startsAt:null,endsAt:null,price:place.price_note,isFree:isFreeCost(place.price_note),isOutdoor:place.is_outdoor,ageMinMonths:place.age_min_months,ageMaxMonths:place.age_max_months,goodAgeFit:fit,reason:placeReason(place,miles,fit,profile),href:`/places/${place.id}/propose`,lastVerifiedAt:place.last_verified_at,score:scorePlace(place,miles,constraints,profile,weather),whatToBring:place.what_to_bring??[],strollerAccessible:place.stroller_accessible,changingTable:place.has_changing_table,nursingFriendly:place.nursing_friendly,parkingNotes:place.parking_notes,typicalCrowdNote:place.typical_crowd_note,bestTimeNote:place.best_time_note};});
+ const eventCandidates:RecommendationCandidate[]=eventsFiltered.kept.map(({event,miles})=>{const fit=goodAgeFit(profile.childAgeMonths,event.age_min_months,event.age_max_months);return{type:"event",id:event.id,title:event.title,description:event.description,address:event.address??event.venue,distanceMiles:miles,driveMinutes:null,distanceLabel:distanceLabel(miles),startsAt:event.time_unknown?null:event.starts_at,endsAt:event.ends_at,price:event.cost,isFree:event.is_free,isOutdoor:event.is_outdoor,ageMinMonths:event.age_min_months,ageMaxMonths:event.age_max_months,goodAgeFit:fit,reason:eventReason(event,miles,fit,profile),href:`/events/${event.id}`,lastVerifiedAt:event.last_verified_at,score:scoreEvent(event,miles,constraints,profile,weather),whatToBring:event.what_to_bring??[],strollerAccessible:null,changingTable:null,nursingFriendly:null,parkingNotes:null,typicalCrowdNote:null,bestTimeNote:null};});
+ const ranked=[...placeCandidates,...eventCandidates].sort((a,b)=>b.score-a.score).slice(0,MAX_RESULTS); return{candidates:ranked,droppedCount:placesFiltered.droppedCount+eventsFiltered.droppedCount};
 }
 
-function interestLabel(interest: string): string {
-  const labels: Record<string, string> = {
-    animals: "animals",
-    water: "water play",
-    playgrounds: "playgrounds",
-    arts_and_crafts: "arts & crafts",
-    books: "books",
-    music: "music",
-    sports: "sports",
-    adventure: "adventure",
-    science: "science",
-    trains: "trains",
-    flying: "things that fly",
-    food: "food",
-  };
-  return labels[interest] ?? interest.replaceAll("_", " ");
-}
-
-function matchedPlaceInterest(place: Place, profile: PoppyProfile): string | null {
-  const matches: Record<string, string[]> = {
-    animals: ["animals"],
-    water: ["water_play"],
-    playgrounds: ["playground"],
-    arts_and_crafts: ["arts_learning"],
-    books: ["storytime"],
-    music: ["arts_learning"],
-    sports: ["active_play", "playground"],
-    adventure: ["active_play", "outdoor"],
-    science: ["arts_learning"],
-  };
-  return profile.childInterests.find((interest) => {
-    const tags = matches[interest] ?? [];
-    return tags.some((tag) => place.category_tags.includes(tag));
-  }) ?? null;
-}
-
-function matchedEventInterest(event: FeedEvent, profile: PoppyProfile): string | null {
-  const matches: Record<string, string[]> = {
-    animals: ["animal"],
-    sports: ["music_movement"],
-    arts_and_crafts: ["hands_on"],
-    books: ["storytime_experience"],
-    music: ["music_movement"],
-    science: ["hands_on"],
-    adventure: ["music_movement"],
-    trains: ["vehicle"],
-    flying: ["vehicle"],
-  };
-  return profile.childInterests.find((interest) => {
-    const experiences = matches[interest] ?? [];
-    return event.experience_type != null && experiences.includes(event.experience_type);
-  }) ?? null;
-}
-
-function placeReason(place: Place, miles: number | null, fit: boolean, profile: PoppyProfile): string {
-  const bits: string[] = [];
-  if (fit && profile.childAgeMonths != null) {
-    const years = Math.floor(profile.childAgeMonths / 12);
-    bits.push(years >= 1 ? `a good fit for your ${years}-year-old` : "a good fit for your little one");
-  }
-  const interest = matchedPlaceInterest(place, profile);
-  if (interest) bits.push(`matches their interest in ${interestLabel(interest)}`);
-  if (miles != null && miles <= 10) bits.push(`only ${miles < 10 ? miles.toFixed(1) : Math.round(miles)} miles away`);
-  if (isFreeCost(place.price_note)) bits.push("free");
-  if (place.is_outdoor != null && profile.indoorPreference !== "either") {
-    const matchesPreference = profile.indoorPreference === "outdoor" ? place.is_outdoor : !place.is_outdoor;
-    if (matchesPreference) bits.push(profile.indoorPreference === "outdoor" ? "fits your outdoor preference" : "fits your indoor preference");
-  }
-  if (bits.length === 0) return place.is_outdoor ? "A solid outdoor pick nearby." : "A solid nearby pick.";
-  return `${bits[0].charAt(0).toUpperCase()}${bits[0].slice(1)}${bits.length > 1 ? ` — ${bits.slice(1).join(" · ")}` : ""}.`;
-}
-
-function eventReason(event: FeedEvent, miles: number | null, fit: boolean, profile: PoppyProfile): string {
-  const bits: string[] = [];
-  if (fit && profile.childAgeMonths != null) {
-    const years = Math.floor(profile.childAgeMonths / 12);
-    bits.push(years >= 1 ? `great for your ${years}-year-old` : "great for your little one");
-  }
-  const interest = matchedEventInterest(event, profile);
-  if (interest) bits.push(`matches ${interestLabel(interest)}`);
-  if (event.is_free) bits.push("free");
-  if (miles != null && miles <= 12) bits.push(`close by (~${miles < 10 ? miles.toFixed(1) : Math.round(miles)} mi)`);
-  if (event.is_outdoor != null && profile.indoorPreference !== "either") {
-    const matchesPreference = profile.indoorPreference === "outdoor" ? event.is_outdoor : !event.is_outdoor;
-    if (matchesPreference) bits.push(profile.indoorPreference === "outdoor" ? "fits your outdoor preference" : "fits your indoor preference");
-  }
-  if (bits.length === 0) return "Happening soon and worth a look.";
-  return `Looks ${bits.join(" · ")}.`;
-}
-
-export function recommend(
-  inputs: CandidateInputs,
-  constraints: RecommendationConstraints,
-  profile: PoppyProfile,
-  origin: { lat: number; lng: number } | null,
-  weather: WeatherContext | null,
-  now: Date,
-): { candidates: RecommendationCandidate[]; droppedCount: number } {
-  const placesFiltered = filterPlaces(inputs.places, constraints, origin);
-  const eventsFiltered = filterEvents(inputs.events, constraints, origin, now);
-
-  const placeCandidates: RecommendationCandidate[] = placesFiltered.kept.map(({ place, miles }) => {
-    const fit = goodAgeFit(profile.childAgeMonths, place.age_min_months, place.age_max_months);
-    return {
-      type: "place" as const,
-      id: place.id,
-      title: place.name,
-      description: place.toddler_notes ?? place.description,
-      address: place.address,
-      distanceMiles: miles,
-      driveMinutes: null,
-      distanceLabel: distanceLabel(miles),
-      startsAt: null,
-      endsAt: null,
-      price: place.price_note,
-      isFree: isFreeCost(place.price_note),
-      isOutdoor: place.is_outdoor,
-      ageMinMonths: place.age_min_months,
-      ageMaxMonths: place.age_max_months,
-      goodAgeFit: fit,
-      reason: placeReason(place, miles, fit, profile),
-      href: `/places/${place.id}/propose`,
-      score: scorePlace(place, miles, constraints, profile, weather),
-    };
-  });
-
-  const eventCandidates: RecommendationCandidate[] = eventsFiltered.kept.map(({ event, miles }) => {
-    const fit = goodAgeFit(profile.childAgeMonths, event.age_min_months, event.age_max_months);
-    return {
-      type: "event" as const,
-      id: event.id,
-      title: event.title,
-      description: event.description,
-      address: event.address ?? event.venue,
-      distanceMiles: miles,
-      driveMinutes: null,
-      distanceLabel: distanceLabel(miles),
-      startsAt: event.time_unknown ? null : event.starts_at,
-      endsAt: event.ends_at,
-      price: event.cost,
-      isFree: event.is_free,
-      isOutdoor: event.is_outdoor,
-      ageMinMonths: event.age_min_months,
-      ageMaxMonths: event.age_max_months,
-      goodAgeFit: fit,
-      reason: eventReason(event, miles, fit, profile),
-      href: `/events/${event.id}`,
-      score: scoreEvent(event, miles, constraints, profile, weather),
-    };
-  });
-
-  const ranked = [...placeCandidates, ...eventCandidates]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_RESULTS);
-
-  const droppedCount = placesFiltered.droppedCount + eventsFiltered.droppedCount;
-  return { candidates: ranked, droppedCount };
-}
-
-// Actionable fallbacks when nothing matched (Phase 14). Each carries a
-// constraint patch the UI re-sends — no fabricated results.
-export function buildFallbacks(constraints: RecommendationConstraints): FallbackAction[] {
-  const actions: FallbackAction[] = [];
-  if (constraints.maxMiles != null) {
-    actions.push({
-      key: "farther",
-      label: "Search farther",
-      patch: { maxMiles: Math.min(60, Math.round((constraints.maxMiles ?? 15) * 2)) },
-    });
-  }
-  if (constraints.indoor !== "indoor") {
-    actions.push({ key: "indoors", label: "Try indoors", patch: { indoor: "indoor", indoorExplicit: true, mood: "indoor" } });
-  }
-  if (constraints.indoor !== "outdoor") {
-    actions.push({ key: "outdoors", label: "Try outdoors", patch: { indoor: "outdoor", indoorExplicit: true, mood: "outdoor" } });
-  }
-  if (constraints.timeframe !== "any") {
-    actions.push({ key: "anyday", label: "Try another day", patch: { timeframe: "any" } });
-  }
-  actions.push({
-    key: "anything",
-    label: "Show anything nearby",
-    patch: { mood: "all", indoor: "either", indoorExplicit: false, budget: "any" },
-  });
-  return actions;
-}
-
+export function buildFallbacks(constraints:RecommendationConstraints):FallbackAction[]{const actions:FallbackAction[]=[];if(constraints.maxMiles!=null)actions.push({key:"farther",label:"Search farther",patch:{maxMiles:Math.min(60,Math.round((constraints.maxMiles??15)*2))}});if(constraints.indoor!=="indoor")actions.push({key:"indoors",label:"Try indoors",patch:{indoor:"indoor",indoorExplicit:true,mood:"indoor"}});if(constraints.indoor!=="outdoor")actions.push({key:"outdoors",label:"Try outdoors",patch:{indoor:"outdoor",indoorExplicit:true,mood:"outdoor"}});if(constraints.timeframe!=="any")actions.push({key:"anyday",label:"Try another day",patch:{timeframe:"any"}});if(constraints.timeOfDay!=="any")actions.push({key:"anytime",label:"Try another time",patch:{timeOfDay:"any"}});if(constraints.maxPriceDollars!=null)actions.push({key:"more_budget",label:"Raise the budget",patch:{maxPriceDollars:null,budget:"any"}});actions.push({key:"anything",label:"Show anything nearby",patch:{mood:"all",indoor:"either",indoorExplicit:false,budget:"any",maxPriceDollars:null}});return actions;}
 export { buildResponseText };
