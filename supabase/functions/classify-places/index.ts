@@ -2,8 +2,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 // classify-places
-// Fills facility facts from public place descriptions only.
-// Fill-gaps-only and evidence-only: never overwrites existing values.
+// Public place text only. Gemini proposes facts; the database independently
+// validates supporting evidence before any facility fact is accepted.
 
 const db = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -11,39 +11,62 @@ const db = createClient(
 );
 
 const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.5-flash-lite";
-const GEMINI_URL = (m: string) =>
-  `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`;
-const PLACES_PER_RUN = 100;
-const BATCH_SIZE = 8;
-const PACE_MS = 4500;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const PLACES_PER_RUN = 10; // controlled canary; increase only after QA
+const BATCH_SIZE = 5;
+const PACE_MS = 3000;
 
-const SYSTEM = `You extract facility facts about a venue from its description, for parents of children aged 0-5. CRITICAL: only assert a fact the description supports. If a facility is not mentioned, return null — do NOT guess. Return false only when the text explicitly says the facility is absent. A wrong "yes" is worse than a null.
-
-Return ONLY a JSON array, one object per input place, in the same order, each:
+const SYSTEM = `You extract facility facts about a venue from its public description for parents of children aged 0-5.
+CRITICAL EVIDENCE RULE: never infer or paraphrase evidence. For every non-null scalar claim, evidence must be copied from the supplied description. If the description does not explicitly support the claim, return null and an empty evidence string.
+For what_to_bring, include only concrete items explicitly named in the description and provide an exact evidence quote covering them. For price and parking, only return information explicitly stated and provide exact evidence.
+Return ONLY a JSON array, one object per input place, in the same order:
 {
-  "id": "<echo the id>",
+  "id": "<echo id>",
   "has_changing_table": true | false | null,
   "nursing_friendly": true | false | null,
   "stroller_accessible": true | false | null,
   "quiet_or_sensory_friendly": true | false | null,
   "what_to_bring": ["short item", ...],
   "price_note": "short string" | null,
-  "parking_notes": "short string" | null
-}
-Only return concrete what_to_bring items, price, and parking details explicitly stated in the supplied text.`;
+  "parking_notes": "short string" | null,
+  "evidence": {
+    "has_changing_table": "exact quote" | "",
+    "nursing_friendly": "exact quote" | "",
+    "stroller_accessible": "exact quote" | "",
+    "quiet_or_sensory_friendly": "exact quote" | "",
+    "what_to_bring": "exact quote" | "",
+    "price_note": "exact quote" | "",
+    "parking_notes": "exact quote" | ""
+  }
+}`;
 
 type Row = { id: string; name: string; description: string | null };
+
+type Verdict = {
+  id: string;
+  has_changing_table?: unknown;
+  nursing_friendly?: unknown;
+  stroller_accessible?: unknown;
+  quiet_or_sensory_friendly?: unknown;
+  what_to_bring?: unknown;
+  price_note?: unknown;
+  parking_notes?: unknown;
+  evidence?: Record<string, unknown>;
+};
 
 function boolOrNull(v: unknown): boolean | null {
   return typeof v === "boolean" ? v : null;
 }
 function strOrNull(v: unknown): string | null {
-  return typeof v === "string" && v.trim() !== "" ? v.trim().slice(0, 300) : null;
+  return typeof v === "string" && v.trim() ? v.trim().slice(0, 300) : null;
 }
 function strArray(v: unknown): string[] {
   return Array.isArray(v)
-    ? v.filter((x) => typeof x === "string" && x.trim() !== "").map((x) => x.trim().slice(0, 60)).slice(0, 12)
+    ? v.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim().slice(0, 60)).slice(0, 12)
     : [];
+}
+function evidence(v: unknown): string {
+  return typeof v === "string" ? v.trim().slice(0, 500) : "";
 }
 
 async function getGeminiKey(): Promise<string> {
@@ -53,13 +76,13 @@ async function getGeminiKey(): Promise<string> {
   return data;
 }
 
-async function geminiBatch(rows: Row[], key: string): Promise<Map<string, any>> {
+async function geminiBatch(rows: Row[], key: string): Promise<Map<string, Verdict>> {
   const payload = rows.map((r) => ({
     id: r.id,
     name: r.name ?? "",
     description: (r.description ?? "").slice(0, 2000),
   }));
-  const res = await fetch(GEMINI_URL(GEMINI_MODEL), {
+  const res = await fetch(GEMINI_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({
@@ -76,13 +99,13 @@ async function geminiBatch(rows: Row[], key: string): Promise<Map<string, any>> 
   const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
   const parsed = JSON.parse(text);
-  const out = new Map<string, any>();
-  for (const o of Array.isArray(parsed) ? parsed : []) if (o?.id) out.set(String(o.id), o);
+  const out = new Map<string, Verdict>();
+  for (const o of Array.isArray(parsed) ? parsed : []) if (o?.id) out.set(String(o.id), o as Verdict);
   return out;
 }
 
-async function writeBack(id: string, v: any): Promise<boolean> {
-  const { error } = await db.rpc("apply_place_enrichment", {
+async function writeBack(id: string, v: Verdict) {
+  const { error } = await db.rpc("apply_place_enrichment_v2", {
     p_place_id: id,
     p_has_changing_table: boolOrNull(v.has_changing_table),
     p_nursing_friendly: boolOrNull(v.nursing_friendly),
@@ -91,14 +114,22 @@ async function writeBack(id: string, v: any): Promise<boolean> {
     p_what_to_bring: strArray(v.what_to_bring),
     p_price_note: strOrNull(v.price_note),
     p_parking_notes: strOrNull(v.parking_notes),
+    p_evidence: {
+      has_changing_table: evidence(v.evidence?.has_changing_table),
+      nursing_friendly: evidence(v.evidence?.nursing_friendly),
+      stroller_accessible: evidence(v.evidence?.stroller_accessible),
+      quiet_or_sensory_friendly: evidence(v.evidence?.quiet_or_sensory_friendly),
+      what_to_bring: evidence(v.evidence?.what_to_bring),
+      price_note: evidence(v.evidence?.price_note),
+      parking_notes: evidence(v.evidence?.parking_notes),
+    },
     p_model: GEMINI_MODEL,
   });
-  return !error;
+  if (error) throw new Error(error.message);
 }
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return Response.json({ error: "POST required" }, { status: 405 });
-
   const secret = req.headers.get("x-cron-secret");
   if (!secret) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const { data: valid } = await db.rpc("validate_community_cron_secret", { provided_secret: secret });
@@ -116,55 +147,34 @@ Deno.serve(async (req) => {
   if (error) return Response.json({ error: error.message }, { status: 500 });
   const queue = (rows ?? []) as Row[];
 
-  let enriched = 0;
-  let skipped = 0;
-  let gemini_failed_batches = 0;
-  let missing_verdicts = 0;
-  let write_failures = 0;
+  let enriched = 0, skipped = 0, gemini_failed_batches = 0, missing_verdicts = 0, write_failures = 0;
   let last_gemini_error = "";
 
   for (let i = 0; i < queue.length; i += BATCH_SIZE) {
     const batch = queue.slice(i, i + BATCH_SIZE);
-    let verdicts = new Map<string, any>();
+    let verdicts: Map<string, Verdict>;
     try {
       verdicts = await geminiBatch(batch, key);
     } catch (e) {
       gemini_failed_batches++;
       skipped += batch.length;
       last_gemini_error = String(e instanceof Error ? e.message : e).slice(0, 400);
-      if (i + BATCH_SIZE < queue.length) await new Promise((res) => setTimeout(res, PACE_MS));
+      if (i + BATCH_SIZE < queue.length) await new Promise((r) => setTimeout(r, PACE_MS));
       continue;
     }
 
     for (const r of batch) {
       const v = verdicts.get(r.id);
-      if (!v) {
-        missing_verdicts++;
-        skipped++;
-        continue;
-      }
-      try {
-        if (await writeBack(r.id, v)) enriched++;
-        else { write_failures++; skipped++; }
-      } catch (_e) {
-        write_failures++;
-        skipped++;
-      }
+      if (!v) { missing_verdicts++; skipped++; continue; }
+      try { await writeBack(r.id, v); enriched++; }
+      catch (_e) { write_failures++; skipped++; }
     }
-
-    if (i + BATCH_SIZE < queue.length) await new Promise((res) => setTimeout(res, PACE_MS));
+    if (i + BATCH_SIZE < queue.length) await new Promise((r) => setTimeout(r, PACE_MS));
   }
 
   return Response.json({
-    ok: true,
-    model: GEMINI_MODEL,
-    queue_pulled: queue.length,
-    enriched,
-    skipped,
-    gemini_failed_batches,
-    missing_verdicts,
-    write_failures,
-    last_gemini_error,
-    runtime_ms: Date.now() - started,
+    ok: true, model: GEMINI_MODEL, queue_pulled: queue.length,
+    enriched, skipped, gemini_failed_batches, missing_verdicts, write_failures,
+    last_gemini_error, runtime_ms: Date.now() - started,
   });
 });
