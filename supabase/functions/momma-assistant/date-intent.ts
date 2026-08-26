@@ -57,7 +57,7 @@ export function deterministicWindow(text: string, now = new Date()): DateWindow 
   if (explicitNext) {
     const target = short.findIndex(x => x.toLowerCase() === explicitNext[1].slice(0, 3).toLowerCase());
     const n = (target - currentDow + 7) % 7 || 7;
-    return dayWindow(p, n);
+    return dayWindow(p, n + (n < 7 ? 7 : 0));
   }
 
   if (/\b(?:morning|afternoon|evening|tonight|night)\b/.test(t)) return null;
