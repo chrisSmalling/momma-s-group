@@ -44,12 +44,7 @@ async function waitForProduction() {
 async function authenticate() {
   if (!QA_EMAIL || !QA_PASSWORD || !SUPABASE_URL || !SUPABASE_KEY) throw new InfrastructureFailure("QA_EMAIL, QA_PASSWORD, SUPABASE_URL, and SUPABASE_PUBLISHABLE_KEY are required.");
   const pendingCookies = [];
-  const supabase = createServerClient(SUPABASE_URL, SUPABASE_KEY, {
-    cookies: {
-      getAll: () => [],
-      setAll: (cookies) => pendingCookies.push(...cookies),
-    },
-  });
+  const supabase = createServerClient(SUPABASE_URL, SUPABASE_KEY, { cookies: { getAll: () => [], setAll: (cookies) => pendingCookies.push(...cookies) } });
   const { data, error } = await supabase.auth.signInWithPassword({ email: QA_EMAIL, password: QA_PASSWORD });
   if (error || !data.session) throw new InfrastructureFailure(`QA Supabase password authentication failed: ${error?.message || "no session returned"}`);
   const host = new URL(BASE_URL).hostname;
@@ -92,25 +87,34 @@ try {
   assert("Today: useful content", todayBody.length > 150, `body chars=${todayBody.length}`);
   assert("Today: no error boundary", !/application error|internal server error|something went wrong/i.test(todayBody));
   await assertBottomNavigation("Today");
+
   await visit("/places", "places");
-  const explorerText = (await page.locator("body").innerText()).toLowerCase();
-  assert("Explorer: heading present", explorerText.includes("what do you want to do today?"));
-  const query = page.getByPlaceholder(/try .*toddler/i).first();
-  assert("Explorer: query input present", await query.count() > 0);
-  await assertBottomNavigation("Explorer");
-  const moodLabels = ["Outside", "Indoor", "Water", "Get active", "Learn", "Create", "Animals"];
-  for (const label of moodLabels) {
-    const button = page.getByRole("button", { name: new RegExp(label, "i") }).first();
-    assert(`Explorer: ${label} control present`, await button.count() > 0);
-    if (await button.count()) { await button.click(); await page.waitForTimeout(250); assert(`Explorer: ${label} control responsive`, await page.locator("body").count() === 1); }
+  const placesText = (await page.locator("body").innerText()).toLowerCase();
+  assert("Poppy: heading present", placesText.includes("meet poppy"));
+  const query = page.getByPlaceholder(/somewhere close where she can run around/i).first();
+  assert("Poppy: query input present", await query.count() > 0);
+  await assertBottomNavigation("Poppy");
+
+  const promptLabels = ["Something fun today", "Indoor ideas", "Outdoor ideas", "Close by", "Under $20", "For my little one", "This weekend"];
+  for (const label of promptLabels) {
+    const button = page.getByRole("button", { name: new RegExp(`^${label}$`, "i") }).first();
+    assert(`Poppy: ${label} control present`, await button.count() > 0);
+    if (await button.count()) { await button.click(); await page.waitForTimeout(250); assert(`Poppy: ${label} control responsive`, await page.locator("body").count() === 1); }
   }
-  if (await query.count()) { await query.fill("indoor, cheap, and my toddler needs to burn some energy"); assert("Explorer: natural-language query accepted", (await query.inputValue()).length > 10); }
-  const buildDay = page.getByRole("button", { name: /build my day/i });
-  assert("Explorer: Build my day present", await buildDay.count() > 0);
-  if (await buildDay.count()) { await buildDay.click(); await page.waitForTimeout(250); assert("Explorer: Build my day responsive", await page.locator("body").count() === 1); }
+
+  if (await query.count()) {
+    await query.fill("indoor, cheap, and my toddler needs to burn some energy");
+    assert("Poppy: natural-language query accepted", (await query.inputValue()).length > 10);
+  }
+
+  const currentLocation = page.getByRole("button", { name: /find near me/i }).first();
+  assert("Poppy: current-location control present", await currentLocation.count() > 0);
+  if (await currentLocation.count()) assert("Poppy: current-location control has accessible name", (await currentLocation.innerText()).length > 0);
+
   await visit("/calendar", "calendar"); await assertBottomNavigation("Calendar");
   await visit("/groups", "groups"); await assertBottomNavigation("Groups");
   await visit("/settings", "settings"); await assertBottomNavigation("Settings");
+
   assert("Mobile: no horizontal overflow", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2));
   assert("Runtime: no console errors", consoleErrors.length === 0, consoleErrors.slice(0, 5).join(" | "));
   assert("Runtime: no failed requests", requestFailures.length === 0, requestFailures.slice(0, 5).join(" | "));
