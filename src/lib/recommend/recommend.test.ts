@@ -175,6 +175,25 @@ describe("recommend()", () => {
     expect(candidates[0].id).toBe("zoo");
   });
 
+  it("explains a place recommendation using real age, interest, distance, and cost signals", () => {
+    const place = makePlace({ category_tags: ["animals"], price_note: "Free", is_outdoor: true });
+    const profile = { ...baseProfile, childInterests: ["animals"] };
+    const { candidates } = recommend({ places: [place], events: [] }, anyConstraints, profile, origin, null, NOW);
+    expect(candidates[0].reason).toContain("good fit for your 2-year-old");
+    expect(candidates[0].reason).toContain("interest in animals");
+    expect(candidates[0].reason).toContain("free");
+    expect(candidates[0].reason).toContain("miles away");
+  });
+
+  it("explains an event recommendation using real age and interest signals", () => {
+    const event = makeEvent({ experience_type: "storytime_experience", is_outdoor: false, is_free: true });
+    const profile = { ...baseProfile, childInterests: ["books"] };
+    const { candidates } = recommend({ places: [], events: [event] }, anyConstraints, profile, origin, null, NOW);
+    expect(candidates[0].reason).toContain("great for your 2-year-old");
+    expect(candidates[0].reason).toContain("books");
+    expect(candidates[0].reason).toContain("free");
+  });
+
   it("caps results at five", () => {
     const places = Array.from({ length: 9 }, (_, i) => makePlace({ id: `p${i}`, lat: 28.2 + i * 0.001, lng: -82.4 }));
     const { candidates } = recommend({ places, events: [] }, anyConstraints, baseProfile, origin, null, NOW);

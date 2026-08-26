@@ -24,23 +24,76 @@ function distanceLabel(miles: number | null): string | null {
   return `~${rounded} mi away`;
 }
 
+function interestLabel(interest: string): string {
+  const labels: Record<string, string> = {
+    animals: "animals",
+    water: "water play",
+    playgrounds: "playgrounds",
+    arts_and_crafts: "arts & crafts",
+    books: "books",
+    music: "music",
+    sports: "sports",
+    adventure: "adventure",
+    science: "science",
+    trains: "trains",
+    flying: "things that fly",
+    food: "food",
+  };
+  return labels[interest] ?? interest.replaceAll("_", " ");
+}
+
+function matchedPlaceInterest(place: Place, profile: PoppyProfile): string | null {
+  const matches: Record<string, string[]> = {
+    animals: ["animals"],
+    water: ["water_play"],
+    playgrounds: ["playground"],
+    arts_and_crafts: ["arts_learning"],
+    books: ["storytime"],
+    music: ["arts_learning"],
+    sports: ["active_play", "playground"],
+    adventure: ["active_play", "outdoor"],
+    science: ["arts_learning"],
+  };
+  return profile.childInterests.find((interest) => {
+    const tags = matches[interest] ?? [];
+    return tags.some((tag) => place.category_tags.includes(tag));
+  }) ?? null;
+}
+
+function matchedEventInterest(event: FeedEvent, profile: PoppyProfile): string | null {
+  const matches: Record<string, string[]> = {
+    animals: ["animal"],
+    sports: ["music_movement"],
+    arts_and_crafts: ["hands_on"],
+    books: ["storytime_experience"],
+    music: ["music_movement"],
+    science: ["hands_on"],
+    adventure: ["music_movement"],
+    trains: ["vehicle"],
+    flying: ["vehicle"],
+  };
+  return profile.childInterests.find((interest) => {
+    const experiences = matches[interest] ?? [];
+    return event.experience_type != null && experiences.includes(event.experience_type);
+  }) ?? null;
+}
+
 function placeReason(place: Place, miles: number | null, fit: boolean, profile: PoppyProfile): string {
   const bits: string[] = [];
   if (fit && profile.childAgeMonths != null) {
     const years = Math.floor(profile.childAgeMonths / 12);
     bits.push(years >= 1 ? `a good fit for your ${years}-year-old` : "a good fit for your little one");
   }
+  const interest = matchedPlaceInterest(place, profile);
+  if (interest) bits.push(`matches their interest in ${interestLabel(interest)}`);
   if (miles != null && miles <= 10) bits.push(`only ${miles < 10 ? miles.toFixed(1) : Math.round(miles)} miles away`);
-  if (isFreeCost(place.price_note)) bits.push("and it's free");
-  const matchedInterest = profile.childInterests.find((i) =>
-    (i === "animals" && place.category_tags.includes("animals")) ||
-    (i === "water" && place.category_tags.includes("water_play")) ||
-    (i === "playgrounds" && place.category_tags.includes("playground")),
-  );
-  if (matchedInterest) bits.push(`right up their alley`);
+  if (isFreeCost(place.price_note)) bits.push("free");
+  if (place.is_outdoor != null && profile.indoorPreference !== "either") {
+    const matchesPreference = profile.indoorPreference === "outdoor" ? place.is_outdoor : !place.is_outdoor;
+    if (matchesPreference) bits.push(profile.indoorPreference === "outdoor" ? "fits your outdoor preference" : "fits your indoor preference");
+  }
   if (bits.length === 0) return place.is_outdoor ? "A solid outdoor pick nearby." : "A solid nearby pick.";
-  const sentence = bits.join(", ").replace(", and", " and");
-  return sentence.charAt(0).toUpperCase() + sentence.slice(1) + ".";
+  return `${bits[0].charAt(0).toUpperCase()}${bits[0].slice(1)}${bits.length > 1 ? ` — ${bits.slice(1).join(" · ")}` : ""}.`;
 }
 
 function eventReason(event: FeedEvent, miles: number | null, fit: boolean, profile: PoppyProfile): string {
@@ -49,11 +102,16 @@ function eventReason(event: FeedEvent, miles: number | null, fit: boolean, profi
     const years = Math.floor(profile.childAgeMonths / 12);
     bits.push(years >= 1 ? `great for your ${years}-year-old` : "great for your little one");
   }
+  const interest = matchedEventInterest(event, profile);
+  if (interest) bits.push(`matches ${interestLabel(interest)}`);
   if (event.is_free) bits.push("free");
   if (miles != null && miles <= 12) bits.push(`close by (~${miles < 10 ? miles.toFixed(1) : Math.round(miles)} mi)`);
+  if (event.is_outdoor != null && profile.indoorPreference !== "either") {
+    const matchesPreference = profile.indoorPreference === "outdoor" ? event.is_outdoor : !event.is_outdoor;
+    if (matchesPreference) bits.push(profile.indoorPreference === "outdoor" ? "fits your outdoor preference" : "fits your indoor preference");
+  }
   if (bits.length === 0) return "Happening soon and worth a look.";
-  const sentence = bits.join(", ");
-  return "Looks " + sentence + ".";
+  return `Looks ${bits.join(" · ")}.`;
 }
 
 export function recommend(
