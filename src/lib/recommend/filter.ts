@@ -9,6 +9,7 @@ import type { FeedEvent, Place } from "@/types";
 import type { Mood, RecommendationConstraints, Timeframe, TimeOfDay } from "./types";
 
 const KM_PER_MILE = 1.609344;
+const APP_TIME_ZONE = "America/New_York";
 
 export function milesBetween(
   origin: { lat: number; lng: number } | null,
@@ -72,17 +73,26 @@ export function eventWithinTimeframe(e: FeedEvent, timeframe: Timeframe, now: Da
   return start.getTime() >= rangeStart.getTime() && start.getTime() < monStart.getTime();
 }
 
+function easternMinutes(date: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+  return hour * 60 + minute;
+}
+
 export function eventMatchesTimeOfDay(e: FeedEvent, timeOfDay: TimeOfDay): boolean {
   if (timeOfDay === "any") return true;
-  const start = new Date(e.starts_at);
-  const end = new Date(e.ends_at ?? e.starts_at);
-  const dayStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-  const dayMs = 24 * 60 * 60 * 1000;
-  const windowStartHour = timeOfDay === "morning" ? 6 : timeOfDay === "afternoon" ? 12 : 17;
-  const windowEndHour = timeOfDay === "morning" ? 12 : timeOfDay === "afternoon" ? 17 : 21;
-  const windowStart = new Date(dayStart.getTime() + windowStartHour * 60 * 60 * 1000);
-  const windowEnd = new Date(dayStart.getTime() + windowEndHour * 60 * 60 * 1000);
-  return start.getTime() < windowEnd.getTime() && end.getTime() > windowStart.getTime();
+  const startMinutes = easternMinutes(new Date(e.starts_at));
+  const endMinutes = easternMinutes(new Date(e.ends_at ?? e.starts_at));
+  const windowStart = timeOfDay === "morning" ? 6 * 60 : timeOfDay === "afternoon" ? 12 * 60 : 17 * 60;
+  const windowEnd = timeOfDay === "morning" ? 12 * 60 : timeOfDay === "afternoon" ? 17 * 60 : 21 * 60;
+  if (endMinutes < startMinutes) return startMinutes < windowEnd || endMinutes > windowStart;
+  return startMinutes < windowEnd && endMinutes > windowStart;
 }
 
 function passesIndoorHardFilter(isOutdoor: boolean | null, c: RecommendationConstraints): boolean {
