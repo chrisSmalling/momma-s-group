@@ -29,7 +29,7 @@ describe("Poppy deterministic date intent", () => {
     expect(w.end_at).toBe("2026-08-31T04:00:00.000Z");
   });
 
-  it("resolves the next Saturday", () => {
+  it("resolves the next Saturday as the following occurrence", () => {
     const w = deterministicWindow("next Saturday", wed)!;
     expect(w.start_at).toBe("2026-09-05T04:00:00.000Z");
     expect(w.end_at).toBe("2026-09-06T04:00:00.000Z");
@@ -39,6 +39,7 @@ describe("Poppy deterministic date intent", () => {
     expect(deterministicWindow("Saturday morning", wed)).toBeNull();
     expect(deterministicWindow("Saturday afternoon", wed)).toBeNull();
     expect(deterministicWindow("Saturday evening", wed)).toBeNull();
+    expect(deterministicWindow("next Saturday morning", wed)).toBeNull();
   });
 
   it("handles the fall DST boundary using the named Florida timezone", () => {
