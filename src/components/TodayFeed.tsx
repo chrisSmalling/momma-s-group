@@ -42,7 +42,7 @@ export default function TodayFeed({ bundles, currentUserId, currentUserName, has
       </div>
     </div>
 
-    {visible.length === 0 ? <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-6 text-sm text-zinc-600">Nothing today matches <strong>{activeFilter.label}</strong>. Try another filter or ask Explorer for a different plan.</div> : <>
+    {visible.length === 0 ? <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-6 text-sm text-zinc-600">Nothing today matches <strong>{activeFilter.label}</strong>. Try another filter or ask Poppy for a different plan.</div> : <>
       <div className="mb-3 flex items-center justify-between gap-3"><div><h3 className="font-display text-lg font-bold text-zinc-950">Today&apos;s best bets</h3><p className="text-xs text-zinc-500">A short list first — more only when you ask for it.</p></div><span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">{visible.length} option{visible.length === 1 ? "" : "s"}</span></div>
       <div className="flex flex-col gap-4">
         {shown.map((b) => <div key={b.event.id}><EventCard event={b.event} currentUserId={currentUserId} currentUserName={currentUserName} currentStatus={b.currentStatus} currentNote={b.currentNote} attendees={b.attendees} hasActiveGroup={hasActiveGroup} activeGroupId={activeGroupId} activeGroupName={activeGroupName} activeGroupMemberIds={activeGroupMemberIds} roster={roster} proposedBy={b.proposedBy} place={b.place} duringNap={b.duringNap} comments={b.comments} tips={b.tips} childAgeMonths={childAgeMonths} distance={b.distance} weatherSummary={b.weatherSummary} /></div>)}
