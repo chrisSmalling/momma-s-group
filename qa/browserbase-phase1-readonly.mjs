@@ -89,6 +89,18 @@ async function visit(path, label) {
   await page.screenshot({ path: `/tmp/${label}.png`, fullPage: true });
 }
 
+async function assertBottomNavigation(label) {
+  const nav = page.locator("nav").last();
+  if (await nav.count() === 0) {
+    assert(`${label}: bottom navigation present`, false, "no nav element found");
+    return;
+  }
+  assert(`${label}: bottom navigation present`, true);
+  const navBox = await nav.boundingBox();
+  const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  assert(`${label}: bottom navigation visible`, Boolean(navBox && navBox.y + navBox.height >= viewport.height - 80));
+}
+
 try {
   await waitForProduction();
   await authenticate();
@@ -96,12 +108,14 @@ try {
   const todayBody = (await page.locator("body").innerText()).toLowerCase();
   assert("Today: useful content", todayBody.length > 150, `body chars=${todayBody.length}`);
   assert("Today: no error boundary", !/application error|internal server error|something went wrong/i.test(todayBody));
+  await assertBottomNavigation("Today");
 
   await visit("/places", "places");
   const explorerText = (await page.locator("body").innerText()).toLowerCase();
   assert("Explorer: heading present", explorerText.includes("what do you want to do today?"));
   const query = page.getByPlaceholder(/try .*toddler/i).first();
   assert("Explorer: query input present", await query.count() > 0);
+  await assertBottomNavigation("Explorer");
 
   const moodLabels = ["Outside", "Indoor", "Water", "Get active", "Learn", "Create", "Animals"];
   for (const label of moodLabels) {
@@ -128,7 +142,11 @@ try {
   }
 
   await visit("/calendar", "calendar");
+  await assertBottomNavigation("Calendar");
   await visit("/groups", "groups");
+  await assertBottomNavigation("Groups");
+  await visit("/settings", "settings");
+  await assertBottomNavigation("Settings");
 
   assert("Mobile: no horizontal overflow", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2));
   assert("Runtime: no console errors", consoleErrors.length === 0, consoleErrors.slice(0, 5).join(" | "));
