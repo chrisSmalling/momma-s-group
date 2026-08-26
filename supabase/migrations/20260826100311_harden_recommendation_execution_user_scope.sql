@@ -13,7 +13,7 @@ create or replace function public.record_recommendation_execution(
 returns uuid
 language plpgsql
 security definer
-set search_path to 'public', 'pg_temp'
+set search_path to ''
 as $$
 declare
   rid uuid;
