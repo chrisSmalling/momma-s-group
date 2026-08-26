@@ -5,27 +5,15 @@ import { useFormStatus } from "react-dom";
 import { completeOnboarding } from "./actions";
 
 const INTERESTS = [
-  ["animals", "Animals"],
-  ["water", "Water"],
-  ["playgrounds", "Playgrounds"],
-  ["arts_and_crafts", "Arts & crafts"],
-  ["books", "Books"],
-  ["music", "Music"],
-  ["sports", "Sports"],
-  ["adventure", "Adventure"],
-  ["science", "Science"],
-  ["trains", "Trains"],
-  ["flying", "Things that fly"],
-  ["food", "Food"],
+  ["animals", "Animals"], ["water", "Water"], ["playgrounds", "Playgrounds"],
+  ["arts_and_crafts", "Arts & crafts"], ["books", "Books"], ["music", "Music"],
+  ["sports", "Sports"], ["adventure", "Adventure"], ["science", "Science"],
+  ["trains", "Trains"], ["flying", "Things that fly"], ["food", "Food"],
 ] as const;
 
 const CATEGORIES = [
-  ["active_play", "Active play"],
-  ["animals", "Animals"],
-  ["arts_learning", "Learn & create"],
-  ["playground", "Playgrounds"],
-  ["storytime", "Storytime"],
-  ["water_play", "Water play"],
+  ["active_play", "Active play"], ["animals", "Animals"], ["arts_learning", "Learn & create"],
+  ["playground", "Playgrounds"], ["storytime", "Storytime"], ["water_play", "Water play"],
 ] as const;
 
 function SubmitButton() {
@@ -36,6 +24,16 @@ function SubmitButton() {
 export default function ActivationFlow({ error }: { error?: string }) {
   const [step, setStep] = useState(1);
   const [age, setAge] = useState("");
+  const [childName, setChildName] = useState("");
+  const [interests, setInterests] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [indoorPreference, setIndoorPreference] = useState("either");
+  const [budget, setBudget] = useState("");
+  const [maxDistance, setMaxDistance] = useState("20");
+
+  function toggle(setter: (value: string[]) => void, current: string[], value: string) {
+    setter(current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
+  }
 
   function nextFromAge() {
     const value = Number(age);
@@ -45,6 +43,13 @@ export default function ActivationFlow({ error }: { error?: string }) {
   return (
     <form action={completeOnboarding} className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-xl shadow-zinc-200/50 sm:p-7">
       <input type="hidden" name="child_age_months" value={age} />
+      <input type="hidden" name="child_name" value={childName} />
+      <input type="hidden" name="indoor_preference" value={indoorPreference} />
+      <input type="hidden" name="family_budget_note" value={budget} />
+      <input type="hidden" name="max_distance_miles" value={maxDistance} />
+      {interests.map((value) => <input key={`interest-${value}`} type="hidden" name="child_interests" value={value} />)}
+      {categories.map((value) => <input key={`category-${value}`} type="hidden" name="preferred_categories" value={value} />)}
+
       <div className="mb-6 flex items-center gap-2" aria-label={`Step ${step} of 3`}>
         {[1, 2, 3].map((n) => <span key={n} className={`h-1.5 flex-1 rounded-full ${n <= step ? "bg-rose-600" : "bg-zinc-200"}`} />)}
       </div>
@@ -58,7 +63,7 @@ export default function ActivationFlow({ error }: { error?: string }) {
           <p className="mt-2 text-sm leading-6 text-zinc-600">Age is the most useful first signal. Everything else can stay flexible.</p>
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-semibold text-zinc-700">Child age <span className="text-rose-600">*</span><div className="mt-1 flex items-center gap-2"><input autoFocus required min={0} max={144} type="number" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} placeholder="24" className="min-h-12 w-full rounded-2xl border border-zinc-300 px-4 text-base outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100" /><span className="text-sm font-medium text-zinc-500">months</span></div></label>
-            <label className="text-sm font-semibold text-zinc-700">Child’s name <span className="font-normal text-zinc-400">optional</span><input name="child_name" type="text" maxLength={60} placeholder="Emma" className="mt-1 min-h-12 w-full rounded-2xl border border-zinc-300 px-4 text-base outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100" /></label>
+            <label className="text-sm font-semibold text-zinc-700">Child’s name <span className="font-normal text-zinc-400">optional</span><input type="text" maxLength={60} value={childName} onChange={(e) => setChildName(e.target.value)} placeholder="Emma" className="mt-1 min-h-12 w-full rounded-2xl border border-zinc-300 px-4 text-base outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100" /></label>
           </div>
           <button type="button" onClick={nextFromAge} className="mt-6 min-h-12 w-full rounded-2xl bg-zinc-950 px-5 py-3 text-sm font-bold text-white">Next</button>
         </section>
@@ -70,13 +75,13 @@ export default function ActivationFlow({ error }: { error?: string }) {
           <h2 className="mt-2 font-display text-2xl font-bold tracking-tight text-zinc-950">Give Poppy a few clues.</h2>
           <p className="mt-2 text-sm leading-6 text-zinc-600">Pick anything that sounds like your family. You can change this later.</p>
 
-          <fieldset className="mt-5"><legend className="text-sm font-bold text-zinc-800">Interests</legend><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{INTERESTS.map(([value, label]) => <label key={value} className="cursor-pointer"><input type="checkbox" name="child_interests" value={value} className="peer sr-only" /><span className="flex min-h-11 items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition peer-checked:border-rose-500 peer-checked:bg-rose-50 peer-checked:text-rose-700">{label}</span></label>)}</div></fieldset>
+          <fieldset className="mt-5"><legend className="text-sm font-bold text-zinc-800">Interests</legend><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{INTERESTS.map(([value, label]) => <label key={value} className="cursor-pointer"><input type="checkbox" checked={interests.includes(value)} onChange={() => toggle(setInterests, interests, value)} className="peer sr-only" /><span className="flex min-h-11 items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition peer-checked:border-rose-500 peer-checked:bg-rose-50 peer-checked:text-rose-700">{label}</span></label>)}</div></fieldset>
 
-          <fieldset className="mt-5"><legend className="text-sm font-bold text-zinc-800">Usually prefer</legend><div className="mt-3 grid grid-cols-3 gap-2">{([["either", "Either"], ["outdoor", "Outside"], ["indoor", "Inside"]] as const).map(([value, label]) => <label key={value} className="cursor-pointer"><input type="radio" name="indoor_preference" value={value} defaultChecked={value === "either"} className="peer sr-only" /><span className="flex min-h-11 items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 peer-checked:border-rose-500 peer-checked:bg-rose-50 peer-checked:text-rose-700">{label}</span></label>)}</div></fieldset>
+          <fieldset className="mt-5"><legend className="text-sm font-bold text-zinc-800">Usually prefer</legend><div className="mt-3 grid grid-cols-3 gap-2">{([["either", "Either"], ["outdoor", "Outside"], ["indoor", "Inside"]] as const).map(([value, label]) => <label key={value} className="cursor-pointer"><input type="radio" checked={indoorPreference === value} onChange={() => setIndoorPreference(value)} className="peer sr-only" /><span className="flex min-h-11 items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 peer-checked:border-rose-500 peer-checked:bg-rose-50 peer-checked:text-rose-700">{label}</span></label>)}</div></fieldset>
 
-          <fieldset className="mt-5"><legend className="text-sm font-bold text-zinc-800">Good to know</legend><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-zinc-600">Budget<input name="family_budget_note" type="text" maxLength={200} placeholder="Free or low-cost is great" className="mt-1 min-h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-rose-500" /></label><label className="text-xs font-semibold text-zinc-600">How far are you usually willing to drive?<select name="max_distance_miles" defaultValue="20" className="mt-1 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-rose-500"><option value="5">5 miles</option><option value="10">10 miles</option><option value="20">20 miles</option><option value="30">30 miles</option><option value="45">45 miles</option></select></label></div></fieldset>
+          <fieldset className="mt-5"><legend className="text-sm font-bold text-zinc-800">Good to know</legend><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-zinc-600">Budget<input type="text" maxLength={200} value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="Free or low-cost is great" className="mt-1 min-h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-rose-500" /></label><label className="text-xs font-semibold text-zinc-600">How far are you usually willing to drive?<select value={maxDistance} onChange={(e) => setMaxDistance(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-rose-500"><option value="5">5 miles</option><option value="10">10 miles</option><option value="20">20 miles</option><option value="30">30 miles</option><option value="45">45 miles</option></select></label></div></fieldset>
 
-          <fieldset className="mt-5"><legend className="text-sm font-bold text-zinc-800">Poppy can prioritize</legend><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{CATEGORIES.map(([value, label]) => <label key={value} className="cursor-pointer"><input type="checkbox" name="preferred_categories" value={value} className="peer sr-only" /><span className="flex min-h-11 items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 peer-checked:border-rose-500 peer-checked:bg-rose-50 peer-checked:text-rose-700">{label}</span></label>)}</div></fieldset>
+          <fieldset className="mt-5"><legend className="text-sm font-bold text-zinc-800">Poppy can prioritize</legend><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{CATEGORIES.map(([value, label]) => <label key={value} className="cursor-pointer"><input type="checkbox" checked={categories.includes(value)} onChange={() => toggle(setCategories, categories, value)} className="peer sr-only" /><span className="flex min-h-11 items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 peer-checked:border-rose-500 peer-checked:bg-rose-50 peer-checked:text-rose-700">{label}</span></label>)}</div></fieldset>
 
           <div className="mt-6 grid grid-cols-2 gap-2"><button type="button" onClick={() => setStep(1)} className="min-h-12 rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-bold text-zinc-700">Back</button><button type="button" onClick={() => setStep(3)} className="min-h-12 rounded-2xl bg-zinc-950 px-5 py-3 text-sm font-bold text-white">Next</button></div>
         </section>
