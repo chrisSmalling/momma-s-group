@@ -19,6 +19,15 @@ const INTERESTS: { value: string; label: string }[] = [
   { value: "food", label: "🍦 Food/treats" },
 ];
 
+const CATEGORIES: { value: string; label: string }[] = [
+  { value: "playground", label: "🛝 Playgrounds" },
+  { value: "storytime", label: "📚 Storytime" },
+  { value: "animals", label: "🐾 Animal outings" },
+  { value: "water_play", label: "💦 Water play" },
+  { value: "active_play", label: "🏃 Active play" },
+  { value: "arts_learning", label: "🎨 Arts & learning" },
+];
+
 function parseLegacyAddress(value: string | null | undefined) {
   if (!value) return { street: "", city: "", state: "", zip: "" };
   const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
@@ -44,7 +53,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("nap_start, nap_end, child_age_months, child_name, child_interests, family_budget_note, indoor_preference, max_distance_miles, home_address, home_street, home_city, home_state, home_zip, home_lat, home_lng")
+    .select("display_name, nap_start, nap_end, child_age_months, child_name, child_interests, child_activity_preferences, preferred_categories, family_budget_note, indoor_preference, max_distance_miles, home_address, home_street, home_city, home_state, home_zip, home_lat, home_lng")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -67,6 +76,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
         {poppySaved && <p className="mb-4 text-sm text-emerald-700">Saved — Poppy will use this next time.</p>}
 
         <form action={updatePoppyProfile} className="mb-10 flex flex-col gap-5">
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">Your name <span className="text-zinc-400">(optional)</span><input type="text" name="display_name" defaultValue={profile?.display_name ?? ""} maxLength={80} placeholder="Chris" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
           <label className="flex flex-col gap-1 text-sm text-zinc-600">What&apos;s your little one&apos;s name?<input type="text" name="child_name" defaultValue={profile?.child_name ?? ""} maxLength={60} placeholder="Emma" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
 
           <fieldset className="flex flex-col gap-2">
@@ -78,6 +88,21 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
                   <label key={interest.value} className="cursor-pointer">
                     <input type="checkbox" name="child_interests" value={interest.value} defaultChecked={checked} className="peer sr-only" />
                     <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 peer-checked:border-rose-500 peer-checked:bg-rose-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-rose-300">{interest.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-sm text-zinc-600">Favorite outing styles <span className="text-zinc-400">(pick any)</span></legend>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIES.map((category) => {
+                const checked = (profile?.preferred_categories ?? []).includes(category.value);
+                return (
+                  <label key={category.value} className="cursor-pointer">
+                    <input type="checkbox" name="preferred_categories" value={category.value} defaultChecked={checked} className="peer sr-only" />
+                    <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 peer-checked:border-rose-500 peer-checked:bg-rose-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-rose-300">{category.label}</span>
                   </label>
                 );
               })}
