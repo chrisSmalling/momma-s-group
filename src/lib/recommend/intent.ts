@@ -4,8 +4,8 @@
 // Explorer component. It has been moved server-side (Phase 2): the prohibition
 // is on doing intent parsing / ranking *in the browser*, not on deterministic
 // keyword parsing itself. When a GEMINI_API_KEY is configured the route can
-// additionally ask the model to interpret intent, but this deterministic
-// parser is always the reliable floor and the sole source of hard filters.
+// additionally ask the model to interpret intent, but this deterministic parser
+// is always the reliable floor and the sole source of hard filters.
 
 import type {
   BudgetPreference,
@@ -13,6 +13,7 @@ import type {
   Mood,
   RecommendationConstraints,
   Timeframe,
+  TimeOfDay,
 } from "./types";
 
 // Momma's Meetup is intentionally local-first. A request without an explicit
@@ -59,6 +60,13 @@ function detectTimeframe(s: string): Timeframe {
   return "any";
 }
 
+function detectTimeOfDay(s: string): TimeOfDay {
+  if (/morning|breakfast|before lunch|early/.test(s)) return "morning";
+  if (/afternoon|after lunch|midday|after nap/.test(s)) return "afternoon";
+  if (/evening|tonight|dinner|after work|late afternoon/.test(s)) return "evening";
+  return "any";
+}
+
 function indoorFromMood(mood: Mood, s: string): { indoor: IndoorPreference; explicit: boolean } {
   if (/indoor|inside|too hot|air conditioning|ac\b/.test(s)) return { indoor: "indoor", explicit: true };
   if (/outdoor|outside|fresh air/.test(s)) return { indoor: "outdoor", explicit: true };
@@ -102,6 +110,7 @@ export function parseIntent(
   const budget = detectBudget(s);
   const maxMiles = detectMaxMiles(s);
   const timeframe = detectTimeframe(s);
+  const timeOfDay = detectTimeOfDay(s);
 
   // Start from any prior constraints (follow-up context), then overlay
   // anything explicitly stated in this message.
@@ -111,6 +120,7 @@ export function parseIntent(
     budget: previous?.budget ?? "any",
     maxMiles: previous?.maxMiles ?? DEFAULT_SERVICE_RADIUS_MILES,
     timeframe: previous?.timeframe ?? "any",
+    timeOfDay: previous?.timeOfDay ?? "any",
     indoorExplicit: previous?.indoorExplicit ?? false,
   };
 
@@ -120,6 +130,7 @@ export function parseIntent(
     budget: budget !== "any" ? budget : base.budget,
     maxMiles: maxMiles ?? base.maxMiles,
     timeframe: timeframe !== "any" ? timeframe : base.timeframe,
+    timeOfDay: timeOfDay !== "any" ? timeOfDay : base.timeOfDay,
     indoorExplicit: explicit || base.indoorExplicit,
   };
 
