@@ -19,6 +19,9 @@ function PricePill({ candidate }: { candidate: RecommendationCandidate }) {
 
 export default function PoppyCandidateCard({ candidate, rankLabel }: { candidate: RecommendationCandidate; rankLabel: string }) {
   const when = formatWhen(candidate);
+  const venue = candidate.address?.trim() || null;
+  const description = candidate.description?.trim() || null;
+
   return (
     <article className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition hover:border-rose-200 hover:shadow-md">
       <div className="p-4">
@@ -28,8 +31,16 @@ export default function PoppyCandidateCard({ candidate, rankLabel }: { candidate
           <PricePill candidate={candidate} />
         </div>
 
+        {description && (
+          <p className="mt-2 text-sm leading-5 text-zinc-700">{description}</p>
+        )}
+
+        {venue && (
+          <div className="mt-2 text-sm font-semibold text-zinc-600">📍 {venue}</div>
+        )}
+
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-600">
-          {candidate.distanceLabel && <span className="inline-flex items-center gap-1 font-semibold text-zinc-700">📍 {candidate.distanceLabel}</span>}
+          {candidate.distanceLabel && <span className="inline-flex items-center gap-1 font-semibold text-zinc-700">{candidate.distanceLabel}</span>}
           {when && <span className="inline-flex items-center gap-1">🕐 {when}</span>}
         </div>
 
@@ -38,6 +49,7 @@ export default function PoppyCandidateCard({ candidate, rankLabel }: { candidate
           {candidate.isOutdoor != null && (
             <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-semibold text-zinc-600">{candidate.isOutdoor ? "🌳 Outside" : "🏠 Indoor"}</span>
           )}
+          {candidate.driveMinutes != null && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-700">🚗 ~{candidate.driveMinutes} min drive</span>}
         </div>
 
         {candidate.reason && <p className="mt-3 text-sm leading-5 text-zinc-600">{candidate.reason}</p>}
