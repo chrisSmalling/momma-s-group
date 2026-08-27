@@ -6,7 +6,9 @@ import type { Mood, RecommendationConstraints, Timeframe, TimeOfDay } from "./ty
 
 const KM_PER_MILE = 1.609344;
 const APP_TIME_ZONE = "America/New_York";
-const MAX_SERVICE_RADIUS_MILES = 30;
+// Defense-in-depth prefilter for the routed 45-minute eligibility gate.
+// Actual acceptance is still based on routing in /api/poppy/recommend.
+const MAX_SERVICE_RADIUS_MILES = 45;
 
 export function milesBetween(origin:{lat:number;lng:number}|null,point:{lat:number|null;lng:number|null}):number|null{if(!origin||point.lat==null||point.lng==null)return null;return distanceKm(origin.lat,origin.lng,point.lat,point.lng)/KM_PER_MILE;}
 export function moodMatchesPlace(p:Place,mood:Mood):boolean{if(mood==="all")return true;if(mood==="indoor")return p.category_tags.includes("indoor")||p.is_outdoor===false;if(mood==="outdoor")return p.category_tags.some(t=>t==="outdoor"||t==="playground")||p.is_outdoor===true;if(mood==="water")return p.category_tags.includes("water_play");if(mood==="active")return p.category_tags.some(t=>t==="active_play"||t==="playground");if(mood==="learn")return p.category_tags.includes("storytime")||p.category_tags.includes("arts_learning");if(mood==="create")return p.category_tags.includes("arts_learning");return p.category_tags.includes("animals");}
