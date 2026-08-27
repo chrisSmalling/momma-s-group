@@ -57,22 +57,23 @@ export function getTrustSummary(candidate: RecommendationCandidate, now = new Da
     candidate.whatToBring.length > 0 ? candidate.whatToBring : null,
   ].filter((value) => value !== null && value !== undefined && value !== "" && value !== false).length;
 
+  const freshness = getFreshnessState(candidate.lastVerifiedAt, now);
   return {
-    freshness: getFreshnessState(candidate.lastVerifiedAt, now),
-    freshnessLabel: getFreshnessLabel(getFreshnessState(candidate.lastVerifiedAt, now)),
+    freshness,
+    freshnessLabel: getFreshnessLabel(freshness),
     knownFactCount: known,
     practicalFactCount: practical,
-    hasCommunityTips: false,
+    hasCommunityTips: (candidate.communityTips ?? []).length > 0,
   };
 }
 
 export function buildGroundedWhy(candidate: RecommendationCandidate): string[] {
   const facts: string[] = [];
-  if (candidate.goodAgeFit) facts.push("fits the child age range");
-  if (candidate.distanceLabel) facts.push(candidate.distanceLabel.replace(/^~/, "").replace(/ away$/, " away"));
-  if (candidate.isFree) facts.push("free");
-  if (candidate.isOutdoor === true) facts.push("outdoor");
-  if (candidate.isOutdoor === false) facts.push("indoor");
-  if (candidate.registrationRequired) facts.push("registration required");
+  if (candidate.goodAgeFit) facts.push("it fits the child age range");
+  if (candidate.distanceLabel) facts.push(`it is ${candidate.distanceLabel.replace(/^~/, "").replace(/ away$/, " away")}`);
+  if (candidate.isFree) facts.push("it is free");
+  if (candidate.isOutdoor === true) facts.push("it is outdoors");
+  if (candidate.isOutdoor === false) facts.push("it is indoors");
+  if (candidate.registrationRequired) facts.push("registration is required");
   return facts;
 }
