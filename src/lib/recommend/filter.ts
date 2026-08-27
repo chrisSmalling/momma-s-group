@@ -14,121 +14,26 @@ export function milesBetween(origin:{lat:number;lng:number}|null,point:{lat:numb
 }
 
 export function moodMatchesPlace(p:Place,mood:Mood):boolean{
-  if(mood==="all")return true;
-  if(mood==="indoor")return p.category_tags.includes("indoor")||p.is_outdoor===false;
-  if(mood==="outdoor")return p.category_tags.some(t=>t==="outdoor"||t==="playground")||p.is_outdoor===true;
-  if(mood==="water")return p.category_tags.includes("water_play");
-  if(mood==="active")return p.category_tags.some(t=>t==="active_play"||t==="playground");
-  if(mood==="learn")return p.category_tags.includes("storytime")||p.category_tags.includes("arts_learning");
-  if(mood==="create")return p.category_tags.includes("arts_learning");
-  return p.category_tags.includes("animals");
+  if(mood==="all")return true;if(mood==="indoor")return p.category_tags.includes("indoor")||p.is_outdoor===false;if(mood==="outdoor")return p.category_tags.some(t=>t==="outdoor"||t==="playground")||p.is_outdoor===true;if(mood==="water")return p.category_tags.includes("water_play");if(mood==="active")return p.category_tags.some(t=>t==="active_play"||t==="playground");if(mood==="learn")return p.category_tags.includes("storytime")||p.category_tags.includes("arts_learning");if(mood==="create")return p.category_tags.includes("arts_learning");return p.category_tags.includes("animals");
 }
-
 export function moodMatchesEvent(e:FeedEvent,mood:Mood):boolean{
-  if(mood==="all")return true;
-  if(mood==="indoor")return e.weather_fit==="indoor"||e.is_outdoor===false;
-  if(mood==="outdoor")return e.weather_fit==="outdoor"||e.is_outdoor===true;
-  if(mood==="water")return e.weather_fit==="water";
-  if(mood==="active")return e.experience_type==="music_movement";
-  if(mood==="learn")return e.experience_type==="storytime_experience"||e.experience_type==="community_helper";
-  if(mood==="create")return e.experience_type==="hands_on";
-  return e.experience_type==="animal";
+  if(mood==="all")return true;if(mood==="indoor")return e.weather_fit==="indoor"||e.is_outdoor===false;if(mood==="outdoor")return e.weather_fit==="outdoor"||e.is_outdoor===true;if(mood==="water")return e.weather_fit==="water";if(mood==="active")return e.experience_type==="music_movement";if(mood==="learn")return e.experience_type==="storytime_experience"||e.experience_type==="community_helper";if(mood==="create")return e.experience_type==="hands_on";return e.experience_type==="animal";
 }
-
 function easternParts(date:Date):{year:number;month:number;day:number;weekday:number;hour:number;minute:number}{
-  const parts=new Intl.DateTimeFormat("en-US",{timeZone:APP_TIME_ZONE,year:"numeric",month:"2-digit",day:"2-digit",weekday:"short",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(date);
-  const value=(type:string)=>parts.find(p=>p.type===type)?.value??"0";
-  const weekdays:Record<string,number>={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
-  return{year:Number(value("year")),month:Number(value("month")),day:Number(value("day")),weekday:weekdays[value("weekday")]??0,hour:Number(value("hour")),minute:Number(value("minute"))};
+  const parts=new Intl.DateTimeFormat("en-US",{timeZone:APP_TIME_ZONE,year:"numeric",month:"2-digit",day:"2-digit",weekday:"short",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(date);const value=(type:string)=>parts.find(p=>p.type===type)?.value??"0";const weekdays:Record<string,number>={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};return{year:Number(value("year")),month:Number(value("month")),day:Number(value("day")),weekday:weekdays[value("weekday")]??0,hour:Number(value("hour")),minute:Number(value("minute"))};
 }
-
 function dateKey(year:number,month:number,day:number):string{return `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;}
 function easternDateKey(date:Date):string{const p=easternParts(date);return dateKey(p.year,p.month,p.day);}
-function addCalendarDays(dateKeyValue:string,days:number):string{
-  const [y,m,d]=dateKeyValue.split("-").map(Number);
-  const shifted=new Date(Date.UTC(y,m-1,d+days));
-  return dateKey(shifted.getUTCFullYear(),shifted.getUTCMonth()+1,shifted.getUTCDate());
-}
-
+function addCalendarDays(value:string,days:number):string{const [y,m,d]=value.split("-").map(Number);const shifted=new Date(Date.UTC(y,m-1,d+days));return dateKey(shifted.getUTCFullYear(),shifted.getUTCMonth()+1,shifted.getUTCDate());}
 export function eventWithinTimeframe(e:FeedEvent,timeframe:Timeframe,now:Date):boolean{
-  const start=new Date(e.starts_at);
-  const end=e.ends_at?new Date(e.ends_at):start;
-  if(!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end.getTime()<now.getTime())return false;
-  if(timeframe==="any")return true;
-  const today=easternDateKey(now);
-  const eventDay=easternDateKey(start);
-  if(timeframe==="today")return eventDay===today;
-  if(timeframe==="tomorrow")return eventDay===addCalendarDays(today,1);
-  const nowEastern=easternParts(now);
-  const daysUntilSat=(6-nowEastern.weekday+7)%7;
-  const saturday=addCalendarDays(today,daysUntilSat);
-  const monday=addCalendarDays(saturday,2);
-  if(nowEastern.weekday===0)return eventDay===today||eventDay===addCalendarDays(today,1);
-  return eventDay>=saturday&&eventDay<monday;
+  const start=new Date(e.starts_at);const end=e.ends_at?new Date(e.ends_at):start;if(!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end.getTime()<now.getTime())return false;if(timeframe==="any")return true;const today=easternDateKey(now);const eventDay=easternDateKey(start);if(timeframe==="today")return eventDay===today;if(timeframe==="tomorrow")return eventDay===addCalendarDays(today,1);const nowEastern=easternParts(now);if(nowEastern.weekday===0)return eventDay===today;const daysUntilSat=(6-nowEastern.weekday+7)%7;const saturday=addCalendarDays(today,daysUntilSat);const monday=addCalendarDays(saturday,2);return eventDay>=saturday&&eventDay<monday;
 }
-
-function easternMinutes(date:Date):number{
-  const p=easternParts(date);
-  return p.hour*60+p.minute;
-}
-
-export function eventMatchesTimeOfDay(e:FeedEvent,timeOfDay:TimeOfDay):boolean{
-  if(timeOfDay==="any")return true;
-  const start=e.starts_at?easternMinutes(new Date(e.starts_at)):0;
-  const end=e.ends_at?easternMinutes(new Date(e.ends_at)):start;
-  const ws=timeOfDay==="morning"?360:timeOfDay==="afternoon"?720:1020;
-  const we=timeOfDay==="morning"?720:timeOfDay==="afternoon"?1020:1260;
-  if(end<start)return start<we||end>ws;
-  return start<we&&end>ws;
-}
-
-function passesIndoorHardFilter(isOutdoor:boolean|null,c:RecommendationConstraints):boolean{
-  if(!c.indoorExplicit||c.indoor==="either")return true;
-  if(isOutdoor==null)return true;
-  return c.indoor==="outdoor"?isOutdoor:!isOutdoor;
-}
-function parseMaxPrice(cost:string|null):number|null{
-  if(!cost?.trim())return null;
-  if(isFreeCost(cost))return 0;
-  const values=[...cost.matchAll(/(?:\$|usd\s*)(\d+(?:\.\d{1,2})?)|(?:^|[^\d])(\d+(?:\.\d{1,2})?)\s*dollars?/gi)].map(m=>Number(m[1]??m[2])).filter(Number.isFinite);
-  return values.length?Math.max(...values):null;
-}
-function passesBudgetHardFilter(cost:string|null,c:RecommendationConstraints):boolean{
-  if(c.budget==="free"){
-    if(isFreeCost(cost))return true;
-    return parseMaxPrice(cost)===null;
-  }
-  if(c.maxPriceDollars==null)return true;
-  const price=parseMaxPrice(cost);
-  return price==null||price<=c.maxPriceDollars;
-}
-function passesDistanceHardFilter(miles:number|null,c:RecommendationConstraints):boolean{
-  const requested=c.maxMiles==null?MAX_SERVICE_RADIUS_MILES:Math.min(c.maxMiles,MAX_SERVICE_RADIUS_MILES);
-  if(miles==null)return !c.distanceExplicit;
-  return miles<=requested;
-}
-
-export interface FilteredPlace{place:Place;miles:number|null;}
-export interface FilteredEvent{event:FeedEvent;miles:number|null;}
-
-export function filterPlaces(places:Place[],c:RecommendationConstraints,origin:{lat:number;lng:number}|null):{kept:FilteredPlace[];droppedCount:number}{
-  let dropped=0;const kept:FilteredPlace[]=[];
-  for(const place of places){
-    if(!place.active||!moodMatchesPlace(place,c.mood)||!passesIndoorHardFilter(place.is_outdoor,c)||!passesBudgetHardFilter(place.price_note,c)){dropped++;continue;}
-    const miles=milesBetween(origin,place);
-    if(!passesDistanceHardFilter(miles,c)){dropped++;continue;}
-    kept.push({place,miles});
-  }
-  return{kept,droppedCount:dropped};
-}
-
-export function filterEvents(events:FeedEvent[],c:RecommendationConstraints,origin:{lat:number;lng:number}|null,now:Date):{kept:FilteredEvent[];droppedCount:number}{
-  let dropped=0;const kept:FilteredEvent[]=[];
-  for(const event of events){
-    if(event.status==="cancelled"||!eventWithinTimeframe(event,c.timeframe,now)||!eventMatchesTimeOfDay(event,c.timeOfDay)||!moodMatchesEvent(event,c.mood)||!passesIndoorHardFilter(event.is_outdoor,c)||!passesBudgetHardFilter(event.cost,c)){dropped++;continue;}
-    const miles=milesBetween(origin,event);
-    if(!passesDistanceHardFilter(miles,c)){dropped++;continue;}
-    kept.push({event,miles});
-  }
-  return{kept,droppedCount:dropped};
-}
+function easternMinutes(date:Date):number{const p=easternParts(date);return p.hour*60+p.minute;}
+export function eventMatchesTimeOfDay(e:FeedEvent,timeOfDay:TimeOfDay):boolean{if(timeOfDay==="any")return true;const start=e.starts_at?easternMinutes(new Date(e.starts_at)):0;const end=e.ends_at?easternMinutes(new Date(e.ends_at)):start;const ws=timeOfDay==="morning"?360:timeOfDay==="afternoon"?720:1020;const we=timeOfDay==="morning"?720:timeOfDay==="afternoon"?1020:1260;if(end<start)return start<we||end>ws;return start<we&&end>ws;}
+function passesIndoorHardFilter(isOutdoor:boolean|null,c:RecommendationConstraints):boolean{if(!c.indoorExplicit||c.indoor==="either")return true;if(isOutdoor==null)return true;return c.indoor==="outdoor"?isOutdoor:!isOutdoor;}
+function parseMaxPrice(cost:string|null):number|null{if(!cost?.trim())return null;if(isFreeCost(cost))return 0;const values=[...cost.matchAll(/(?:\$|usd\s*)(\d+(?:\.\d{1,2})?)|(?:^|[^\d])(\d+(?:\.\d{1,2})?)\s*dollars?/gi)].map(m=>Number(m[1]??m[2])).filter(Number.isFinite);return values.length?Math.max(...values):null;}
+function passesBudgetHardFilter(cost:string|null,c:RecommendationConstraints):boolean{if(c.budget==="free"){if(isFreeCost(cost))return true;return parseMaxPrice(cost)===null;}if(c.maxPriceDollars==null)return true;const price=parseMaxPrice(cost);return price==null||price<=c.maxPriceDollars;}
+function passesDistanceHardFilter(miles:number|null,c:RecommendationConstraints):boolean{const requested=c.maxMiles==null?MAX_SERVICE_RADIUS_MILES:Math.min(c.maxMiles,MAX_SERVICE_RADIUS_MILES);if(miles==null)return !c.distanceExplicit;return miles<=requested;}
+export interface FilteredPlace{place:Place;miles:number|null;} export interface FilteredEvent{event:FeedEvent;miles:number|null;}
+export function filterPlaces(places:Place[],c:RecommendationConstraints,origin:{lat:number;lng:number}|null):{kept:FilteredPlace[];droppedCount:number}{let dropped=0;const kept:FilteredPlace[]=[];for(const place of places){if(!place.active||!moodMatchesPlace(place,c.mood)||!passesIndoorHardFilter(place.is_outdoor,c)||!passesBudgetHardFilter(place.price_note,c)){dropped++;continue;}const miles=milesBetween(origin,place);if(!passesDistanceHardFilter(miles,c)){dropped++;continue;}kept.push({place,miles});}return{kept,droppedCount:dropped};}
+export function filterEvents(events:FeedEvent[],c:RecommendationConstraints,origin:{lat:number;lng:number}|null,now:Date):{kept:FilteredEvent[];droppedCount:number}{let dropped=0;const kept:FilteredEvent[]=[];for(const event of events){if(event.status==="cancelled"||!eventWithinTimeframe(event,c.timeframe,now)||!eventMatchesTimeOfDay(event,c.timeOfDay)||!moodMatchesEvent(event,c.mood)||!passesIndoorHardFilter(event.is_outdoor,c)||!passesBudgetHardFilter(event.cost,c)){dropped++;continue;}const miles=milesBetween(origin,event);if(!passesDistanceHardFilter(miles,c)){dropped++;continue;}kept.push({event,miles});}return{kept,droppedCount:dropped};}
