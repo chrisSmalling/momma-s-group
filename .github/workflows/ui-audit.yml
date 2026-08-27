@@ -8,7 +8,7 @@ on:
       base_url:
         description: Production URL to audit
         required: false
-        default: https://momma-s-group.vercel.app
+        default: https://mommas-group.vercel.app
         type: string
 
 permissions:
@@ -24,11 +24,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      QA_BASE_URL: ${{ inputs.base_url || 'https://momma-s-group.vercel.app' }}
+      QA_BASE_URL: ${{ inputs.base_url || 'https://mommas-group.vercel.app' }}
       QA_EMAIL: ${{ secrets.QA_EMAIL }}
       QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
       SUPABASE_URL: https://uiuibwufzhirpntdtqpj.supabase.co
       SUPABASE_PUBLISHABLE_KEY: sb_publishable_vVfbSkh1Fner08lqWJfJ4w_P9b_4gw2
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,10 +46,10 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Verify QA credentials
+      - name: Verify QA bootstrap secrets
         run: |
           test -n "$QA_EMAIL" || { echo "QA_EMAIL GitHub Actions secret is missing."; exit 1; }
-          test -n "$QA_PASSWORD" || { echo "QA_PASSWORD GitHub Actions secret is missing."; exit 1; }
+          if [ -z "$QA_PASSWORD" ] && [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then echo "Either QA_PASSWORD or SUPABASE_SERVICE_ROLE_KEY is required."; exit 1; fi
 
       - name: Run authenticated read-only production UI audit
         run: node qa/local-phase1-readonly.mjs
