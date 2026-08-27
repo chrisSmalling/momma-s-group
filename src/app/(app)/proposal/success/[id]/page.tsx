@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { resolveEvent } from "@/lib/resolveEvent";
 import Nav from "@/components/Nav";
 
 export default async function ProposalSuccessPage(
@@ -11,11 +12,11 @@ export default async function ProposalSuccessPage(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect(`/login?next=/proposal/success/${id}`);
 
-  const { data: event } = await supabase
-    .from("feed_events")
-    .select("id, title, venue, address, starts_at, proposed_by_group")
-    .eq("id", id)
-    .maybeSingle();
+  // A fresh proposal has no verification tier/score, so it never appears
+  // in feed_events — resolveEvent falls back to the base, RLS-scoped
+  // events table so this confirmation page (and the "View meetup" link on
+  // it) doesn't 404 immediately after proposing.
+  const event = await resolveEvent(supabase, id);
 
   if (!event) notFound();
 
