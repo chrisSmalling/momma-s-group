@@ -39,6 +39,7 @@ export function getTrustSummary(candidate: RecommendationCandidate, now = new Da
     candidate.description,
     candidate.address,
     candidate.distanceMiles,
+    candidate.driveMinutes,
     candidate.startsAt,
     candidate.price,
     candidate.ageMinMonths,
@@ -70,7 +71,8 @@ export function getTrustSummary(candidate: RecommendationCandidate, now = new Da
 export function buildGroundedWhy(candidate: RecommendationCandidate): string[] {
   const facts: string[] = [];
   if (candidate.goodAgeFit) facts.push("it fits the child age range");
-  if (candidate.distanceLabel) facts.push(`it is ${candidate.distanceLabel.replace(/^~/, "").replace(/ away$/, " away")}`);
+  if (candidate.driveMinutes != null) facts.push(`it is about ${Math.round(candidate.driveMinutes)} minutes away by car`);
+  else if (candidate.distanceLabel) facts.push(`it is ${candidate.distanceLabel.replace(/^~/, "").replace(/ away$/, " away")}`);
   if (candidate.isFree) facts.push("it is free");
   if (candidate.isOutdoor === true) facts.push("it is outdoors");
   if (candidate.isOutdoor === false) facts.push("it is indoors");
