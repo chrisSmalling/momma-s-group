@@ -13,6 +13,6 @@ describe("parseIntent", () => {
   it("preserves prior constraints for follow-up requests", () => { expect(parseIntent("something closer", { mood: "outdoor", indoor: "outdoor", budget: "any", maxMiles: 20, maxPriceDollars: 30, timeframe: "weekend", timeOfDay: "morning", indoorExplicit: true })).toMatchObject({ mood: "outdoor", indoor: "outdoor", timeframe: "weekend", timeOfDay: "morning", maxMiles: 12, maxPriceDollars: 30, indoorExplicit: true }); });
   it("tightens cheaper follow-ups", () => { expect(parseIntent("anything cheaper", { budget: "budget", maxMiles: 20, maxPriceDollars: 20 })).toMatchObject({ budget: "free", maxMiles: 20, maxPriceDollars: 14 }); });
   it("parses common price ceiling language", () => { expect(parseIntent("keep it below $15").maxPriceDollars).toBe(15); expect(parseIntent("no more than 25 dollars").maxPriceDollars).toBe(25); expect(parseIntent("up to $10").maxPriceDollars).toBe(10); });
-  it("expands only for explicit farther requests, within the hard 30-mile ceiling", () => { expect(parseIntent("show me more options farther away", { maxMiles: 20 })).toMatchObject({ maxMiles: 30 }); });
+  it("expands only for explicit farther requests, within the hard 45-mile routing prefilter", () => { expect(parseIntent("show me more options farther away", { maxMiles: 30 })).toMatchObject({ maxMiles: 45 }); });
   it("keeps nearby requests from accidentally expanding the search", () => { expect(parseIntent("anything nearby").maxMiles).toBe(8); });
 });
