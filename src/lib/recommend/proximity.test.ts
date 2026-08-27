@@ -24,9 +24,15 @@ describe("Eastern calendar semantics",()=>{
    const now=new Date("2026-08-28T02:30:00Z");
    expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-28T23:00:00-04:00"),"tomorrow",now)).toBe(true);
  });
- it("handles the weekend window by Eastern local date",()=>{
+ it("handles Friday-to-Sunday weekend boundaries",()=>{
    const now=new Date("2026-08-28T16:00:00Z");
    expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-29T10:00:00-04:00"),"weekend",now)).toBe(true);
+   expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-30T10:00:00-04:00"),"weekend",now)).toBe(true);
+   expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-31T10:00:00-04:00"),"weekend",now)).toBe(false);
+ });
+ it("does not leak Monday into a Sunday weekend request",()=>{
+   const now=new Date("2026-08-30T15:00:00-04:00");
+   expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-30T16:00:00-04:00"),"weekend",now)).toBe(true);
    expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-31T10:00:00-04:00"),"weekend",now)).toBe(false);
  });
 });
