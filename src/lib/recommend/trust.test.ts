@@ -26,12 +26,12 @@ describe("recommendation trust", () => {
     expect(summary.hasCommunityTips).toBe(false);
   });
 
-  it("builds why text only from candidate facts", () => {
-    expect(buildGroundedWhy(base)).toEqual(["it fits the child age range", "it is 4.2 mi away", "it is indoors"]);
+  it("prefers an explicit verified drive time over straight-line distance", () => {
+    expect(buildGroundedWhy(base)).toEqual(["it fits the child age range", "it is about 10 minutes away by car", "it is indoors"]);
   });
 
   it("includes only explicit facts", () => {
-    const candidate = { ...base, goodAgeFit: false, distanceLabel: null, isFree: true, isOutdoor: null };
+    const candidate = { ...base, goodAgeFit: false, distanceLabel: null, driveMinutes: null, isFree: true, isOutdoor: null };
     expect(buildGroundedWhy(candidate)).toEqual(["it is free"]);
   });
 });
