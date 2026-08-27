@@ -90,6 +90,9 @@ create table if not exists public.venue_aliases (pattern text primary key, canon
 -- public.event_local_hour(ts timestamptz) -> numeric
 -- public.refresh_phase2_quality_feedback() -> jsonb
 -- public.update_source_reliability(p_source_id uuid, p_outcome text) -> void
+-- public.record_recommendation_execution(uuid,text,text,jsonb,integer,uuid[],text) -> uuid
+-- authenticated role has EXECUTE on record_recommendation_execution; function
+-- is SECURITY DEFINER and enforces auth.uid() = p_user_id.
 -- (Other application signatures remain defined by their migrations.)
 
 -- ---------- Live indexes of particular ingestion importance --
