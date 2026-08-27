@@ -10,17 +10,30 @@ const PROMPT_CHIPS=[{label:"Something fun today",message:"Something fun to do to
 const FOLLOW_UPS=[{label:"Something closer",message:"Something closer"},{label:"Anything cheaper",message:"Something cheaper"},{label:"Try indoors",message:"Something indoors"},{label:"Try outdoors",message:"Something outdoors"}];
 type Props={childName:string|null;hasHome:boolean;initialMessage?:string|null};
 
+function diversifyCandidates(candidates:RecommendationCandidate[]):RecommendationCandidate[]{
+ const unique=candidates.filter((candidate,index,all)=>all.findIndex(other=>other.type===candidate.type&&other.id===candidate.id)===index);
+ const places=unique.filter(c=>c.type==="place");
+ const events=unique.filter(c=>c.type==="event");
+ const mixed:RecommendationCandidate[]=[];
+ let p=0,e=0;
+ while(mixed.length<5&&(p<places.length||e<events.length)){
+   if(p<places.length)mixed.push(places[p++]);
+   if(e<events.length&&mixed.length<5)mixed.push(events[e++]);
+ }
+ while(mixed.length<5&&p<places.length)mixed.push(places[p++]);
+ while(mixed.length<5&&e<events.length)mixed.push(events[e++]);
+ return mixed;
+}
+
 export default function Poppy({childName,hasHome,initialMessage}:Props){
  const[prompt,setPrompt]=useState(initialMessage??"");const[phase,setPhase]=useState<Phase>("idle");const[status,setStatus]=useState("");const[result,setResult]=useState<RecommendationResult|null>(null);const[lastMessage,setLastMessage]=useState("");const[origin,setOrigin]=useState<{lat:number;lng:number}|null>(null);const[usingCurrent,setUsingCurrent]=useState(false);const slowTimer=useRef<ReturnType<typeof setTimeout>|null>(null);const didInitialRun=useRef(false);
  const runSearch=useCallback(async(message:string,previous?:Partial<RecommendationConstraints>)=>{const text=message.trim();if(!text&&!previous)return;setLastMessage(text);setPhase("loading");setStatus("Poppy is looking around…");if(slowTimer.current)clearTimeout(slowTimer.current);slowTimer.current=setTimeout(()=>setStatus("Still looking — I'm checking nearby options…"),3500);try{
    const payload={message:text,previous,originMode:usingCurrent?"current":"home",origin:usingCurrent?origin:undefined};
-   const [recommendationResponse,placeResponse]=await Promise.all([fetch("/api/poppy/recommend",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),fetch("/api/poppy/places",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})]);
+   const [recommendationResponse,placeResponse]=await Promise.all([fetch("/api/poppy/recommend",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),fetch("/api/poppy/places",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload})]);
    if(!recommendationResponse.ok)throw new Error(String(recommendationResponse.status));
    const data=(await recommendationResponse.json()) as RecommendationResult;
    let evergreen:RecommendationCandidate[]=[];if(placeResponse.ok){const placeData=await placeResponse.json() as {candidates?:RecommendationCandidate[]};evergreen=Array.isArray(placeData.candidates)?placeData.candidates:[];}
-   const eventCandidates=data.candidates.filter(c=>c.type==="event");const placeCandidates=data.candidates.filter(c=>c.type==="place");
-   const merged=[...placeCandidates,...evergreen,...eventCandidates].filter((candidate,index,all)=>all.findIndex(other=>other.type===candidate.type&&other.id===candidate.id)===index);
-   const diversified=merged.slice(0,5);
+   const diversified=diversifyCandidates([...data.candidates,...evergreen]);
    const nextResult={...data,candidates:diversified};setResult(nextResult);setPhase(diversified.length>0?"results":"empty");setStatus(diversified.length>0?`Poppy found ${diversified.length} option${diversified.length===1?"":"s"}.`:"No strong matches — here are some things to try.");
  }catch{setPhase("error");setStatus("Poppy hit a snag while looking for ideas.");}finally{if(slowTimer.current)clearTimeout(slowTimer.current);}},[origin,usingCurrent]);
  useEffect(()=>{if(didInitialRun.current)return;if(initialMessage?.trim()){didInitialRun.current=true;const id=setTimeout(()=>void runSearch(initialMessage),0);return()=>clearTimeout(id);}},[initialMessage,runSearch]);useEffect(()=>()=>{if(slowTimer.current)clearTimeout(slowTimer.current);},[]);
