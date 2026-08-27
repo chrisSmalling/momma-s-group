@@ -17,16 +17,15 @@ const db = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-// Env-configurable so a silent free-tier model rename doesn't take us down.
-// Accept whichever secret name is set (secret names are case-sensitive in Supabase).
-// "gemeni_key" (misspelled) is the actual name it was created under in this
-// project — kept as a fallback rather than requiring a rename right now.
-const GEMINI_KEY =
-  Deno.env.get("GEMINI_API_KEY") ??
-  Deno.env.get("gemini_key") ??
-  Deno.env.get("gemeni_key") ??
-  Deno.env.get("GEMINI_KEY") ??
-  "";
+// gemini_key lives in the Postgres Vault, not as an Edge Function env var —
+// same lookup the sibling classify-places function uses. Fetched fresh per
+// invocation via a SECURITY DEFINER RPC rather than Deno.env.get().
+async function getGeminiKey(): Promise<string> {
+  const { data, error } = await db.rpc("get_gemini_key");
+  if (error) throw new Error(`gemini_key lookup failed: ${error.message}`);
+  if (typeof data !== "string" || !data) throw new Error("gemini_key not configured");
+  return data;
+}
 const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash-lite";
 const GEMINI_URL = (m: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`;
@@ -80,16 +79,16 @@ function intOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? Math.round(n) : null;
 }
 
-async function geminiBatch(rows: Row[]): Promise<Map<string, any>> {
+async function geminiBatch(rows: Row[], key: string): Promise<Map<string, any>> {
   const payload = rows.map((r) => ({
     id: r.id,
     title: r.title ?? "",
     description: (r.description ?? "").slice(0, 1500),
     venue: r.venue_name ?? "",
   }));
-  const res = await fetch(`${GEMINI_URL(GEMINI_MODEL)}?key=${GEMINI_KEY}`, {
+  const res = await fetch(GEMINI_URL(GEMINI_MODEL), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({
       contents: [{ parts: [{ text: `${SYSTEM}\n\nEVENTS:\n${JSON.stringify(payload)}` }] }],
       generationConfig: { temperature: 0, responseMimeType: "application/json" },
@@ -146,7 +145,12 @@ Deno.serve(async (req) => {
   const { data: valid } = await db.rpc("validate_community_cron_secret", { provided_secret: secret });
   if (valid !== true) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!GEMINI_KEY) return Response.json({ error: "GEMINI_API_KEY not set" }, { status: 500 });
+  let geminiKey: string;
+  try {
+    geminiKey = await getGeminiKey();
+  } catch (e) {
+    return Response.json({ error: e instanceof Error ? e.message : "gemini_key not configured" }, { status: 500 });
+  }
 
   const started = Date.now();
   const { data: rows, error } = await db.rpc("get_events_for_enrichment", { p_limit: EVENTS_PER_RUN });
@@ -157,7 +161,7 @@ Deno.serve(async (req) => {
   for (let i = 0; i < queue.length; i += BATCH_SIZE) {
     const batch = queue.slice(i, i + BATCH_SIZE);
     try {
-      const verdicts = await geminiBatch(batch);
+      const verdicts = await geminiBatch(batch, geminiKey);
       for (const r of batch) {
         const v = verdicts.get(r.id);
         if (v) { await writeBack(r.id, v, GEMINI_MODEL); enriched++; }

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import Nav from "@/components/Nav";
 import GroupMeetupPlanner from "@/components/GroupMeetupPlanner";
@@ -47,6 +48,16 @@ export default async function GroupsPage(props: PageProps<"/groups">) {
           <h1 className="font-display text-2xl font-bold tracking-tight text-zinc-950">Groups</h1>
           <p className="mt-1 text-sm text-zinc-500">See who&apos;s in, plan something together, and keep the little details in one place.</p>
         </div>
+
+        {groupList.length > 0 && (
+          <Link href="/plans" className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3.5 shadow-sm transition hover:border-rose-300">
+            <div>
+              <div className="font-display text-base font-bold text-zinc-950">What we&apos;re up to →</div>
+              <p className="mt-0.5 text-xs text-zinc-600">See what your group&apos;s already committed to this month.</p>
+            </div>
+            <span aria-hidden="true" className="text-lg font-semibold text-rose-600">→</span>
+          </Link>
+        )}
 
         {groupList.map((group) => <GroupMeetupPlanner key={`planner-${group.id}`} groupName={group.name} members={recommendationMembersByGroup[group.id] ?? []} candidates={candidates} />)}
 
