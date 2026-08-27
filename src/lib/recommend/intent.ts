@@ -1,6 +1,6 @@
 // Deterministic natural-language intent parsing. This is the reliable floor for hard filters.
 import type { BudgetPreference, IndoorPreference, Mood, RecommendationConstraints, Timeframe, TimeOfDay } from "./types";
-const DEFAULT_SERVICE_RADIUS_MILES=20; const CLOSE_RADIUS_MILES=8; const MAX_SERVICE_RADIUS_MILES=30;
+const DEFAULT_SERVICE_RADIUS_MILES=20; const CLOSE_RADIUS_MILES=8; const MAX_SERVICE_RADIUS_MILES=45;
 function detectMood(s:string):Mood{if(/animal|farm|zoo|petting|ranch|wildlife|butterfl/.test(s))return"animals";if(/water|splash|pool|lagoon|swim|cool off|beach/.test(s))return"water";if(/indoor|inside|rain|raining|too hot|ac\b|air conditioning/.test(s))return"indoor";if(/outside|outdoor|park|nature|fresh air|run around|playground/.test(s))return"outdoor";if(/run|energy|active|burn|climb|gym|wiggl/.test(s))return"active";if(/learn|library|story|storytime|museum|science|read/.test(s))return"learn";if(/art|music|craft|create|dance|paint|sing/.test(s))return"create";return"all";}
 function detectBudget(s:string):BudgetPreference{if(/free|no money|no cost|don't want to spend|dont want to spend|\$0/.test(s))return"free";if(/cheap|budget|low.?cost|affordable|under \$?\d+|inexpensive/.test(s))return"budget";return"any";}
 function detectMaxPriceDollars(s:string):number|null{const m=s.match(/(?:under|less than|below|max(?:imum)?|up to|no more than|nothing more than|nothing above|not more than)\s*\$?\s*(\d{1,4})(?:\.\d{1,2})?/);if(!m)return null;const v=Number(m[1]);return Number.isFinite(v)?Math.max(0,v):null;}
