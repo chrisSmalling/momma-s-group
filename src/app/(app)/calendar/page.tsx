@@ -40,6 +40,15 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
   const monthDate = parseMonthParam(
     typeof params.month === "string" ? params.month : undefined,
   );
+  // The canonical "YYYY-MM" for the visible month. monthDate itself must
+  // never cross into MonthCalendar (a client component) — its
+  // getFullYear()/getMonth() read the server's local zone (UTC on Vercel),
+  // which the browser re-derives in the viewer's own zone and can land on
+  // the wrong month entirely. year/month0 below are the primitives that
+  // actually get passed down.
+  const monthStr = monthParam(monthDate);
+  const [yy, mmOneBased] = monthStr.split("-").map(Number);
+  const month0 = mmOneBased - 1;
   const requestedGroup =
     typeof params.group === "string" ? params.group : undefined;
   const paramError = typeof params.error === "string" ? params.error : undefined;
@@ -86,16 +95,23 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
   // Events in the visible month. RLS already limits proposed meetups
   // (proposed_by_group set) to members of that group; curated/materialized
   // events (proposed_by_group null) are visible to everyone.
-  const monthStart = monthDate;
-  const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
+  // The query range is a deliberately loose superset (padded a day on each
+  // side) of the ET month — MonthCalendar's Eastern-calendar-date placement
+  // below is what's authoritative for which grid cell an event lands in, so
+  // it's safe (and necessary, given UTC/ET offset) to over-fetch here rather
+  // than risk excluding an event that's in-month in ET but not in UTC.
+  const rangeStart = new Date(Date.UTC(yy, month0, 1));
+  rangeStart.setUTCDate(rangeStart.getUTCDate() - 1);
+  const rangeEnd = new Date(Date.UTC(yy, month0 + 1, 1));
+  rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 1);
   // public.feed_events already applies status='published' AND
   // is_kid_relevant AND NOT is_suppressed AND duplicate_of IS NULL —
   // don't hand-filter events here, query the view directly.
   const { data: events } = await supabase
     .from("feed_events")
     .select("*")
-    .gte("starts_at", monthStart.toISOString())
-    .lt("starts_at", monthEnd.toISOString())
+    .gte("starts_at", rangeStart.toISOString())
+    .lt("starts_at", rangeEnd.toISOString())
     .order("starts_at", { ascending: true });
   const eventList = (events ?? []) as FeedEvent[];
   const eventIds = eventList.map((e) => e.id);
@@ -246,7 +262,6 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
   const prevMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1);
   const nextMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
   const groupQuery = activeGroupId ? `&group=${activeGroupId}` : "";
-  const monthStr = monthParam(monthDate);
 
   // Built once here and handed to MonthCalendar as pre-rendered nodes so its
   // client-side search/filter/day-selection state has a single set of full
@@ -316,6 +331,7 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
                   </a>{" "}
                   —{" "}
                   {new Date(c.starts_at).toLocaleDateString(undefined, {
+                    timeZone: "America/New_York",
                     month: "short",
                     day: "numeric",
                   })}
@@ -334,7 +350,8 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
         {paramError && <p className="mb-6 text-sm text-red-600">{paramError}</p>}
 
         <MonthCalendar
-          date={monthDate}
+          year={yy}
+          month0={month0}
           events={eventList}
           prevHref={`/calendar?month=${monthParam(prevMonth)}${groupQuery}`}
           nextHref={`/calendar?month=${monthParam(nextMonth)}${groupQuery}`}

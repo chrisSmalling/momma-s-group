@@ -2,13 +2,23 @@
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import { isGoodAgeFit } from "@/lib/ageFit";
+import { etYMD, isInEtMonth, isOnEtDay } from "@/lib/date";
 import type { FeedEvent, RsvpStatus } from "@/types";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const ET_TIME_ZONE = "America/New_York";
 
 function eventTime(event: FeedEvent) {
   if (event.time_unknown) return "Time to be confirmed";
-  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(event.starts_at));
+  return new Intl.DateTimeFormat("en-US", { timeZone: ET_TIME_ZONE, hour: "numeric", minute: "2-digit" }).format(new Date(event.starts_at));
+}
+
+// Weekday name for an already-resolved ET calendar date. Anchored at noon
+// local so constructing the Date can't round into the adjacent day — the
+// weekday of a calendar date doesn't depend on which zone you build it in,
+// only on avoiding a midnight-boundary flip.
+function weekdayShort(y: number, m: number, d: number) {
+  return new Date(y, m - 1, d, 12).toLocaleDateString(undefined, { weekday: "short" });
 }
 
 type Filter = "all" | "free" | "indoor" | "outdoor" | "mine" | "going" | "age_fit";
@@ -42,7 +52,8 @@ function EmptyState({ mode, plansHref, onShowAll }: { mode: Mode; plansHref: str
 }
 
 export default function MonthCalendar({
-  date,
+  year,
+  month0,
   events,
   prevHref,
   nextHref,
@@ -52,7 +63,8 @@ export default function MonthCalendar({
   childAgeMonths,
   plansHref,
 }: {
-  date: Date;
+  year: number;
+  month0: number; // 0-based, matches Date's getMonth() convention
   events: FeedEvent[];
   prevHref: string;
   nextHref: string;
@@ -83,6 +95,11 @@ export default function MonthCalendar({
     const q = query.trim().toLowerCase();
     return scoped
       .filter((e) => {
+        // The page queries a padded UTC superset of the month (see
+        // calendar/page.tsx), so events just outside this ET month can be
+        // present here — exclude them before anything downstream (agenda
+        // list, card list, counts) ever sees them.
+        if (!isInEtMonth(e.starts_at, year, month0)) return false;
         if (q && !`${e.title} ${e.venue ?? ""} ${e.address ?? ""}`.toLowerCase().includes(q)) return false;
         if (filter === "free" && !e.is_free) return false;
         if (filter === "indoor" && e.is_outdoor !== false) return false;
@@ -93,28 +110,31 @@ export default function MonthCalendar({
         return true;
       })
       .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
-  }, [scoped, query, filter, myRsvpByEvent, childAgeMonths]);
+  }, [scoped, query, filter, myRsvpByEvent, childAgeMonths, year, month0]);
 
   // The month grid/agenda always shows the full filtered set so every day
   // stays clickable; selecting a day narrows only the detail cards below —
   // that's the "clear date navigation" layer on top of search/filter.
+  // Placement is by the event's Eastern calendar date, not the viewer's
+  // local zone or a bare getDate() — see src/lib/date.ts.
   const listItems = useMemo(
-    () => (selectedDay == null ? filtered : filtered.filter((e) => new Date(e.starts_at).getDate() === selectedDay)),
-    [filtered, selectedDay],
+    () => (selectedDay == null ? filtered : filtered.filter((e) => isOnEtDay(e.starts_at, year, month0, selectedDay))),
+    [filtered, selectedDay, year, month0],
   );
 
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const firstOfMonth = new Date(year, month, 1);
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  // Noon anchor keeps the label/weekday away from any midnight TZ flip.
+  const firstOfMonth = new Date(year, month0, 1, 12);
+  const daysInMonth = new Date(year, month0 + 1, 0).getDate();
   const startWeekday = firstOfMonth.getDay();
-  const today = new Date();
-  const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+  const todayEt = etYMD(new Date().toISOString());
+  const isCurrentMonth = todayEt.y === year && todayEt.m === month0 + 1;
 
+  // Bucket by ET calendar date — `filtered` is already scoped to this ET
+  // month, so every event here belongs to some day cell in this grid.
   const eventsByDay = new Map<number, FeedEvent[]>();
   for (const event of filtered) {
-    const day = new Date(event.starts_at).getDate();
-    eventsByDay.set(day, [...(eventsByDay.get(day) ?? []), event]);
+    const { d } = etYMD(event.starts_at);
+    eventsByDay.set(d, [...(eventsByDay.get(d) ?? []), event]);
   }
 
   const cells: (number | null)[] = [
@@ -172,19 +192,19 @@ export default function MonthCalendar({
         ) : (
           <div className="flex flex-col gap-2">
             {filtered.map((event) => {
-              const d = new Date(event.starts_at);
-              const selected = selectedDay === d.getDate();
+              const { d } = etYMD(event.starts_at);
+              const selected = selectedDay === d;
               return (
                 <button
                   key={event.id}
                   type="button"
-                  onClick={() => selectDay(d.getDate())}
+                  onClick={() => selectDay(d)}
                   aria-pressed={selected}
                   className={`flex min-h-[72px] w-full items-center gap-3 rounded-2xl border p-3 text-left shadow-sm transition active:scale-[0.99] ${selected ? "border-rose-300 bg-rose-50/60" : "border-zinc-200 bg-white hover:border-rose-200"}`}
                 >
                   <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-rose-50 text-rose-700">
-                    <span className="text-[10px] font-bold uppercase">{d.toLocaleDateString(undefined, { weekday: "short" })}</span>
-                    <span className="text-lg font-bold leading-none">{d.getDate()}</span>
+                    <span className="text-[10px] font-bold uppercase">{weekdayShort(year, month0 + 1, d)}</span>
+                    <span className="text-lg font-bold leading-none">{d}</span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className={event.status === "cancelled" ? "truncate text-sm font-bold text-zinc-400 line-through" : "truncate text-sm font-bold text-zinc-900"}>{event.title}</div>
@@ -214,7 +234,7 @@ export default function MonthCalendar({
                     onClick={() => dayEvents.length > 0 && selectDay(day)}
                     disabled={dayEvents.length === 0}
                     aria-pressed={selected}
-                    className={isCurrentMonth && day === today.getDate() ? "inline-flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-xs font-bold text-white" : "inline-flex h-7 w-7 items-center justify-center text-xs font-semibold text-zinc-700 disabled:cursor-default"}
+                    className={isCurrentMonth && day === todayEt.d ? "inline-flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-xs font-bold text-white" : "inline-flex h-7 w-7 items-center justify-center text-xs font-semibold text-zinc-700 disabled:cursor-default"}
                   >
                     {day}
                   </button>
