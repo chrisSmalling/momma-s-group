@@ -1,6 +1,7 @@
 import Link from "next/link";
 import EventCardShell from "@/components/EventCardShell";
 import LiveAttendees from "@/components/LiveAttendees";
+import GoingAvatars from "@/components/GoingAvatars";
 import PracticalityIcons from "@/components/PracticalityIcons";
 import EventComments from "@/components/EventComments";
 import TipsSection from "@/components/TipsSection";
@@ -89,6 +90,10 @@ export default function EventCard({ event, currentUserId, currentUserName, curre
   // viewer. Tags are shown only when there's no numeric range to derive
   // from at all.
   const ageLabel = formatAgeRange(event.age_min_months, event.age_max_months) ?? (event.age_tags.length > 0 ? event.age_tags.join(" · ") : null);
+  // Social proof is the hero when it exists (Phase 2 handoff) — shown only
+  // when someone's actually going, not the "be the first" negative state,
+  // which stays a lower-priority nudge inside LiveAttendees below.
+  const heroGoing = attendees.filter((a) => a.status === "going");
 
   return (
     <EventCardShell eventId={event.id} currentStatus={currentStatus} currentNote={currentNote} disabled={cancelled} duringNap={duringNap}>
@@ -99,6 +104,7 @@ export default function EventCard({ event, currentUserId, currentUserName, curre
             <div className="flex items-start justify-between gap-2"><h3 className={cancelled ? "font-display text-xl font-bold leading-tight text-zinc-400 line-through" : "font-display text-xl font-bold leading-tight text-zinc-900 group-hover:text-rose-700"}>{event.title}</h3>{cancelled ? <CancelledPill /> : <CostPill cost={event.cost} />}</div>
             <p className="mt-1 text-sm font-semibold text-zinc-600">{formatTime(event)}</p>
             {event.venue && <p className="mt-0.5 line-clamp-2 text-sm text-zinc-500">{event.venue}{event.room_name ? ` · ${event.room_name}` : ""}</p>}
+            {heroGoing.length > 0 && <div className="mt-2"><GoingAvatars going={heroGoing} currentUserId={currentUserId} groupName={activeGroupName} hasActiveGroup={hasActiveGroup} /></div>}
             {ageLabel && <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><span className="inline-block rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">{ageLabel}</span></div>}
             {!cancelled && <FitChips goodAgeFit={goodAgeFit} isOutdoor={event.is_outdoor} driveMinutes={distance?.driveMinutes} registrationRequired={event.registration_required} />}
             {!cancelled && (weatherSummary || distance) && <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-700 ring-1 ring-zinc-100">{weatherSummary && <span>{weatherSummary}</span>}{distance && <span>🚗 {distance.driveMinutes != null ? `${Math.round(distance.driveMinutes)} min` : "Drive time unavailable"}{miles != null ? ` · ${miles < 10 ? miles.toFixed(1) : Math.round(miles)} mi` : ""}</span>}</div>}

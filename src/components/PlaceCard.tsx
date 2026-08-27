@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { formatHours } from "@/lib/hours";
 import { isGoodAgeFit } from "@/lib/ageFit";
+import { isFreeCost } from "@/lib/cost";
+import { buildPlaceReason } from "@/lib/placeReason";
 import PracticalityIcons from "@/components/PracticalityIcons";
 import TipsSection from "@/components/TipsSection";
 import IndoorOutdoorTag from "@/components/IndoorOutdoorTag";
@@ -30,6 +32,8 @@ type Props = {
 export default function PlaceCard({ place, groupId, groupName, currentUserId, tips, distance, childAgeMonths, weather }: Props) {
   const hours = formatHours(place.hours);
   const goodAgeFit = isGoodAgeFit(childAgeMonths, place.age_min_months, place.age_max_months);
+  const miles = distance?.km != null ? distance.km * 0.621371 : null;
+  const reason = buildPlaceReason({ goodAgeFit, childAgeMonths, miles, isFree: isFreeCost(place.price_note) });
 
   return (
     <article className="overflow-hidden rounded-3xl border border-zinc-200/80 bg-white shadow-sm transition-shadow hover:shadow-md">
@@ -41,6 +45,7 @@ export default function PlaceCard({ place, groupId, groupName, currentUserId, ti
               <IndoorOutdoorTag isOutdoor={place.is_outdoor} />
               {goodAgeFit && <AgeFitBadge />}
             </div>
+            {reason && <p className="mt-1.5 text-sm font-medium text-rose-700">{reason}</p>}
           </div>
         </div>
 

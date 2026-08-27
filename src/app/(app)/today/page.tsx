@@ -9,6 +9,10 @@ import PoppyTodayEntry from "@/components/poppy/PoppyTodayEntry";
 import Nav from "@/components/Nav";
 import HomeAddressNudge from "@/components/HomeAddressNudge";
 import { deriveHomeStatus } from "@/lib/homeStatus";
+import { scorePlace } from "@/lib/recommend/score";
+import { easternDateKey } from "@/lib/recommend/filter";
+import { exposurePenalty, nextExposureState, type ExposureState } from "@/lib/recommend/exposure";
+import type { PoppyProfile, RecommendationConstraints } from "@/lib/recommend/types";
 import type { FeedEvent, EventComment, Place, PlaceTip, RsvpStatus } from "@/types";
 
 type AttendeeDisplay = { user_id: string; status: RsvpStatus; display_name: string; avatar_color: string };
@@ -163,7 +167,35 @@ export default async function TodayPage(props: PageProps<"/today">) {
   const todayPlaceCandidates = home ? [...placeList].sort((a, b) => { const aKey = straightLineByPlaceId.get(a.id); const bKey = straightLineByPlaceId.get(b.id); if (aKey == null) return 1; if (bKey == null) return -1; return aKey - bKey; }).slice(0, todayCandidateLimit) : placeList.slice(0, todayCandidateLimit);
   const driveTimeByPlaceId = new Map<string, DriveTimeResult>();
   if (home) { const routingProvider = getRoutingProvider(); if (routingProvider) { const geolocated = todayPlaceCandidates.filter((p) => p.lat != null && p.lng != null); const results = await routingProvider.getDriveTimes(home, geolocated.map((p) => ({ lat: p.lat as number, lng: p.lng as number }))); if (results) geolocated.forEach((p, i) => { const result = results[i]; if (result) driveTimeByPlaceId.set(p.id, result); }); } }
-  if (home) placeList = [...todayPlaceCandidates].sort((a, b) => { const aKey = driveTimeByPlaceId.get(a.id)?.durationMinutes ?? straightLineByPlaceId.get(a.id); const bKey = driveTimeByPlaceId.get(b.id)?.durationMinutes ?? straightLineByPlaceId.get(b.id); if (aKey == null) return 1; if (bKey == null) return -1; return aKey - bKey; }).slice(0, todayDisplayLimit); else placeList = todayPlaceCandidates.slice(0, todayDisplayLimit);
+  // Rank the geographic candidate pool by real relevance (age fit, distance,
+  // interests, freshness — see scorePlace) rather than distance alone, and
+  // apply a capped same-user exposure penalty so a place shown several days
+  // running gradually loses to a comparable fresh alternative instead of
+  // this section showing the identical 5 places forever (Phase 2 handoff).
+  const todayDateKey = easternDateKey(now);
+  const candidateIds = todayPlaceCandidates.map((p) => p.id);
+  const { data: exposureRows } = candidateIds.length ? await supabase.from("place_exposure").select("place_id, last_shown_at, consecutive_days").eq("user_id", user.id).in("place_id", candidateIds) : { data: [] };
+  const exposureByPlaceId = new Map<string, ExposureState>((exposureRows ?? []).map((r) => [r.place_id, { lastShownAt: r.last_shown_at, consecutiveDays: r.consecutive_days }]));
+  const todayProfile: PoppyProfile = { childAgeMonths: myProfile?.child_age_months ?? null, childInterests: [], childActivityPreferences: [], preferredCategories: [], preferredPlaceTypes: [], indoorPreference: "either", maxDistanceMiles: null, familyBudgetNote: null, napStart: myProfile?.nap_start ?? null, napEnd: myProfile?.nap_end ?? null, homeLat: myProfile?.home_lat ?? null, homeLng: myProfile?.home_lng ?? null };
+  const todayConstraints: RecommendationConstraints = { mood: "all", indoor: "either", indoorExplicit: false, budget: "any", maxMiles: null, timeframe: "any", timeOfDay: "any" };
+  const rankedPlaceCandidates = todayPlaceCandidates.map((p) => {
+    const km = straightLineByPlaceId.get(p.id);
+    const miles = km != null ? km * 0.621371 : null;
+    const relevance = scorePlace(p, miles, todayConstraints, todayProfile, null);
+    const penalty = exposurePenalty(exposureByPlaceId.get(p.id) ?? null, todayDateKey);
+    return { place: p, finalScore: relevance - penalty };
+  }).sort((a, b) => b.finalScore - a.finalScore);
+  placeList = rankedPlaceCandidates.slice(0, todayDisplayLimit).map((r) => r.place);
+
+  if (placeList.length) {
+    const upserts = placeList.map((p) => {
+      const next = nextExposureState(exposureByPlaceId.get(p.id) ?? null, todayDateKey);
+      return { user_id: user.id, place_id: p.id, last_shown_at: next.lastShownAt, consecutive_days: next.consecutiveDays };
+    });
+    const { error: exposureError } = await supabase.from("place_exposure").upsert(upserts, { onConflict: "user_id,place_id" });
+    if (exposureError) console.error("[today] place exposure upsert failed", exposureError.message);
+  }
+
   const placeIds = placeList.map((p) => p.id);
   const { data: placeTips } = activeGroupId && placeIds.length ? await supabase.from("place_tips").select("*").eq("group_id", activeGroupId).in("place_id", placeIds) : { data: [] };
   const placeTipsByPlaceId: Record<string, (PlaceTip & { display_name: string })[]> = {};
