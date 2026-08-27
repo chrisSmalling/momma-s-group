@@ -7,258 +7,31 @@ import type { FeedEvent, RsvpStatus } from "@/types";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const ET_TIME_ZONE = "America/New_York";
-
-function eventTime(event: FeedEvent) {
-  if (event.time_unknown) return "Time to be confirmed";
-  return new Intl.DateTimeFormat("en-US", { timeZone: ET_TIME_ZONE, hour: "numeric", minute: "2-digit" }).format(new Date(event.starts_at));
-}
-
-// Weekday name for an already-resolved ET calendar date. Anchored at noon
-// local so constructing the Date can't round into the adjacent day — the
-// weekday of a calendar date doesn't depend on which zone you build it in,
-// only on avoiding a midnight-boundary flip.
-function weekdayShort(y: number, m: number, d: number) {
-  return new Date(y, m - 1, d, 12).toLocaleDateString(undefined, { weekday: "short" });
-}
-
+function eventTime(event: FeedEvent) { if (event.time_unknown) return "Time to be confirmed"; return new Intl.DateTimeFormat("en-US", { timeZone: ET_TIME_ZONE, hour: "numeric", minute: "2-digit" }).format(new Date(event.starts_at)); }
+function weekdayShort(y: number, m: number, d: number) { return new Date(y, m - 1, d, 12).toLocaleDateString(undefined, { weekday: "short" }); }
 type Filter = "all" | "free" | "indoor" | "outdoor" | "mine" | "going" | "age_fit";
 type Mode = "plans" | "discovery";
-
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "free", label: "Free" },
-  { id: "indoor", label: "Indoor" },
-  { id: "outdoor", label: "Outdoor" },
-  { id: "mine", label: "Proposed" },
-  { id: "going", label: "I'm going" },
-  { id: "age_fit", label: "Good age fit" },
-];
-
-function EmptyState({ mode, plansHref, onShowAll }: { mode: Mode; plansHref: string; onShowAll: () => void }) {
-  if (mode === "plans") {
-    return (
-      <p className="mt-4 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-5 text-sm text-zinc-600">
-        Nothing locked in yet this month.{" "}
-        <Link href={plansHref} className="underline">See what your group&apos;s up to</Link>, or{" "}
-        <button type="button" onClick={onShowAll} className="underline">browse all events</button> to find something to propose.
-      </p>
-    );
-  }
-  return (
-    <p className="mt-4 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-5 text-sm text-zinc-600">
-      Nothing matches these filters.
-    </p>
-  );
-}
-
-export default function MonthCalendar({
-  year,
-  month0,
-  events,
-  prevHref,
-  nextHref,
-  cards,
-  myRsvpByEvent,
-  activeGroupId,
-  childAgeMonths,
-  plansHref,
-}: {
-  year: number;
-  month0: number; // 0-based, matches Date's getMonth() convention
-  events: FeedEvent[];
-  prevHref: string;
-  nextHref: string;
-  cards: Record<string, ReactNode>;
-  myRsvpByEvent: Record<string, RsvpStatus>;
-  activeGroupId: string | null;
-  childAgeMonths: number | null;
-  plansHref: string;
-}) {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
-  const [mode, setMode] = useState<Mode>("plans");
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
-
-  // "Your plans" is deliberately narrower than "everything published this
-  // month": an RSVP you've made, or a meetup your active group proposed —
-  // the things you're actually committed to or weighing, not discovery.
-  const scoped = useMemo(() => {
-    if (mode === "discovery") return events;
-    return events.filter((e) => {
-      const status = myRsvpByEvent[e.id];
-      if (status === "going" || status === "maybe") return true;
-      return Boolean(activeGroupId) && e.proposed_by_group === activeGroupId;
-    });
-  }, [events, mode, activeGroupId, myRsvpByEvent]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return scoped
-      .filter((e) => {
-        // The page queries a padded UTC superset of the month (see
-        // calendar/page.tsx), so events just outside this ET month can be
-        // present here — exclude them before anything downstream (agenda
-        // list, card list, counts) ever sees them.
-        if (!isInEtMonth(e.starts_at, year, month0)) return false;
-        if (q && !`${e.title} ${e.venue ?? ""} ${e.address ?? ""}`.toLowerCase().includes(q)) return false;
-        if (filter === "free" && !e.is_free) return false;
-        if (filter === "indoor" && e.is_outdoor !== false) return false;
-        if (filter === "outdoor" && e.is_outdoor !== true) return false;
-        if (filter === "mine" && e.proposed_by_group == null) return false;
-        if (filter === "going" && myRsvpByEvent[e.id] !== "going") return false;
-        if (filter === "age_fit" && !isGoodAgeFit(childAgeMonths, e.age_min_months, e.age_max_months)) return false;
-        return true;
-      })
-      .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
-  }, [scoped, query, filter, myRsvpByEvent, childAgeMonths, year, month0]);
-
-  // The month grid/agenda always shows the full filtered set so every day
-  // stays clickable; selecting a day narrows only the detail cards below —
-  // that's the "clear date navigation" layer on top of search/filter.
-  // Placement is by the event's Eastern calendar date, not the viewer's
-  // local zone or a bare getDate() — see src/lib/date.ts.
-  const listItems = useMemo(
-    () => (selectedDay == null ? filtered : filtered.filter((e) => isOnEtDay(e.starts_at, year, month0, selectedDay))),
-    [filtered, selectedDay, year, month0],
-  );
-
-  // Noon anchor keeps the label/weekday away from any midnight TZ flip.
-  const firstOfMonth = new Date(year, month0, 1, 12);
-  const daysInMonth = new Date(year, month0 + 1, 0).getDate();
-  const startWeekday = firstOfMonth.getDay();
-  const todayEt = etYMD(new Date().toISOString());
-  const isCurrentMonth = todayEt.y === year && todayEt.m === month0 + 1;
-
-  // Bucket by ET calendar date — `filtered` is already scoped to this ET
-  // month, so every event here belongs to some day cell in this grid.
-  const eventsByDay = new Map<number, FeedEvent[]>();
-  for (const event of filtered) {
-    const { d } = etYMD(event.starts_at);
-    eventsByDay.set(d, [...(eventsByDay.get(d) ?? []), event]);
-  }
-
-  const cells: (number | null)[] = [
-    ...Array(startWeekday).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
-  const monthLabel = firstOfMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-
-  function selectDay(day: number) {
-    setSelectedDay((current) => (current === day ? null : day));
-  }
-
-  function switchMode(next: Mode) {
-    setMode(next);
-    setSelectedDay(null);
-  }
-
-  return (
-    <div className="w-full max-w-2xl">
-      <div className="mb-4 flex items-center justify-between rounded-2xl border border-zinc-200 bg-white px-3 py-2 shadow-sm sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:shadow-none">
-        <Link href={prevHref} className="inline-flex min-h-11 items-center rounded-xl px-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900">← Prev</Link>
-        <h2 className="font-display text-xl font-bold text-zinc-950">{monthLabel}</h2>
-        <Link href={nextHref} className="inline-flex min-h-11 items-center rounded-xl px-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900">Next →</Link>
-      </div>
-
-      <div className="mb-4 flex items-center gap-1 rounded-2xl border border-zinc-200 bg-white p-1 shadow-sm" role="tablist" aria-label="Plans or discovery">
-        <button type="button" role="tab" aria-selected={mode === "plans"} onClick={() => switchMode("plans")} className={mode === "plans" ? "min-h-10 flex-1 rounded-xl bg-zinc-900 px-3 py-2 text-sm font-bold text-white" : "min-h-10 flex-1 rounded-xl px-3 py-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-50"}>Your plans</button>
-        <button type="button" role="tab" aria-selected={mode === "discovery"} onClick={() => switchMode("discovery")} className={mode === "discovery" ? "min-h-10 flex-1 rounded-xl bg-zinc-900 px-3 py-2 text-sm font-bold text-white" : "min-h-10 flex-1 rounded-xl px-3 py-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-50"}>All events</button>
-      </div>
-
-      <div className="mb-5 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
-        <label htmlFor="calendar-search" className="sr-only">Search calendar</label>
-        <input id="calendar-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your plans…" className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" />
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Calendar filters">
-          {FILTERS.map((f) => (
-            <button key={f.id} type="button" role="tab" aria-selected={filter === f.id} onClick={() => setFilter(f.id)} className={filter === f.id ? "min-h-10 shrink-0 rounded-full bg-zinc-900 px-3 py-2 text-xs font-bold text-white" : "min-h-10 shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700"}>{f.label}</button>
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-zinc-500">
-          {filtered.length} {mode === "plans" ? "planned" : "matching"} option{filtered.length === 1 ? "" : "s"}
-          {selectedDay != null ? ` · ${monthLabel.split(" ")[0]} ${selectedDay} only` : ""}
-        </p>
-      </div>
-
-      {selectedDay != null && (
-        <button type="button" onClick={() => setSelectedDay(null)} className="mb-3 inline-flex min-h-9 items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:border-zinc-300">
-          ← Show the whole month
-        </button>
-      )}
-
-      <div className="sm:hidden">
-        {filtered.length === 0 ? (
-          <EmptyState mode={mode} plansHref={plansHref} onShowAll={() => switchMode("discovery")} />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {filtered.map((event) => {
-              const { d } = etYMD(event.starts_at);
-              const selected = selectedDay === d;
-              return (
-                <button
-                  key={event.id}
-                  type="button"
-                  onClick={() => selectDay(d)}
-                  aria-pressed={selected}
-                  className={`flex min-h-[72px] w-full items-center gap-3 rounded-2xl border p-3 text-left shadow-sm transition active:scale-[0.99] ${selected ? "border-rose-300 bg-rose-50/60" : "border-zinc-200 bg-white hover:border-rose-200"}`}
-                >
-                  <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-rose-50 text-rose-700">
-                    <span className="text-[10px] font-bold uppercase">{weekdayShort(year, month0 + 1, d)}</span>
-                    <span className="text-lg font-bold leading-none">{d}</span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className={event.status === "cancelled" ? "truncate text-sm font-bold text-zinc-400 line-through" : "truncate text-sm font-bold text-zinc-900"}>{event.title}</div>
-                    <div className="mt-1 text-xs font-semibold text-zinc-500">{eventTime(event)}{event.venue ? ` · ${event.venue}` : ""}{event.is_free ? " · Free" : ""}</div>
-                  </div>
-                  <span aria-hidden="true" className="shrink-0 text-lg text-rose-600">{selected ? "✓" : "↓"}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <div className="hidden sm:block">
-        <div className="grid grid-cols-7 gap-px overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-200 text-sm shadow-sm">
-          {WEEKDAYS.map((day) => (
-            <div key={day} className="bg-zinc-50 px-2 py-2 text-center text-xs font-bold text-zinc-500">{day}</div>
-          ))}
-          {cells.map((day, i) => {
-            const dayEvents = day !== null ? (eventsByDay.get(day) ?? []) : [];
-            const selected = day !== null && selectedDay === day;
-            return (
-              <div key={i} className={`min-h-20 bg-white px-2 py-2 ${day === null ? "bg-zinc-50" : ""} ${selected ? "ring-2 ring-inset ring-rose-400" : ""}`}>
-                {day !== null && (
-                  <button
-                    type="button"
-                    onClick={() => dayEvents.length > 0 && selectDay(day)}
-                    disabled={dayEvents.length === 0}
-                    aria-pressed={selected}
-                    className={isCurrentMonth && day === todayEt.d ? "inline-flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-xs font-bold text-white" : "inline-flex h-7 w-7 items-center justify-center text-xs font-semibold text-zinc-700 disabled:cursor-default"}
-                  >
-                    {day}
-                  </button>
-                )}
-                {day !== null && (
-                  <div className="mt-1 flex flex-col gap-0.5">
-                    {dayEvents.slice(0, 2).map((event) => (
-                      <button key={event.id} type="button" onClick={() => selectDay(day)} className={event.status === "cancelled" ? "truncate rounded-lg bg-zinc-100 px-1.5 py-1 text-left text-[11px] text-zinc-400 line-through hover:bg-zinc-200" : "truncate rounded-lg bg-rose-50 px-1.5 py-1 text-left text-[11px] font-semibold text-rose-800 hover:bg-rose-100"} title={event.title}>{event.title}</button>
-                    ))}
-                    {dayEvents.length > 2 && (
-                      <button type="button" onClick={() => selectDay(day)} className="text-left text-[11px] font-semibold text-zinc-400 hover:text-zinc-600">+{dayEvents.length - 2} more</button>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        {filtered.length === 0 && <EmptyState mode={mode} plansHref={plansHref} onShowAll={() => switchMode("discovery")} />}
-      </div>
-
-      <div className="mt-8 flex flex-col gap-4">
-        {listItems.map((event) => cards[event.id] ?? null)}
-      </div>
-    </div>
-  );
+const FILTERS: { id: Filter; label: string }[] = [{ id: "all", label: "All" }, { id: "free", label: "Free" }, { id: "indoor", label: "Indoor" }, { id: "outdoor", label: "Outdoor" }, { id: "mine", label: "Proposed" }, { id: "going", label: "I'm going" }, { id: "age_fit", label: "Good age fit" }];
+function EmptyState({ mode, plansHref, onShowAll }: { mode: Mode; plansHref: string; onShowAll: () => void }) { if (mode === "plans") return <p className="mt-4 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-5 text-sm text-zinc-600">Nothing locked in yet this month. <Link href={plansHref} className="underline">See what your group&apos;s up to</Link>, or <button type="button" onClick={onShowAll} className="underline">browse all events</button> to find something to propose.</p>; return <p className="mt-4 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-5 text-sm text-zinc-600">Nothing matches these filters.</p>; }
+export default function MonthCalendar({ year, month0, events, prevHref, nextHref, cards, myRsvpByEvent, activeGroupId, childAgeMonths, plansHref }: { year: number; month0: number; events: FeedEvent[]; prevHref: string; nextHref: string; cards: Record<string, ReactNode>; myRsvpByEvent: Record<string, RsvpStatus>; activeGroupId: string | null; childAgeMonths: number | null; plansHref: string }) {
+  const [query, setQuery] = useState(""); const [filter, setFilter] = useState<Filter>("all"); const [mode, setMode] = useState<Mode>("plans"); const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const scoped = useMemo(() => { if (mode === "discovery") return events; return events.filter((e) => { const status = myRsvpByEvent[e.id]; if (status === "going" || status === "maybe") return true; return Boolean(activeGroupId) && e.proposed_by_group === activeGroupId; }); }, [events, mode, activeGroupId, myRsvpByEvent]);
+  const filtered = useMemo(() => { const q = query.trim().toLowerCase(); return scoped.filter((e) => { if (!isInEtMonth(e.starts_at, year, month0)) return false; if (q && !`${e.title} ${e.venue ?? ""} ${e.address ?? ""}`.toLowerCase().includes(q)) return false; if (filter === "free" && !e.is_free) return false; if (filter === "indoor" && e.is_outdoor !== false) return false; if (filter === "outdoor" && e.is_outdoor !== true) return false; if (filter === "mine" && e.proposed_by_group == null) return false; if (filter === "going" && myRsvpByEvent[e.id] !== "going") return false; if (filter === "age_fit" && !isGoodAgeFit(childAgeMonths, e.age_min_months, e.age_max_months)) return false; return true; }).sort((a, b) => { const ap = a.proposed_by_group === activeGroupId ? 0 : 1; const bp = b.proposed_by_group === activeGroupId ? 0 : 1; return ap - bp || new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime(); }); }, [scoped, query, filter, myRsvpByEvent, childAgeMonths, year, month0, activeGroupId]);
+  const listItems = useMemo(() => selectedDay == null ? filtered : filtered.filter((e) => isOnEtDay(e.starts_at, year, month0, selectedDay)), [filtered, selectedDay, year, month0]);
+  const firstOfMonth = new Date(year, month0, 1, 12); const daysInMonth = new Date(year, month0 + 1, 0).getDate(); const startWeekday = firstOfMonth.getDay(); const todayEt = etYMD(new Date().toISOString()); const isCurrentMonth = todayEt.y === year && todayEt.m === month0 + 1;
+  const eventsByDay = new Map<number, FeedEvent[]>(); for (const event of filtered) { const { d } = etYMD(event.starts_at); eventsByDay.set(d, [...(eventsByDay.get(d) ?? []), event]); }
+  const proposalDays = new Set([...eventsByDay.entries()].filter(([, es]) => es.some((e) => e.proposed_by_group === activeGroupId)).map(([d]) => d));
+  const cells: (number | null)[] = [...Array(startWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]; while (cells.length % 7 !== 0) cells.push(null); const monthLabel = firstOfMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  function selectDay(day: number) { setSelectedDay((current) => current === day ? null : day); } function switchMode(next: Mode) { setMode(next); setSelectedDay(null); }
+  const proposalCount = filtered.filter((e) => e.proposed_by_group === activeGroupId).length;
+  return <div className="w-full max-w-2xl">
+    {proposalCount > 0 && <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4" role="status"><div className="text-sm font-bold text-amber-950">✨ {proposalCount === 1 ? "Your group has a meetup proposal" : `Your group has ${proposalCount} meetup proposals`}</div><p className="mt-1 text-xs text-amber-800">A group member suggested something. Review it below and decide if you want to go.</p></div>}
+    <div className="mb-4 flex items-center justify-between rounded-2xl border border-zinc-200 bg-white px-3 py-2 shadow-sm sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:shadow-none"><Link href={prevHref} className="inline-flex min-h-11 items-center rounded-xl px-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900">← Prev</Link><h2 className="font-display text-xl font-bold text-zinc-950">{monthLabel}</h2><Link href={nextHref} className="inline-flex min-h-11 items-center rounded-xl px-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900">Next →</Link></div>
+    <div className="mb-4 flex items-center gap-1 rounded-2xl border border-zinc-200 bg-white p-1 shadow-sm"><button type="button" onClick={() => switchMode("plans")} className={mode === "plans" ? "min-h-10 flex-1 rounded-xl bg-zinc-900 px-3 py-2 text-sm font-bold text-white" : "min-h-10 flex-1 rounded-xl px-3 py-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-50"}>Your plans</button><button type="button" onClick={() => switchMode("discovery")} className={mode === "discovery" ? "min-h-10 flex-1 rounded-xl bg-zinc-900 px-3 py-2 text-sm font-bold text-white" : "min-h-10 flex-1 rounded-xl px-3 py-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-50"}>All events</button></div>
+    <div className="mb-5 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm"><label htmlFor="calendar-search" className="sr-only">Search calendar</label><input id="calendar-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your plans…" className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" /><div className="mt-3 flex gap-2 overflow-x-auto pb-1">{FILTERS.map((f) => <button key={f.id} type="button" onClick={() => setFilter(f.id)} className={filter === f.id ? "min-h-10 shrink-0 rounded-full bg-zinc-900 px-3 py-2 text-xs font-bold text-white" : "min-h-10 shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700"}>{f.label}</button>)}</div><p className="mt-2 text-xs text-zinc-500">{filtered.length} {mode === "plans" ? "planned" : "matching"} option{filtered.length === 1 ? "" : "s"}{selectedDay != null ? ` · ${monthLabel.split(" ")[0]} ${selectedDay} only` : ""}</p></div>
+    {selectedDay != null && <button type="button" onClick={() => setSelectedDay(null)} className="mb-3 inline-flex min-h-9 items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600">← Show the whole month</button>}
+    <div className="sm:hidden">{filtered.length === 0 ? <EmptyState mode={mode} plansHref={plansHref} onShowAll={() => switchMode("discovery")} /> : <div className="flex flex-col gap-2">{filtered.map((event) => { const { d } = etYMD(event.starts_at); const selected = selectedDay === d; const proposal = event.proposed_by_group === activeGroupId; return <button key={event.id} type="button" onClick={() => selectDay(d)} className={`flex min-h-[72px] w-full items-center gap-3 rounded-2xl border p-3 text-left shadow-sm ${proposal ? "border-amber-300 bg-amber-50/70" : selected ? "border-rose-300 bg-rose-50/60" : "border-zinc-200 bg-white"}`}><div className={`flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl ${proposal ? "bg-amber-200 text-amber-900" : "bg-rose-50 text-rose-700"}`}><span className="text-[10px] font-bold uppercase">{weekdayShort(year, month0 + 1, d)}</span><span className="text-lg font-bold leading-none">{d}</span></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2">{proposal && <span className="shrink-0 rounded-full bg-amber-200 px-2 py-0.5 text-[9px] font-extrabold uppercase text-amber-900">Group proposal</span>}<div className="truncate text-sm font-bold text-zinc-900">{event.title}</div></div><div className="mt-1 text-xs font-semibold text-zinc-500">{eventTime(event)}{event.venue ? ` · ${event.venue}` : ""}{event.is_free ? " · Free" : ""}</div></div></button>; })}</div>}</div>
+    <div className="hidden sm:block"><div className="grid grid-cols-7 gap-px overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-200 text-sm shadow-sm">{WEEKDAYS.map((day) => <div key={day} className="bg-zinc-50 px-2 py-2 text-center text-xs font-bold text-zinc-500">{day}</div>)}{cells.map((day, i) => { const dayEvents = day !== null ? (eventsByDay.get(day) ?? []) : []; const selected = day !== null && selectedDay === day; const proposal = day !== null && proposalDays.has(day); return <div key={i} className={`min-h-20 px-2 py-2 ${day === null ? "bg-zinc-50" : proposal ? "bg-amber-50" : "bg-white"} ${selected ? "ring-2 ring-inset ring-rose-400" : ""}`}>{day !== null && <button type="button" onClick={() => dayEvents.length > 0 && selectDay(day)} disabled={dayEvents.length === 0} className={proposal ? "inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white" : isCurrentMonth && day === todayEt.d ? "inline-flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-xs font-bold text-white" : "inline-flex h-7 w-7 items-center justify-center text-xs font-semibold text-zinc-700 disabled:cursor-default"}>{day}</button>}{day !== null && <div className="mt-1 flex flex-col gap-0.5">{dayEvents.slice(0, 2).map((event) => { const p = event.proposed_by_group === activeGroupId; return <button key={event.id} type="button" onClick={() => selectDay(day)} className={event.status === "cancelled" ? "truncate rounded-lg bg-zinc-100 px-1.5 py-1 text-left text-[11px] text-zinc-400 line-through" : p ? "truncate rounded-lg bg-amber-200 px-1.5 py-1 text-left text-[11px] font-bold text-amber-950" : "truncate rounded-lg bg-rose-50 px-1.5 py-1 text-left text-[11px] font-semibold text-rose-800"} title={event.title}>{p ? "✨ " : ""}{event.title}</button>; })}{dayEvents.length > 2 && <button type="button" onClick={() => selectDay(day)} className="text-left text-[11px] font-semibold text-zinc-400">+{dayEvents.length - 2} more</button>}</div>}</div>; })}</div></div>
+    <div className="mt-8 flex flex-col gap-4">{listItems.map((event) => cards[event.id] ?? null)}</div>
+  </div>;
 }
