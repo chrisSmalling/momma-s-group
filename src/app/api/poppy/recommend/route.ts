@@ -17,6 +17,7 @@ export const dynamic = "force-dynamic";
 const MESSAGE_MAX = 400;
 const CANDIDATE_POOL = 500;
 const CACHE_TTL_MINUTES = 15;
+const MAX_DRIVE_MINUTES = 45;
 const MOODS: Mood[] = ["all", "indoor", "outdoor", "water", "active", "learn", "create", "animals"];
 const INDOOR: IndoorPreference[] = ["indoor", "outdoor", "either"];
 
@@ -60,11 +61,12 @@ type PlaceTrustRow = { id: string; stroller_accessible: boolean | null; has_chan
 type TipRow = { place_id: string | null; event_id: string | null; body: string };
 
 function candidateToFeedEvent(row: PoppyCandidateRow, place?: PlaceTrustRow, tips: string[] = []): FeedEvent {
+  const evergreen = row.experience_type === "evergreen_place";
   return {
     id: row.id, title: row.display_title?.trim() || row.title?.trim() || "Family activity", description: row.description,
     venue: row.venue_display?.trim() || row.venue_name?.trim() || null, room_name: null, organizer: null, address: row.address,
     lat: row.lat ?? row.location_latitude, lng: row.lng ?? row.location_longitude, location_latitude: row.location_latitude ?? row.lat, location_longitude: row.location_longitude ?? row.lng,
-    starts_at: row.starts_at, ends_at: row.ends_at, time_precision: "datetime", time_unknown: false, cost: row.cost, is_free: isFreeCost(row.cost),
+    starts_at: row.starts_at, ends_at: row.ends_at, time_precision: evergreen ? "unknown" : "datetime", time_unknown: evergreen, cost: row.cost, is_free: isFreeCost(row.cost),
     age_tags: row.age_tags ?? [], age_min_months: row.age_min_months, age_max_months: row.age_max_months, age_band: row.age_band, is_outdoor: row.is_outdoor,
     what_to_bring: place?.what_to_bring ?? [], registration_required: row.registration_required, registration_url: row.registration_url, source: row.source ?? "", source_id: null,
     source_url: row.source_url, content_status: row.content_review_status, geography_tier: row.verification_tier, experience_type: row.experience_type, weather_fit: row.weather_fit,
@@ -87,9 +89,10 @@ export async function POST(request: Request) {
   const originMode = body.originMode === "current" ? "current" : "home";
 
   try {
-    const { data: profileRow } = await supabase.from("profiles").select("display_name, child_name, child_age_months, child_interests, child_activity_preferences, family_budget_note, preferred_categories, preferred_place_types, indoor_preference, max_distance_miles, nap_start, nap_end, home_lat, home_lng").eq("id", user.id).maybeSingle();
+    const { data: profileRow } = await supabase.from("profiles").select("display_name, child_name, child_age_months, child_interests, child_activity_preferences, family_budget_note, preferred_categories, preferred_place_types, indoor_preference, max_distance_miles, nap_start, nap_end, home_address, home_lat, home_lng").eq("id", user.id).maybeSingle();
     const profile = toProfile(profileRow as Record<string, unknown> | null);
     const childName = typeof profileRow?.child_name === "string" && profileRow.child_name.trim() ? profileRow.child_name.trim() : null;
+    const hasSavedHomeAddress = typeof profileRow?.home_address === "string" && profileRow.home_address.trim().length > 0;
     let origin: { lat: number; lng: number } | null = profile.homeLat != null && profile.homeLng != null ? { lat: profile.homeLat, lng: profile.homeLng } : null;
     if (originMode === "current") { const o = body.origin as Record<string, unknown> | undefined; if (o && typeof o.lat === "number" && typeof o.lng === "number" && Number.isFinite(o.lat) && Number.isFinite(o.lng)) origin = { lat: o.lat, lng: o.lng }; }
     const constraints = parseIntent(message, previous);
@@ -102,7 +105,7 @@ export async function POST(request: Request) {
       const payload = cached.response as RecommendationResult;
       const requestId = await recordRecommendationRequest(supabase, user.id, message, constraints, payload.candidates, "poppy-cache");
       if (requestId) await recordRecommendationAudit(supabase, requestId, constraints, payload.candidates);
-      return NextResponse.json({ ...payload, requestId: requestId ?? fallbackRequestId, cacheHit: true });
+      return NextResponse.json({ ...payload, requestId: requestId ?? fallbackRequestId, cacheHit: true, locationStatus: origin ? "ready" : hasSavedHomeAddress ? "saved_address_needs_geocoding" : "missing" });
     }
 
     const { data: candidateRows, error: candidateError } = await supabase.from("poppy_recommendation_candidates").select("id, title, display_title, description, venue_name, venue_display, address, location_city, location_state, location_zip, lat, lng, location_latitude, location_longitude, starts_at, ends_at, age_min_months, age_max_months, age_band, age_tags, cost, source, source_url, registration_required, registration_url, is_outdoor, experience_type, weather_fit, verification_tier, content_review_status, last_verified_at, place_id, program_id").gte("starts_at", now.toISOString()).order("starts_at", { ascending: true }).limit(CANDIDATE_POOL);
@@ -134,12 +137,13 @@ export async function POST(request: Request) {
     const { candidates, droppedCount } = recommend({ places: [], events: eventList }, constraints, profile, origin, weather, now);
     await enrichDriveTimes(candidates, origin, eventList);
     let responseText = buildResponseText(candidates, constraints, childName); let model = "poppy-deterministic";
-    if (candidates.length > 0) { const enhanced = await generatePoppyLine({ candidates, constraints, childName, message }); if (enhanced) { responseText = enhanced; model = "poppy-gemini"; } }
+    if (candidates.length > 0) { const enhanced = await generatePoppyLine({ candidates, constraints, childName, message }); if (enhanced) responseText = enhanced; if (enhanced) model = "poppy-gemini"; }
+    if (!origin && hasSavedHomeAddress) responseText = `${responseText} Your home address is saved, but its map location still needs to be verified, so distance sorting is temporarily limited.`;
     const requestId = await recordRecommendationRequest(supabase, user.id, message, constraints, candidates, model); const effectiveRequestId = requestId ?? fallbackRequestId;
     const result: RecommendationResult = { requestId: effectiveRequestId, intent: constraints, candidates, responseText, fallbacks: candidates.length === 0 ? buildFallbacks(constraints) : [], cacheHit: false };
     if (requestId) { await recordRecommendationAudit(supabase, requestId, constraints, candidates); const expiresAt = new Date(now.getTime() + CACHE_TTL_MINUTES * 60 * 1000).toISOString(); const { error: cacheWriteError } = await supabase.from("recommendation_response_cache").upsert({ request_hash: cacheKey, user_id: user.id, request_id: requestId, response: result, model, created_at: now.toISOString(), expires_at: expiresAt }, { onConflict: "request_hash" }); if (cacheWriteError) console.error("[poppy] cache write failed", cacheWriteError.message); }
     void droppedCount;
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, locationStatus: origin ? "ready" : hasSavedHomeAddress ? "saved_address_needs_geocoding" : "missing" });
   } catch (err) { console.error("[poppy] recommendation failed", err); return NextResponse.json({ error: "Something went wrong while Poppy was looking." }, { status: 500 }); }
 }
 
@@ -147,4 +151,4 @@ type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 type RecommendationCandidate = RecommendationResult["candidates"][number];
 async function recordRecommendationRequest(supabase: SupabaseClient,userId:string,message:string,constraints:RecommendationConstraints,candidates:RecommendationResult["candidates"],model:string):Promise<string|null>{const {data,error}=await supabase.rpc("record_recommendation_execution",{p_user_id:userId,p_raw_prompt:message,p_intent:"discover",p_constraints:constraints,p_candidate_count:candidates.length,p_selected_ids:candidates.map((candidate)=>candidate.id),p_model:model});if(error){console.error("[poppy] recommendation request audit failed",error.message);return null;}return typeof data==="string"?data:null;}
 async function recordRecommendationAudit(supabase:SupabaseClient,requestId:string,constraints:RecommendationConstraints,candidates:RecommendationResult["candidates"]){if(candidates.length===0)return;const rows=candidates.map((candidate,index)=>({request_id:requestId,candidate_kind:candidate.type,candidate_id:candidate.id,hard_filters:constraints,score:candidate.score,explanation:{rank:index+1},passed_hard_filters:true,filter_reasons:[],source_kind:candidate.type,source_snapshot:{}}));const {error}=await supabase.from("recommendation_audit").insert(rows);if(error)console.error("[poppy] recommendation audit failed",error.message);}
-async function enrichDriveTimes(candidates:RecommendationResult["candidates"],origin:{lat:number;lng:number}|null,events:FeedEvent[]){if(!origin||candidates.length===0)return;const provider=getRoutingProvider();if(!provider)return;const eventById=new Map(events.map((e)=>[e.id,e]));const points:{candidate:RecommendationCandidate;lat:number;lng:number}[]=[];for(const c of candidates){const src=eventById.get(c.id);const lat=src?.lat??null;const lng=src?.lng??null;if(lat!=null&&lng!=null)points.push({candidate:c,lat,lng});}if(points.length===0)return;try{const results=await provider.getDriveTimes(origin,points.map((p)=>({lat:p.lat,lng:p.lng})));for(let i=0;i<Math.min(results.length,points.length);i+=1){const minutes=results[i]?.durationMinutes;if(typeof minutes==="number"&&Number.isFinite(minutes))points[i].candidate.driveMinutes=Math.round(minutes);}}catch(err){console.error("[poppy] drive-time enrichment failed",err);}}
+async function enrichDriveTimes(candidates:RecommendationResult["candidates"],origin:{lat:number;lng:number}|null,events:FeedEvent[]){if(!origin||candidates.length===0)return;const provider=getRoutingProvider();if(!provider)return;const eventById=new Map(events.map((e)=>[e.id,e]));const points:{candidate:RecommendationCandidate;lat:number;lng:number}[]=[];for(const c of candidates){const src=eventById.get(c.id);const lat=src?.lat??null;const lng=src?.lng??null;if(lat!=null&&lng!=null)points.push({candidate:c,lat,lng});}if(points.length===0)return;try{const results=await provider.getDriveTimes(origin,points.map((p)=>({lat:p.lat,lng:p.lng})));for(let i=0;i<Math.min(results.length,points.length);i+=1){const minutes=results[i]?.durationMinutes;if(typeof minutes==="number"&&Number.isFinite(minutes))points[i].candidate.driveMinutes=Math.round(minutes);}for(let i=candidates.length-1;i>=0;i-=1){const minutes=candidates[i].driveMinutes;if(typeof minutes==="number"&&minutes>MAX_DRIVE_MINUTES)candidates.splice(i,1);}}catch(err){console.error("[poppy] drive-time enrichment failed",err);}}
