@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { monthParam } from "@/lib/date";
 import { overlapsNapWindow } from "@/lib/nap";
@@ -54,7 +55,7 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
 
   const { data: myProfile } = await supabase
     .from("profiles")
-    .select("display_name, nap_start, nap_end")
+    .select("display_name, nap_start, nap_end, child_age_months")
     .eq("id", user.id)
     .maybeSingle();
   const currentUserName = myProfile?.display_name ?? "You";
@@ -247,6 +248,54 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
   const groupQuery = activeGroupId ? `&group=${activeGroupId}` : "";
   const monthStr = monthParam(monthDate);
 
+  // Built once here and handed to MonthCalendar as pre-rendered nodes so its
+  // client-side search/filter/day-selection state has a single set of full
+  // detail cards to show — not a second, always-unfiltered feed underneath.
+  const cards: Record<string, ReactNode> = {};
+  for (const event of eventList) {
+    const proposedBy =
+      event.proposed_by_group && event.added_by
+        ? {
+            user_id: event.added_by,
+            display_name: profileById.get(event.added_by)?.display_name ?? "Someone",
+          }
+        : null;
+
+    const place = event.place_id ? (placeById.get(event.place_id) ?? null) : null;
+
+    const duringNap = overlapsNapWindow(
+      event.starts_at,
+      event.ends_at,
+      myProfile?.nap_start ?? null,
+      myProfile?.nap_end ?? null,
+    );
+
+    const tips = event.place_id ? (tipsByPlaceId[event.place_id] ?? []) : (tipsByEventId[event.id] ?? []);
+
+    cards[event.id] = (
+      <EventCard
+        key={event.id}
+        event={event}
+        currentUserId={user.id}
+        currentUserName={currentUserName}
+        currentStatus={myRsvpByEvent[event.id] ?? null}
+        currentNote={myNoteByEvent[event.id] ?? null}
+        attendees={rsvpsByEvent[event.id] ?? []}
+        hasActiveGroup={Boolean(activeGroupId)}
+        activeGroupId={activeGroupId}
+        activeGroupName={activeGroupName}
+        activeGroupMemberIds={activeGroupMemberIds}
+        roster={roster}
+        proposedBy={proposedBy}
+        place={place as EventCardPlace | null}
+        duringNap={duringNap}
+        comments={commentsByEvent[event.id] ?? []}
+        tips={tips}
+        childAgeMonths={myProfile?.child_age_months ?? null}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center px-4 py-10">
       <div className="w-full max-w-2xl">
@@ -262,10 +311,7 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
             <ul className="flex flex-col gap-1">
               {cancelledUpcomingList.map((c) => (
                 <li key={c.event_id} className="text-sm text-red-700">
-                  <a
-                    href={`/calendar?month=${monthParam(new Date(c.starts_at))}${groupQuery}#event-${c.event_id}`}
-                    className="underline"
-                  >
+                  <a href={`/events/${c.event_id}`} className="underline">
                     {c.title}
                   </a>{" "}
                   —{" "}
@@ -292,63 +338,12 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
           events={eventList}
           prevHref={`/calendar?month=${monthParam(prevMonth)}${groupQuery}`}
           nextHref={`/calendar?month=${monthParam(nextMonth)}${groupQuery}`}
+          cards={cards}
+          myRsvpByEvent={myRsvpByEvent}
+          activeGroupId={activeGroupId}
+          childAgeMonths={myProfile?.child_age_months ?? null}
+          plansHref={activeGroupId ? `/plans?group=${activeGroupId}` : "/plans"}
         />
-
-        <div className="mt-8 flex flex-col gap-4">
-          {eventList.length === 0 && (
-            <p className="rounded-xl border border-dashed border-zinc-200 px-4 py-5 text-sm text-zinc-500">
-              Nothing on the calendar this month yet — peek at Explore, or ask your group what they&apos;re up to.
-            </p>
-          )}
-          {eventList.map((event) => {
-            const proposedBy =
-              event.proposed_by_group && event.added_by
-                ? {
-                    user_id: event.added_by,
-                    display_name:
-                      profileById.get(event.added_by)?.display_name ??
-                      "Someone",
-                  }
-                : null;
-
-            const place = event.place_id
-              ? (placeById.get(event.place_id) ?? null)
-              : null;
-
-            const duringNap = overlapsNapWindow(
-              event.starts_at,
-              event.ends_at,
-              myProfile?.nap_start ?? null,
-              myProfile?.nap_end ?? null,
-            );
-
-            const tips = event.place_id
-              ? (tipsByPlaceId[event.place_id] ?? [])
-              : (tipsByEventId[event.id] ?? []);
-
-            return (
-              <EventCard
-                key={event.id}
-                event={event}
-                currentUserId={user.id}
-                currentUserName={currentUserName}
-                currentStatus={myRsvpByEvent[event.id] ?? null}
-                currentNote={myNoteByEvent[event.id] ?? null}
-                attendees={rsvpsByEvent[event.id] ?? []}
-                hasActiveGroup={Boolean(activeGroupId)}
-                activeGroupId={activeGroupId}
-                activeGroupName={activeGroupName}
-                activeGroupMemberIds={activeGroupMemberIds}
-                roster={roster}
-                proposedBy={proposedBy}
-                place={place as EventCardPlace | null}
-                duringNap={duringNap}
-                comments={commentsByEvent[event.id] ?? []}
-                tips={tips}
-              />
-            );
-          })}
-        </div>
       </div>
     </div>
   );
