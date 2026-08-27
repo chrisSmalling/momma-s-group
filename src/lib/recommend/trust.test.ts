@@ -28,12 +28,12 @@ describe("recommendation trust", () => {
 
   it("builds why text only from candidate facts", () => {
     expect(buildGroundedWhy(base)).toEqual([
-      "fits the child age range", "4.2 mi away", "indoor",
+      "it fits the child age range", "it is 4.2 mi away", "it is indoors",
     ]);
   });
 
   it("includes only explicit facts", () => {
     const candidate = { ...base, goodAgeFit: false, distanceLabel: null, isFree: true, isOutdoor: null };
-    expect(buildGroundedWhy(candidate)).toEqual(["free"]);
+    expect(buildGroundedWhy(candidate)).toEqual(["it is free"]);
   });
 });
