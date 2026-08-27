@@ -1,95 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import SignOutButton from "./SignOutButton";
+import { createClient } from "@/lib/supabase/client";
 
 type NavIconName = "today" | "explore" | "calendar" | "groups" | "me";
-
-const links: readonly [string, string, NavIconName][] = [
-  ["/today", "Today", "today"],
-  ["/places", "Poppy", "explore"],
-  ["/calendar", "Calendar", "calendar"],
-  ["/groups", "Groups", "groups"],
-  ["/settings", "Me", "me"],
-];
-
-function isActive(pathname: string, href: string) {
-  return pathname === href || (href !== "/today" && pathname.startsWith(`${href}/`));
-}
-
-function NavIcon({ name, active }: { name: NavIconName; active: boolean }) {
-  const common = {
-    width: 22,
-    height: 22,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: active ? 2.1 : 1.8,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    "aria-hidden": true,
-  };
-
-  return (
-    <svg {...common} className="transition-transform duration-150" style={{ transform: active ? "scale(1.04)" : "scale(1)" }}>
-      {name === "today" && <><path d="M12 3v2" /><path d="M5.64 5.64 7.05 7.05" /><path d="M3 12h2" /><path d="M17 12h4" /><path d="M16.95 7.05l1.41-1.41" /><path d="M6.5 16.5a6 6 0 1 1 11 0" /></>}
-      {name === "explore" && <><circle cx="12" cy="12" r="9" /><path d="m15.5 8.5-2.2 4.8-4.8 2.2 2.2-4.8 4.8-2.2Z" /></>}
-      {name === "calendar" && <><rect x="3.5" y="5" width="17" height="16" rx="2" /><path d="M7 3v4M17 3v4M3.5 9h17" /><path d="M8 13h2M12 13h2M16 13h.01M8 17h2M12 17h2" /></>}
-      {name === "groups" && <><circle cx="9" cy="8" r="3" /><circle cx="17" cy="10" r="2.5" /><path d="M3.5 20c.5-3.4 2.3-5 5.5-5s5 1.6 5.5 5" /><path d="M14.5 15.5c2.8-.2 4.7 1.1 5.5 3.8" /></>}
-      {name === "me" && <><circle cx="12" cy="8" r="3.5" /><path d="M5 21c.7-4 3-6 7-6s6.3 2 7 6" /></>}
-    </svg>
-  );
-}
+const links: readonly [string, string, NavIconName][] = [["/today", "Today", "today"],["/places", "Poppy", "explore"],["/calendar", "Calendar", "calendar"],["/groups", "Groups", "groups"],["/settings", "Me", "me"]];
+function isActive(pathname: string, href: string) { return pathname === href || (href !== "/today" && pathname.startsWith(`${href}/`)); }
+function NavIcon({ name, active }: { name: NavIconName; active: boolean }) { const common={width:22,height:22,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:active?2.1:1.8,strokeLinecap:"round" as const,strokeLinejoin:"round" as const,"aria-hidden":true}; return <svg {...common} className="transition-transform duration-150" style={{transform:active?"scale(1.04)":"scale(1)"}}>{name==="today"&&<><path d="M12 3v2"/><path d="M5.64 5.64 7.05 7.05"/><path d="M3 12h2"/><path d="M17 12h4"/><path d="M16.95 7.05l1.41-1.41"/><path d="M6.5 16.5a6 6 0 1 1 11 0"/></>}{name==="explore"&&<><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2.2 4.8-4.8 2.2 2.2-4.8 4.8-2.2Z"/></>}{name==="calendar"&&<><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M7 3v4M17 3v4M3.5 9h17"/><path d="M8 13h2M12 13h2M16 13h.01M8 17h2M12 17h2"/></>}{name==="groups"&&<><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3.5 20c.5-3.4 2.3-5 5.5-5s5 1.6 5.5 5"/><path d="M14.5 15.5c2.8-.2 4.7 1.1 5.5 3.8"/></>}{name==="me"&&<><circle cx="12" cy="8" r="3.5"/><path d="M5 21c.7-4 3-6 7-6s6.3 2 7 6"/></>}</svg>; }
 
 export default function Nav({ email }: { email: string }) {
-  const pathname = usePathname();
-
-  return (
-    <>
-      <header className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white/90 p-3 shadow-sm backdrop-blur">
-        <Link href="/today" prefetch className="min-w-0 shrink" aria-label="Momma's Meetup home">
-          <div className="font-display text-base font-bold tracking-tight text-zinc-950">Momma&apos;s Meetup</div>
-          <div className="hidden text-[11px] font-medium text-zinc-400 sm:block">Find something worth doing. See who&apos;s in.</div>
-        </Link>
-        <div className="flex shrink-0 items-center gap-2">
-          <Link
-            href="/places"
-            prefetch
-            className="rounded-full bg-rose-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
-            aria-label="Ask Poppy what to do"
-          >
-            🌼 Ask Poppy
-          </Link>
-          <span className="hidden max-w-40 truncate text-xs text-zinc-500 lg:block" title={email}>{email}</span>
-          <SignOutButton />
-        </div>
-      </header>
-
-      <nav
-        aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200/90 bg-white/97 shadow-[0_-8px_24px_rgba(42,26,31,0.08)] backdrop-blur-md"
-        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-      >
-        <div className="mx-auto grid h-[76px] max-w-2xl grid-cols-5 px-1 sm:h-[72px]">
-          {links.map(([href, label, icon]) => {
-            const active = isActive(pathname, href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                prefetch
-                aria-current={active ? "page" : undefined}
-                className={`relative flex min-h-[44px] flex-col items-center justify-center gap-1 rounded-xl py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-rose-500 ${active ? "font-bold text-rose-600" : "font-semibold text-zinc-500 active:bg-zinc-100 hover:text-zinc-800"}`}
-              >
-                {active && <span aria-hidden="true" className="absolute top-0 h-1 w-10 rounded-b-full bg-rose-600" />}
-                <NavIcon name={icon} active={active} />
-                <span className="text-[11px] leading-none sm:text-xs">{label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
-    </>
-  );
+ const pathname=usePathname(); const router=useRouter(); const [notifications,setNotifications]=useState<any[]>([]); const [open,setOpen]=useState(false);
+ useEffect(()=>{ let mounted=true; const supabase=createClient(); const load=async()=>{ const {data}=await supabase.from("group_proposal_notifications").select("id,event_id,created_at,read_at,events(title,venue_name,starts_at,added_by)").is("read_at",null).order("created_at",{ascending:false}).limit(10); if(mounted)setNotifications(data??[]); }; load(); const channel=supabase.channel("group-proposal-notifications").on("postgres_changes",{event:"INSERT",schema:"public",table:"group_proposal_notifications"},()=>load()).subscribe(); return()=>{mounted=false; supabase.removeChannel(channel);}; },[]);
+ const unread=notifications.length;
+ const markRead=async(id:string,eventId:string)=>{ const supabase=createClient(); await supabase.from("group_proposal_notifications").update({read_at:new Date().toISOString()}).eq("id",id); setNotifications(n=>n.filter(x=>x.id!==id)); setOpen(false); router.push(`/events/${eventId}`); };
+ return <><header className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white/90 p-3 shadow-sm backdrop-blur"><Link href="/today" prefetch className="min-w-0 shrink" aria-label="Momma's Meetup home"><div className="font-display text-base font-bold tracking-tight text-zinc-950">Momma&apos;s Meetup</div><div className="hidden text-[11px] font-medium text-zinc-400 sm:block">Find something worth doing. See who&apos;s in.</div></Link><div className="flex shrink-0 items-center gap-2"><div className="relative"><button type="button" onClick={()=>setOpen(v=>!v)} aria-label={unread?`${unread} new group proposals`:"Notifications"} className="relative flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-white text-lg hover:bg-zinc-50">🔔{unread>0&&<span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-rose-600 px-1 text-[10px] font-extrabold leading-5 text-white">{unread>9?"9+":unread}</span>}</button>{open&&<div className="absolute right-0 top-12 z-[60] w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-zinc-200 bg-white p-3 shadow-xl"><div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-bold text-zinc-900">Group activity</h3><button type="button" onClick={()=>setOpen(false)} className="text-xs text-zinc-500">Close</button></div>{notifications.length===0?<p className="p-3 text-sm text-zinc-500">You&apos;re all caught up.</p>:<div className="space-y-2">{notifications.map(n=><button key={n.id} type="button" onClick={()=>markRead(n.id,n.event_id)} className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-left"><div className="text-xs font-extrabold uppercase text-amber-800">New group proposal</div><div className="mt-1 text-sm font-bold text-zinc-900">{n.events?.title??"A meetup"}</div><div className="mt-1 text-xs text-zinc-600">A mom in your group proposed this meetup. Tap to review and see who&apos;s going.</div></button>)}</div>}</div>}</div><Link href="/places" prefetch className="rounded-full bg-rose-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700">🌼 Ask Poppy</Link><span className="hidden max-w-40 truncate text-xs text-zinc-500 lg:block" title={email}>{email}</span><SignOutButton/></div></header><nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200/90 bg-white/97 shadow-[0_-8px_24px_rgba(42,26,31,0.08)] backdrop-blur-md" style={{paddingBottom:"env(safe-area-inset-bottom, 0px)"}}><div className="mx-auto grid h-[76px] max-w-2xl grid-cols-5 px-1 sm:h-[72px]">{links.map(([href,label,icon])=>{const active=isActive(pathname,href);return <Link key={href} href={href} prefetch aria-current={active?"page":undefined} className={`relative flex min-h-[44px] flex-col items-center justify-center gap-1 rounded-xl py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-rose-500 ${active?"font-bold text-rose-600":"font-semibold text-zinc-500 active:bg-zinc-100 hover:text-zinc-800"}`}>{active&&<span aria-hidden="true" className="absolute top-0 h-1 w-10 rounded-b-full bg-rose-600"/>}<NavIcon name={icon} active={active}/><span className="text-[11px] leading-none sm:text-xs">{label}</span></Link>})}</div></nav></>;
 }
