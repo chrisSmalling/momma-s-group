@@ -1,0 +1,24 @@
+import { chromium } from "playwright";
+import { createServerClient } from "@supabase/ssr";
+import fs from "node:fs/promises";
+
+const BASE_URL=(process.env.QA_BASE_URL||"https://momma-s-group.vercel.app").replace(/\/$/,"");
+const QA_EMAIL=process.env.QA_EMAIL||"";const QA_PASSWORD=process.env.QA_PASSWORD||"";const SUPABASE_URL=process.env.SUPABASE_URL||"";const SUPABASE_KEY=process.env.SUPABASE_PUBLISHABLE_KEY||"";
+const routes=["/today","/places","/calendar","/groups","/settings"];
+const results=[];
+const record=(name,pass,detail="")=>{results.push({name,pass,detail});console.log(`${pass?"PASS":"FAIL"} ${name}${detail?` — ${detail}`:""}`)};
+async function authenticate(context,page){
+ if(!QA_EMAIL||!QA_PASSWORD||!SUPABASE_URL||!SUPABASE_KEY)throw new Error("QA auth secrets are missing");
+ const pendingCookies=[];const supabase=createServerClient(SUPABASE_URL,SUPABASE_KEY,{cookies:{getAll:()=>[],setAll:cookies=>pendingCookies.push(...cookies)}});
+ const {data,error}=await supabase.auth.signInWithPassword({email:QA_EMAIL,password:QA_PASSWORD});
+ if(error||!data.session)throw new Error(`QA auth failed: ${error?.message||"no session"}`);
+ const host=new URL(BASE_URL).hostname;
+ await context.addCookies(pendingCookies.map(({name,value,options})=>({name,value,domain:host,path:options?.path||"/",httpOnly:options?.httpOnly??false,secure:options?.secure??true,sameSite:options?.sameSite==="strict"?"Strict":options?.sameSite==="none"?"None":"Lax",...(options?.maxAge?{expires:Math.floor(Date.now()/1000)+options.maxAge}:{})})));
+ await page.goto(`${BASE_URL}/today`,{waitUntil:"domcontentloaded",timeout:30000});
+ if(new URL(page.url()).pathname==="/login")throw new Error("Authenticated session redirected to /login");
+ record("QA authentication",true);
+}
+async function visit(page,route){const errors=[];const failures=[];page.removeAllListeners("console");page.removeAllListeners("requestfailed");page.on("console",m=>{if(m.type()==="error")errors.push(m.text())});page.on("requestfailed",r=>failures.push(`${r.method()} ${r.url()} :: ${r.failure()?.errorText||"failed"}`));const response=await page.goto(`${BASE_URL}${route}`,{waitUntil:"domcontentloaded",timeout:30000});await page.waitForTimeout(700);const body=(await page.locator("body").innerText()).toLowerCase();const path=new URL(page.url()).pathname;record(`${route}: HTTP`,Boolean(response&&response.status()<400),String(response?.status()??"none"));record(`${route}: protected route`,path!=="/login",path);record(`${route}: no application error`,!/application error|internal server error|unhandled runtime error/i.test(body));record(`${route}: no horizontal overflow`,await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+2));record(`${route}: no failed requests`,failures.length===0,failures.slice(0,3).join(" | "));record(`${route}: no console errors`,errors.length===0,errors.slice(0,3).join(" | "));await page.screenshot({path:`/tmp/${route.slice(1)}.png`,fullPage:true});}
+const browser=await chromium.launch({headless:true,args:["--disable-dev-shm-usage"]});const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1});const page=await context.newPage();
+try{await authenticate(context,page);for(const route of routes)await visit(page,route);await page.goto(`${BASE_URL}/places`,{waitUntil:"domcontentloaded",timeout:30000});const poppy=page.getByPlaceholder(/somewhere close where she can run around/i).first();record("Poppy: query input",await poppy.count()>0);for(const label of ["Something fun today","Indoor ideas","Outdoor ideas","Close by","Under $20","For my little one","This weekend"]){const button=page.getByRole("button",{name:new RegExp(`^${label}$","i")}).first();record(`Poppy: ${label}`,await button.count()>0);if(await button.count()){await button.click();await page.waitForTimeout(200);record(`Poppy: ${label} responsive`,await page.locator("body").count()===1);}}
+const locate=page.getByRole("button",{name:/find near me/i}).first();record("Poppy: location control",await locate.count()>0);await page.goto(`${BASE_URL}/calendar`,{waitUntil:"domcontentloaded",timeout:30000});const calendarText=(await page.locator("body").innerText()).toLowerCase();record("Calendar: filter/search UI",/search|filter|free|indoor|outdoor/.test(calendarText));record("Calendar: not a blank shell",calendarText.length>150);await page.goto(`${BASE_URL}/today`,{waitUntil:"domcontentloaded",timeout:30000});const todayText=(await page.locator("body").innerText()).toLowerCase();record("Today: family options section",todayText.includes("good options for your family"));record("Today: distance/location context",/mi away|minutes away|drive|home location|home address/.test(todayText));}catch(error){record("Harness execution",false,error instanceof Error?error.message:String(error));}finally{console.table(results);await browser.close();if(results.some(r=>!r.pass))process.exitCode=1;}
