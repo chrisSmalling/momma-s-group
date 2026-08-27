@@ -41,19 +41,13 @@ export async function POST(request:Request){
   if(error)return NextResponse.json({error:"Could not load family places."},{status:500});
   const filtered=filterPlaces((rows??[]) as Place[],constraints,origin);
   const ranked:RankedPlace[]=filtered.kept.map(({place,miles})=>({place,miles,score:scorePlace(place,miles,constraints,profile,null)})).sort((a,b)=>b.score-a.score);
-
-  // The 30-mile straight-line ceiling is only a defense-in-depth candidate
-  // pool bound. With a saved/current origin, Poppy's actual proximity gate is
-  // routing: a candidate is eligible only when a routing provider returns a
-  // finite drive time <= 45 minutes. If routing is unavailable we fail closed
-  // rather than claim a drive-time guarantee we could not verify.
   const routePool=ranked.slice(0,ROUTE_POOL);
   const routingProvider=origin?getRoutingProvider():null;
   let selected:RankedPlace[]=[];
   if(!origin){
     selected=ranked.slice(0,MAX_RESULTS);
   }else if(routingProvider&&routePool.length){
-    const points=routePool.map(item=>({id:item.place.id,lat:item.place.lat??item.place.latitude,lng:item.place.lng??item.place.longitude})).filter((p):p is {id:string;lat:number;lng:number}=>p.lat!=null&&p.lng!=null);
+    const points=routePool.map(item=>({id:item.place.id,lat:item.place.lat,lng:item.place.lng})).filter((p):p is {id:string;lat:number;lng:number}=>p.lat!=null&&p.lng!=null);
     try{
       const results=await routingProvider.getDriveTimes(origin,points.map(p=>({lat:p.lat,lng:p.lng})));
       const byId=new Map<string,number>();
@@ -61,7 +55,6 @@ export async function POST(request:Request){
       selected=routePool.filter(item=>{const minutes=byId.get(item.place.id);if(minutes==null||minutes>MAX_DRIVE_MINUTES)return false;item.driveMinutes=minutes;return true;}).slice(0,MAX_RESULTS);
     }catch{selected=[];}
   }
-
   const candidates:RecommendationCandidate[]=selected.map(({place,miles,score,driveMinutes})=>{
     const fit=goodAgeFit(profile.childAgeMonths,place.age_min_months,place.age_max_months);
     const interest=profile.childInterests.find(i=>{const tags:Record<string,string[]>={playgrounds:["playground"],water:["water_play"],adventure:["active_play","outdoor"],sports:["active_play","playground"],animals:["animals"],books:["storytime"],arts_and_crafts:["arts_learning"],science:["arts_learning"],music:["arts_learning"]};return(tags[i]??[]).some(tag=>place.category_tags.includes(tag));});
