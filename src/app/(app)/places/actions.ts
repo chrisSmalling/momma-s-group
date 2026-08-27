@@ -3,7 +3,6 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { monthParam } from "@/lib/date";
 
 export async function proposeMeetup(formData: FormData) {
   const placeId = String(formData.get("place_id") ?? "");
@@ -34,7 +33,9 @@ export async function proposeMeetup(formData: FormData) {
   }
 
   revalidatePath("/calendar");
-  redirect(`/calendar?month=${monthParam(startsAt)}#event-${eventId}`);
+  revalidatePath("/plans");
+  revalidatePath(`/events/${eventId}`);
+  redirect(`/proposal/success/${eventId}`);
 }
 
 export async function addTip(formData: FormData) {
