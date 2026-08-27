@@ -8,7 +8,7 @@ const base: RecommendationCandidate = {
   endsAt: null, price: "$5", isFree: false, isOutdoor: false, ageMinMonths: 24, ageMaxMonths: 60,
   goodAgeFit: true, reason: "Fits", href: "/events/1", lastVerifiedAt: "2026-08-26T12:00:00-04:00", score: 10,
   whatToBring: [], strollerAccessible: null, changingTable: null, nursingFriendly: null, parkingNotes: null,
-  typicalCrowdNote: null, bestTimeNote: null,
+  typicalCrowdNote: null, bestTimeNote: null, registrationRequired: false,
 };
 
 describe("recommendation trust", () => {
@@ -27,9 +27,7 @@ describe("recommendation trust", () => {
   });
 
   it("builds why text only from candidate facts", () => {
-    expect(buildGroundedWhy(base)).toEqual([
-      "it fits the child age range", "it is 4.2 mi away", "it is indoors",
-    ]);
+    expect(buildGroundedWhy(base)).toEqual(["it fits the child age range", "it is 4.2 mi away", "it is indoors"]);
   });
 
   it("includes only explicit facts", () => {
