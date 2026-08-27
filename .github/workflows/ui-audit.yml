@@ -8,7 +8,7 @@ on:
       base_url:
         description: Production URL to audit
         required: false
-        default: https://mommas-group.vercel.app
+        default: https://momma-s-group.vercel.app
         type: string
 
 permissions:
@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      QA_BASE_URL: ${{ inputs.base_url || 'https://mommas-group.vercel.app' }}
+      QA_BASE_URL: ${{ inputs.base_url || 'https://momma-s-group.vercel.app' }}
       QA_EMAIL: ${{ secrets.QA_EMAIL }}
       QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
       SUPABASE_URL: https://uiuibwufzhirpntdtqpj.supabase.co
@@ -33,27 +33,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-
       - name: Install audit dependencies
         run: npm install --no-save playwright
-
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-
       - name: Verify QA bootstrap secrets
         run: |
           test -n "$QA_EMAIL" || { echo "QA_EMAIL GitHub Actions secret is missing."; exit 1; }
           if [ -z "$QA_PASSWORD" ] && [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then echo "Either QA_PASSWORD or SUPABASE_SERVICE_ROLE_KEY is required."; exit 1; fi
-
       - name: Run authenticated read-only production UI audit
         run: node qa/local-phase1-readonly.mjs
-
       - name: Upload UI audit screenshots
         if: always()
         uses: actions/upload-artifact@v4
