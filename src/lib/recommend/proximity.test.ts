@@ -12,6 +12,7 @@ describe("proximity semantics",()=>{
  it("marks close and near-me language as explicit proximity",()=>{expect(parseIntent("what's close?").distanceExplicit).toBe(true);expect(parseIntent("find something near me").distanceExplicit).toBe(true);});
  it("does not surface an unknown-distance candidate for an explicit proximity request",()=>{const {kept}=filterEvents([event(null,null)],{...base,maxMiles:8,distanceExplicit:true},origin,new Date("2026-08-26T12:00:00Z"));expect(kept).toHaveLength(0);});
  it("keeps unknown distance for the default local-first search",()=>{const {kept}=filterEvents([event(null,null)],{...base,maxMiles:20,distanceExplicit:false},origin,new Date("2026-08-26T12:00:00Z"));expect(kept).toHaveLength(1);});
+ it("uses a 45-mile defense-in-depth prefilter while leaving final eligibility to routing",()=>{const inside=filterEvents([event(28.2,-81.75)],{...base,maxMiles:60,distanceExplicit:false},origin,new Date("2026-08-26T12:00:00Z"));const outside=filterEvents([event(28.2,-81.6)],{...base,maxMiles:60,distanceExplicit:false},origin,new Date("2026-08-26T12:00:00Z"));expect(inside.kept).toHaveLength(1);expect(outside.kept).toHaveLength(0);});
 });
 
 describe("Eastern calendar semantics",()=>{
