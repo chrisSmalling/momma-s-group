@@ -55,7 +55,7 @@ export function getTrustSummary(candidate: RecommendationCandidate, now = new Da
     candidate.typicalCrowdNote,
     candidate.bestTimeNote,
     candidate.whatToBring.length > 0 ? candidate.whatToBring : null,
-  ].filter((value) => value !== null && value !== undefined && value !== "" && value !== false).length;
+  ].filter((value) => value !== null && value !== undefined && value !== false).length;
 
   const freshness = getFreshnessState(candidate.lastVerifiedAt, now);
   return {
@@ -77,3 +77,5 @@ export function buildGroundedWhy(candidate: RecommendationCandidate): string[] {
   if (candidate.registrationRequired) facts.push("registration is required");
   return facts;
 }
+
+// Keep this module intentionally deterministic: trust presentation must never invent facts.
