@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { overlapsNapWindow } from "@/lib/nap";
 import { distanceKm } from "@/lib/distance";
-import { getRoutingProvider, type DriveTimeResult } from "@/lib/routing";
 import { createClient } from "@/lib/supabase/server";
 import TodayFeed, { type EventBundle } from "@/components/TodayFeed";
 import PlaceCard from "@/components/PlaceCard";
@@ -11,7 +10,7 @@ import HomeAddressNudge from "@/components/HomeAddressNudge";
 import { deriveHomeStatus } from "@/lib/homeStatus";
 import { scorePlace } from "@/lib/recommend/score";
 import { easternDateKey } from "@/lib/recommend/filter";
-import { exposurePenalty, nextExposureState, type ExposureState } from "@/lib/recommend/exposure";
+import { exposurePenalty, type ExposureState } from "@/lib/recommend/exposure";
 import type { PoppyProfile, RecommendationConstraints } from "@/lib/recommend/types";
 import type { FeedEvent, EventComment, Place, PlaceTip, RsvpStatus } from "@/types";
 
@@ -22,7 +21,7 @@ type Weather = { temperature: number; apparentTemperature: number; precipitation
 const PLACE_CONTEXT_COLUMNS = "id, is_enclosed, has_changing_table, nursing_friendly, stroller_accessible, food_onsite, quiet_or_sensory_friendly, parking_notes, best_time_note, typical_crowd_note, what_to_bring, lat, lng";
 const CANDIDATE_POOL_SIZE = 12;
 
-function todayEventScore(event: TodayEvent, childAgeMonths: number | null, weather: Weather | null) {
+function todayEventScore(event: TodayEvent, childAgeMonths: number | null) {
   let score = 0;
   if (event.content_status === "keep") score += 20;
   if (event.geography_tier === "pasco") score += 12;
@@ -36,16 +35,6 @@ function todayEventScore(event: TodayEvent, childAgeMonths: number | null, weath
   }
   const experienceBoosts: Record<string, number> = { community_helper: 24, animal: 22, vehicle: 22, storytime_experience: 20, sensory: 18, hands_on: 18, music_movement: 15, general: 0 };
   score += experienceBoosts[event.experience_type ?? "general"] ?? 0;
-  if (weather) {
-    const wet = weather.precipitationProbability >= 60 || weather.weatherCode >= 80;
-    const hot = weather.apparentTemperature >= 92;
-    const warm = weather.apparentTemperature >= 86;
-    if (event.weather_fit === "indoor" && (wet || hot)) score += 18;
-    if (event.weather_fit === "water" && hot) score += 14;
-    if (event.weather_fit === "outdoor" && wet) score -= 18;
-    if (event.weather_fit === "outdoor" && hot) score -= 8;
-    if (event.weather_fit === "outdoor" && warm && !wet) score += 2;
-  }
   if (event.registration_required) score -= 2;
   return score;
 }
@@ -122,10 +111,7 @@ export default async function TodayPage(props: PageProps<"/today">) {
   const placeIdsForEvents = [...new Set(rawEventList.map((e) => e.place_id).filter((id): id is string => Boolean(id)))];
   const { data: eventPlaces } = placeIdsForEvents.length ? await supabase.from("places").select(PLACE_CONTEXT_COLUMNS).in("id", placeIdsForEvents) : { data: [] };
   const eventPlaceById = new Map((eventPlaces ?? []).map((p) => [p.id, p as Partial<Place>]));
-  const weatherByEventId = new Map<string, Weather | null>();
-  await Promise.all(rawEventList.map(async (event) => { const lat = event.lat ?? (event.place_id ? eventPlaceById.get(event.place_id)?.lat : null); const lng = event.lng ?? (event.place_id ? eventPlaceById.get(event.place_id)?.lng : null); if (lat == null || lng == null) { weatherByEventId.set(event.id, null); return; } weatherByEventId.set(event.id, await getWeatherAtLocation({ lat, lng }, event.starts_at)); }));
-  const homeWeather = home ? await getWeatherAtLocation(home, now.toISOString()) : null;
-  const rawRanked = [...rawEventList].sort((a, b) => todayEventScore(b, myProfile?.child_age_months ?? null, weatherByEventId.get(b.id) ?? null) - todayEventScore(a, myProfile?.child_age_months ?? null, weatherByEventId.get(a.id) ?? null));
+  const rawRanked = [...rawEventList].sort((a, b) => todayEventScore(b, myProfile?.child_age_months ?? null) - todayEventScore(a, myProfile?.child_age_months ?? null));
   const eventList = dedupeTodayEvents(rawRanked).slice(0, CANDIDATE_POOL_SIZE);
   const eventIds = eventList.map((e) => e.id);
 
@@ -154,9 +140,9 @@ export default async function TodayPage(props: PageProps<"/today">) {
   for (const c of commentRows) { const list = commentsByEvent[c.event_id] ?? []; list.push({ ...c, display_name: profileById.get(c.user_id)?.display_name ?? "Someone" }); commentsByEvent[c.event_id] = list; }
   const eventTipsByPlaceId: Record<string, (PlaceTip & { display_name: string })[]> = {}; const eventTipsByEventId: Record<string, (PlaceTip & { display_name: string })[]> = {};
   for (const t of eventTipRows) { const display = { ...t, display_name: profileById.get(t.user_id)?.display_name ?? "Someone" }; if (t.place_id) { const list = eventTipsByPlaceId[t.place_id] ?? []; list.push(display); eventTipsByPlaceId[t.place_id] = list; } else if (t.event_id) { const list = eventTipsByEventId[t.event_id] ?? []; list.push(display); eventTipsByEventId[t.event_id] = list; } }
-  const eventDistanceById = new Map<string, { km: number; driveMinutes?: number }>();
-  if (home) { const routingProvider = getRoutingProvider(); const geolocatedEvents = eventList.map((e) => ({ event: e, lat: e.lat ?? (e.place_id ? eventPlaceById.get(e.place_id)?.lat : null), lng: e.lng ?? (e.place_id ? eventPlaceById.get(e.place_id)?.lng : null) })).filter((e): e is { event: TodayEvent; lat: number; lng: number } => e.lat != null && e.lng != null); let driveResults: (DriveTimeResult | null)[] | null = null; if (routingProvider && geolocatedEvents.length) driveResults = await routingProvider.getDriveTimes(home, geolocatedEvents.map((e) => ({ lat: e.lat, lng: e.lng }))); geolocatedEvents.forEach((e, i) => { const drive = driveResults?.[i]; eventDistanceById.set(e.event.id, { km: distanceKm(home.lat, home.lng, e.lat, e.lng), driveMinutes: drive?.durationMinutes }); }); }
-  const eventBundles: EventBundle[] = eventList.map((event) => { const proposedBy = event.proposed_by_group && event.added_by ? { user_id: event.added_by, display_name: profileById.get(event.added_by)?.display_name ?? "Someone" } : null; const place = event.place_id ? (eventPlaceById.get(event.place_id) ?? null) : null; const duringNap = overlapsNapWindow(event.starts_at, event.ends_at, myProfile?.nap_start ?? null, myProfile?.nap_end ?? null); const tips = event.place_id ? (eventTipsByPlaceId[event.place_id] ?? []) : (eventTipsByEventId[event.id] ?? []); const eventWeather = weatherByEventId.get(event.id) ?? null; return { event, currentStatus: myRsvpByEvent[event.id] ?? null, currentNote: myNoteByEvent[event.id] ?? null, proposedBy, place: place as EventBundle["place"], duringNap, tips, comments: commentsByEvent[event.id] ?? [], attendees: rsvpsByEvent[event.id] ?? [], weatherSummary: eventWeather ? weatherSummary(eventWeather) : null, distance: eventDistanceById.get(event.id) }; });
+  const eventDistanceById = new Map<string, { km: number }>();
+  if (home) for (const event of eventList) { const lat = event.lat ?? (event.place_id ? eventPlaceById.get(event.place_id)?.lat : null); const lng = event.lng ?? (event.place_id ? eventPlaceById.get(event.place_id)?.lng : null); if (lat != null && lng != null) eventDistanceById.set(event.id, { km: distanceKm(home.lat, home.lng, lat, lng) }); }
+  const eventBundles: EventBundle[] = eventList.map((event) => { const proposedBy = event.proposed_by_group && event.added_by ? { user_id: event.added_by, display_name: profileById.get(event.added_by)?.display_name ?? "Someone" } : null; const place = event.place_id ? (eventPlaceById.get(event.place_id) ?? null) : null; const duringNap = overlapsNapWindow(event.starts_at, event.ends_at, myProfile?.nap_start ?? null, myProfile?.nap_end ?? null); const tips = event.place_id ? (eventTipsByPlaceId[event.place_id] ?? []) : (eventTipsByEventId[event.id] ?? []); return { event, currentStatus: myRsvpByEvent[event.id] ?? null, currentNote: myNoteByEvent[event.id] ?? null, proposedBy, place: place as EventBundle["place"], duringNap, tips, comments: commentsByEvent[event.id] ?? [], attendees: rsvpsByEvent[event.id] ?? [], weatherSummary: null, distance: eventDistanceById.get(event.id) }; });
 
   const { data: places } = await supabase.from("places").select("*").eq("active", true).order("name", { ascending: true });
   let placeList = (places ?? []) as Place[];
@@ -165,13 +151,9 @@ export default async function TodayPage(props: PageProps<"/today">) {
   const straightLineByPlaceId = new Map<string, number>();
   if (home) for (const p of placeList) if (p.lat != null && p.lng != null) straightLineByPlaceId.set(p.id, distanceKm(home.lat, home.lng, p.lat, p.lng));
   const todayPlaceCandidates = home ? [...placeList].sort((a, b) => { const aKey = straightLineByPlaceId.get(a.id); const bKey = straightLineByPlaceId.get(b.id); if (aKey == null) return 1; if (bKey == null) return -1; return aKey - bKey; }).slice(0, todayCandidateLimit) : placeList.slice(0, todayCandidateLimit);
-  const driveTimeByPlaceId = new Map<string, DriveTimeResult>();
-  if (home) { const routingProvider = getRoutingProvider(); if (routingProvider) { const geolocated = todayPlaceCandidates.filter((p) => p.lat != null && p.lng != null); const results = await routingProvider.getDriveTimes(home, geolocated.map((p) => ({ lat: p.lat as number, lng: p.lng as number }))); if (results) geolocated.forEach((p, i) => { const result = results[i]; if (result) driveTimeByPlaceId.set(p.id, result); }); } }
-  // Rank the geographic candidate pool by real relevance (age fit, distance,
-  // interests, freshness — see scorePlace) rather than distance alone, and
-  // apply a capped same-user exposure penalty so a place shown several days
-  // running gradually loses to a comparable fresh alternative instead of
-  // this section showing the identical 5 places forever (Phase 2 handoff).
+  const driveTimeByPlaceId = new Map<string, number>();
+  // Drive time is intentionally excluded from the initial Today render. Straight-line
+  // distance is sufficient for the first paint; drive-time enrichment can be added later.
   const todayDateKey = easternDateKey(now);
   const candidateIds = todayPlaceCandidates.map((p) => p.id);
   const { data: exposureRows } = candidateIds.length ? await supabase.from("place_exposure").select("place_id, last_shown_at, consecutive_days").eq("user_id", user.id).in("place_id", candidateIds) : { data: [] };
@@ -187,21 +169,10 @@ export default async function TodayPage(props: PageProps<"/today">) {
   }).sort((a, b) => b.finalScore - a.finalScore);
   placeList = rankedPlaceCandidates.slice(0, todayDisplayLimit).map((r) => r.place);
 
-  if (placeList.length) {
-    const upserts = placeList.map((p) => {
-      const next = nextExposureState(exposureByPlaceId.get(p.id) ?? null, todayDateKey);
-      return { user_id: user.id, place_id: p.id, last_shown_at: next.lastShownAt, consecutive_days: next.consecutiveDays };
-    });
-    const { error: exposureError } = await supabase.from("place_exposure").upsert(upserts, { onConflict: "user_id,place_id" });
-    if (exposureError) console.error("[today] place exposure upsert failed", exposureError.message);
-  }
-
   const placeIds = placeList.map((p) => p.id);
   const { data: placeTips } = activeGroupId && placeIds.length ? await supabase.from("place_tips").select("*").eq("group_id", activeGroupId).in("place_id", placeIds) : { data: [] };
   const placeTipsByPlaceId: Record<string, (PlaceTip & { display_name: string })[]> = {};
   for (const t of (placeTips ?? []) as PlaceTip[]) { if (!t.place_id) continue; const list = placeTipsByPlaceId[t.place_id] ?? []; list.push({ ...t, display_name: profileById.get(t.user_id)?.display_name ?? "Someone" }); placeTipsByPlaceId[t.place_id] = list; }
-  const weatherByPlaceId = new Map<string, Weather | null>();
-  await Promise.all(placeList.map(async (place) => { if (place.lat == null || place.lng == null) { weatherByPlaceId.set(place.id, null); return; } weatherByPlaceId.set(place.id, await getWeatherAtLocation({ lat: place.lat, lng: place.lng }, now.toISOString())); }));
   const todayLabel = todayStart.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
   const { text: greetingText, emoji: greetingEmoji } = greeting(now);
   const name = firstName(myProfile?.display_name);
@@ -211,13 +182,13 @@ export default async function TodayPage(props: PageProps<"/today">) {
       <div className="w-full max-w-2xl">
         <Nav email={user.email ?? ""} />
         <h1 className="font-display mb-1 text-2xl font-bold text-zinc-900">{greetingText}{name ? `, ${name}` : ""} {greetingEmoji}</h1>
-        <p className="mb-6 text-sm text-zinc-500">{todayLabel}{homeWeather && <> · {weatherSummary(homeWeather)}</>}</p>
+        <p className="mb-6 text-sm text-zinc-500">{todayLabel}</p>
         {paramError && <p className="mb-6 text-sm text-red-600">{paramError}</p>}
         {groupList.length > 1 && <div className="mb-6 flex flex-wrap items-center gap-2 text-sm"><span className="text-zinc-500">Group:</span>{groupList.map((g) => <a key={g.id} href={`/today?group=${g.id}`} className={g.id === activeGroupId ? "rounded-full bg-zinc-900 px-3 py-1 font-medium text-white" : "rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:border-zinc-500"}>{g.name}</a>)}</div>}
         <HomeAddressNudge status={homeStatus} purpose="see how far places are from you" />
         <div className="mb-8"><PoppyTodayEntry childName={myProfile?.child_name?.trim() ? myProfile.child_name.trim() : null} /></div>
         <section className="mb-8"><div className="mb-3 flex items-end justify-between gap-4"><div><h2 className="font-display text-lg font-bold text-zinc-900">Happening today</h2><p className="mt-1 text-xs text-zinc-500">A few picks, not a calendar.</p></div><a href="/calendar" className="text-xs font-medium text-zinc-600 underline underline-offset-2">See all</a></div><TodayFeed bundles={eventBundles} currentUserId={user.id} currentUserName={currentUserName} hasActiveGroup={Boolean(activeGroupId)} activeGroupId={activeGroupId} activeGroupName={activeGroupName} activeGroupMemberIds={activeGroupMemberIds} roster={roster} childAgeMonths={myProfile?.child_age_months ?? null} /></section>
-        <section><div className="mb-3 flex items-end justify-between gap-4"><div><h2 className="font-display text-lg font-bold text-zinc-900">Good options for your family</h2><p className="mt-1 text-xs text-zinc-500">A few good ideas from Poppy.</p></div><a href="/places" className="rounded-full bg-rose-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700">Ask Poppy</a></div>{placeList.length === 0 ? <p className="rounded-xl border border-dashed border-zinc-200 px-4 py-5 text-sm text-zinc-500">No curated places yet in your market — check back soon, or ask Poppy for a different plan.</p> : <div className="flex flex-col gap-4">{placeList.map((place) => <PlaceCard key={place.id} place={place} groupId={activeGroupId} groupName={activeGroupName} currentUserId={user.id} tips={placeTipsByPlaceId[place.id] ?? []} distance={straightLineByPlaceId.has(place.id) ? { km: straightLineByPlaceId.get(place.id)!, driveMinutes: driveTimeByPlaceId.get(place.id)?.durationMinutes } : undefined} childAgeMonths={myProfile?.child_age_months ?? null} weather={weatherByPlaceId.get(place.id) ?? null} />)}</div>}</section>
+        <section><div className="mb-3 flex items-end justify-between gap-4"><div><h2 className="font-display text-lg font-bold text-zinc-900">Good options for your family</h2><p className="mt-1 text-xs text-zinc-500">A few good ideas from Poppy.</p></div><a href="/places" className="rounded-full bg-rose-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700">Ask Poppy</a></div>{placeList.length === 0 ? <p className="rounded-xl border border-dashed border-zinc-200 px-4 py-5 text-sm text-zinc-500">No curated places yet in your market — check back soon, or ask Poppy for a different plan.</p> : <div className="flex flex-col gap-4">{placeList.map((place) => <PlaceCard key={place.id} place={place} groupId={activeGroupId} groupName={activeGroupName} currentUserId={user.id} tips={placeTipsByPlaceId[place.id] ?? []} distance={straightLineByPlaceId.has(place.id) ? { km: straightLineByPlaceId.get(place.id)! } : undefined} childAgeMonths={myProfile?.child_age_months ?? null} weather={null} />)}</div>}</section>
       </div>
     </div>
   );
