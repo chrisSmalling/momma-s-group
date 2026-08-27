@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import EventCard from "@/components/EventCard";
 import ProposalBanner from "@/components/ProposalBanner";
+import Link from "next/link";
 import type { FeedEvent, EventComment, Place, PlaceTip, RsvpStatus } from "@/types";
 
 type Attendee = { user_id: string; status: RsvpStatus; display_name: string; avatar_color: string };
@@ -34,11 +35,14 @@ export default function TodayFeed({ bundles, currentUserId, currentUserName, has
   const activeFilter = filters.find((f) => f.id === selectedFilter) ?? filters[0];
   const visible = bundles.filter(activeFilter.match);
   const proposed = bundles.filter((b) => b.proposedBy && b.currentStatus == null);
+  const friendEvents = bundles.filter((b) => b.attendees.some((a) => a.user_id !== currentUserId && activeGroupMemberIds.includes(a.user_id) && a.status === "going"));
+  const friendSummary = friendEvents.slice(0, 3);
   const shown = expanded ? visible : visible.slice(0, 5);
   const hasMore = visible.length > 5;
 
   return <>
     {proposed.length > 0 && <ProposalBanner proposals={proposed.map((b) => ({ id: b.event.id, title: b.event.title, startsAt: b.event.starts_at, proposerName: b.proposedBy?.user_id === currentUserId ? "You" : (b.proposedBy?.display_name ?? "Someone in your group") }))} />}
+    {hasActiveGroup && friendSummary.length > 0 && <section className="mb-5 rounded-2xl border border-rose-200 bg-rose-50/70 p-4" aria-label="Your friends are going"><div className="flex items-start justify-between gap-3"><div><div className="text-[11px] font-extrabold uppercase tracking-wide text-rose-700">👋 Your group is going</div><h3 className="mt-1 font-display text-lg font-bold text-zinc-950">Your friends are making plans</h3><p className="mt-1 text-xs text-zinc-600">See where moms in your group are actually going today.</p></div><button type="button" onClick={() => setSelectedFilter("friends")} className="shrink-0 rounded-full bg-white px-3 py-2 text-xs font-bold text-rose-700 shadow-sm">See all</button></div><div className="mt-3 space-y-2">{friendSummary.map((b) => { const friends=b.attendees.filter((a)=>a.user_id!==currentUserId&&activeGroupMemberIds.includes(a.user_id)&&a.status==="going"); const names=friends.slice(0,2).map((f)=>f.display_name.split(/\s+/)[0]).join(" + "); const extra=Math.max(0,friends.length-2); return <Link key={b.event.id} href={`/calendar?event=${b.event.id}`} className="block rounded-xl border border-rose-100 bg-white p-3 transition hover:border-rose-300"><div className="flex items-center justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-bold text-zinc-900">{b.event.title}</div><div className="mt-1 text-xs font-semibold text-zinc-500">{names}{extra>0?` + ${extra}`:""} {friends.length===1?"is":"are"} going{b.event.venue?` · ${b.event.venue}`:""}</div></div><span className="shrink-0 text-lg">👥</span></div></Link>); })}</div></section>}
     <div className="-mx-4 mb-5 overflow-x-auto px-4 pb-1" role="tablist" aria-label="Today filters">
       <div className="flex min-w-max gap-2">
         {filters.map((filter) => { const active = filter.id === activeFilter.id; return <button key={filter.id} type="button" role="tab" aria-selected={active} onClick={() => { setSelectedFilter(filter.id); setExpanded(false); }} className={active ? "min-h-11 shrink-0 rounded-full bg-rose-600 px-4 py-2 text-sm font-bold text-white" : "min-h-11 shrink-0 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:border-zinc-400"}>{filter.label}</button>; })}
