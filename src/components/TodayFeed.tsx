@@ -6,6 +6,8 @@ import ProposalBanner from "@/components/ProposalBanner";
 import Link from "next/link";
 import type { FeedEvent, EventComment, Place, PlaceTip, RsvpStatus } from "@/types";
 
+// Keep this component formatted as explicit JSX blocks so Turbopack can parse the social feed reliably.
+
 type Attendee = {
   user_id: string;
   status: RsvpStatus;
