@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { FeedEvent, Place } from "@/types";
+import type { Place } from "@/types";
 import { parseIntent } from "./intent";
 import { filterEvents, filterPlaces, eventWithinTimeframe, eventMatchesTimeOfDay } from "./filter";
 import { recommend } from "./recommend";
 import { buildCacheKey } from "./cacheKey";
-import type { PoppyProfile, RecommendationConstraints } from "./types";
+import type { PoppyCandidate, PoppyProfile, RecommendationConstraints } from "./types";
 
 // ---- Fixtures --------------------------------------------------------------
 
@@ -23,9 +23,9 @@ function makePlace(overrides: Partial<Place> = {}): Place {
   };
 }
 
-function makeEvent(overrides: Partial<FeedEvent> = {}): FeedEvent {
+function makeEvent(overrides: Partial<PoppyCandidate> = {}): PoppyCandidate {
   return {
-    id: "e1", title: "Storytime", description: "fun", venue: "Library", room_name: null,
+    kind: "event", id: "e1", title: "Storytime", description: "fun", venue: "Library", room_name: null,
     organizer: null, address: "2 Oak Ave", lat: 28.21, lng: -82.41, location_latitude: null,
     location_longitude: null, starts_at: "2026-08-27T15:00:00Z", ends_at: "2026-08-27T16:00:00Z",
     time_precision: "exact", time_unknown: false, cost: "Free", is_free: true, age_tags: [],
@@ -34,6 +34,25 @@ function makeEvent(overrides: Partial<FeedEvent> = {}): FeedEvent {
     source_url: null, content_status: "keep", geography_tier: "pasco", experience_type: "storytime_experience",
     weather_fit: "indoor", place_id: null, program_id: null, proposed_by_group: null,
     metro_area: "pasco", status: "published", last_verified_at: null, added_by: null,
+    hours: null, season_start: null, season_end: null,
+    ...overrides,
+  };
+}
+
+// Phase A: places flow through the same unified candidate shape as events,
+// with kind:"place" and no event-time — see recommend/types.ts.
+function makePlaceCandidate(overrides: Partial<PoppyCandidate> = {}): PoppyCandidate {
+  return {
+    kind: "place", id: "pc1", title: "Test Playground", description: "shady", venue: "Test Playground", room_name: null,
+    organizer: null, address: "1 Main St", lat: 28.2, lng: -82.4, location_latitude: null,
+    location_longitude: null, starts_at: null, ends_at: null,
+    time_precision: "unknown", time_unknown: true, cost: "Free", is_free: true, age_tags: [],
+    age_min_months: 12, age_max_months: 60, age_band: null, is_outdoor: true, what_to_bring: [],
+    registration_required: null, registration_url: null, source: "place", source_id: null,
+    source_url: null, content_status: null, geography_tier: "verified", experience_type: null,
+    weather_fit: "outdoor", place_id: "p1", program_id: null, proposed_by_group: null,
+    metro_area: "pasco", status: "published", last_verified_at: null, added_by: null,
+    hours: null, season_start: null, season_end: null,
     ...overrides,
   };
 }
@@ -168,61 +187,61 @@ describe("hard filters", () => {
 
 describe("recommend()", () => {
   it("returns an empty list when nothing matches the mood", () => {
-    const place = makePlace({ category_tags: ["playground"] });
-    const { candidates } = recommend({ places: [place], events: [] }, { ...anyConstraints, mood: "water" }, baseProfile, origin, null, NOW);
+    const place = makePlaceCandidate();
+    const { candidates } = recommend({ events: [place] }, { ...anyConstraints, mood: "water" }, baseProfile, origin, null, NOW);
     expect(candidates).toHaveLength(0);
   });
 
   it("ranks a closer, age-fit, free place above a far, off-age one", () => {
-    const good = makePlace({ id: "good", lat: 28.2, lng: -82.4, age_min_months: 12, age_max_months: 48, price_note: "Free" });
-    const worse = makePlace({ id: "worse", lat: 28.6, lng: -82.9, age_min_months: 120, age_max_months: 180, price_note: "$40" });
-    const { candidates } = recommend({ places: [good, worse], events: [] }, anyConstraints, baseProfile, origin, null, NOW);
+    const good = makePlaceCandidate({ id: "good", lat: 28.2, lng: -82.4, age_min_months: 12, age_max_months: 48, cost: "Free", is_free: true });
+    const worse = makePlaceCandidate({ id: "worse", lat: 28.6, lng: -82.9, age_min_months: 120, age_max_months: 180, cost: "$40", is_free: false });
+    const { candidates } = recommend({ events: [good, worse] }, anyConstraints, baseProfile, origin, null, NOW);
     expect(candidates[0].id).toBe("good");
   });
 
   it("boosts places matching a stated child interest", () => {
-    const animals = makePlace({ id: "zoo", category_tags: ["animals"], place_type: "zoo" });
-    const plain = makePlace({ id: "plain", category_tags: ["playground"] });
+    const animals = makePlaceCandidate({ id: "zoo", experience_type: "animal" });
+    const plain = makePlaceCandidate({ id: "plain", experience_type: null });
     const profile = { ...baseProfile, childInterests: ["animals"] };
-    const { candidates } = recommend({ places: [animals, plain], events: [] }, anyConstraints, profile, origin, null, NOW);
+    const { candidates } = recommend({ events: [animals, plain] }, anyConstraints, profile, origin, null, NOW);
     expect(candidates[0].id).toBe("zoo");
   });
 
   it("explains a place recommendation using real age, interest, distance, and cost signals", () => {
-    const place = makePlace({ category_tags: ["animals"], price_note: "Free", is_outdoor: true });
+    const place = makePlaceCandidate({ experience_type: "animal", cost: "Free", is_free: true, is_outdoor: true });
     const profile = { ...baseProfile, childInterests: ["animals"] };
-    const { candidates } = recommend({ places: [place], events: [] }, anyConstraints, profile, origin, null, NOW);
+    const { candidates } = recommend({ events: [place] }, anyConstraints, profile, origin, null, NOW);
     expect(candidates[0].reason).toContain("good fit for your 2-year-old");
-    expect(candidates[0].reason).toContain("interest in animals");
+    expect(candidates[0].reason).toContain("matches animals");
     expect(candidates[0].reason).toContain("free");
-    expect(candidates[0].reason).toContain("miles away");
+    expect(candidates[0].reason).toContain("close by");
   });
 
   it("explains an event recommendation using real age and interest signals", () => {
     const event = makeEvent({ experience_type: "storytime_experience", is_outdoor: false, is_free: true });
     const profile = { ...baseProfile, childInterests: ["books"] };
-    const { candidates } = recommend({ places: [], events: [event] }, anyConstraints, profile, origin, null, NOW);
+    const { candidates } = recommend({ events: [event] }, anyConstraints, profile, origin, null, NOW);
     expect(candidates[0].reason).toContain("great for your 2-year-old");
     expect(candidates[0].reason).toContain("books");
     expect(candidates[0].reason).toContain("free");
   });
 
   it("caps results at five", () => {
-    const places = Array.from({ length: 9 }, (_, i) => makePlace({ id: `p${i}`, lat: 28.2 + i * 0.001, lng: -82.4 }));
-    const { candidates } = recommend({ places, events: [] }, anyConstraints, baseProfile, origin, null, NOW);
+    const places = Array.from({ length: 9 }, (_, i) => makePlaceCandidate({ id: `p${i}`, lat: 28.2 + i * 0.001, lng: -82.4 }));
+    const { candidates } = recommend({ events: places }, anyConstraints, baseProfile, origin, null, NOW);
     expect(candidates.length).toBe(5);
   });
 
   it("produces a deterministic order for identical inputs", () => {
-    const places = [makePlace({ id: "a" }), makePlace({ id: "b", lat: 28.25 })];
-    const first = recommend({ places, events: [] }, anyConstraints, baseProfile, origin, null, NOW).candidates.map((c) => c.id);
-    const second = recommend({ places, events: [] }, anyConstraints, baseProfile, origin, null, NOW).candidates.map((c) => c.id);
+    const places = [makePlaceCandidate({ id: "a" }), makePlaceCandidate({ id: "b", lat: 28.25 })];
+    const first = recommend({ events: places }, anyConstraints, baseProfile, origin, null, NOW).candidates.map((c) => c.id);
+    const second = recommend({ events: places }, anyConstraints, baseProfile, origin, null, NOW).candidates.map((c) => c.id);
     expect(first).toEqual(second);
   });
 
   it("never marks a place candidate free unless the cost says so", () => {
-    const paid = makePlace({ price_note: "$12" });
-    const { candidates } = recommend({ places: [paid], events: [] }, anyConstraints, baseProfile, origin, null, NOW);
+    const paid = makePlaceCandidate({ cost: "$12", is_free: false });
+    const { candidates } = recommend({ events: [paid] }, anyConstraints, baseProfile, origin, null, NOW);
     expect(candidates[0].isFree).toBe(false);
   });
 });

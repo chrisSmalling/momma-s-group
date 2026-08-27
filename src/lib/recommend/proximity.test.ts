@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { FeedEvent } from "@/types";
 import { eventWithinTimeframe, filterEvents } from "./filter";
 import { parseIntent } from "./intent";
-import type { RecommendationConstraints } from "./types";
+import type { PoppyCandidate, RecommendationConstraints } from "./types";
 
 const base: RecommendationConstraints={mood:"all",indoor:"either",budget:"any",maxMiles:null,maxPriceDollars:null,distanceExplicit:false,timeframe:"any",timeOfDay:"any",indoorExplicit:false};
 const origin={lat:28.2,lng:-82.4};
-function event(lat:number|null,lng:number|null,startsAt="2026-08-27T10:00:00-04:00",endsAt?:string,experienceType="general"):FeedEvent{return{id:crypto.randomUUID(),title:"Activity",description:null,venue:"Venue",room_name:null,organizer:null,address:"1 Main St",lat,lng,location_latitude:null,location_longitude:null,starts_at:startsAt,ends_at:endsAt??new Date(new Date(startsAt).getTime()+60*60*1000).toISOString(),time_precision:"exact",time_unknown:false,cost:"Free",is_free:true,age_tags:[],age_min_months:null,age_max_months:null,age_band:null,is_outdoor:false,what_to_bring:[],registration_required:false,registration_url:null,source:"test",source_id:null,source_url:null,content_status:"keep",geography_tier:"pasco",experience_type:experienceType,weather_fit:"indoor",place_id:null,program_id:null,proposed_by_group:null,metro_area:"pasco",status:"published",last_verified_at:null,added_by:null};}
+function event(lat:number|null,lng:number|null,startsAt="2026-08-27T10:00:00-04:00",endsAt?:string,experienceType="general"):PoppyCandidate{return{kind:"event",id:crypto.randomUUID(),title:"Activity",description:null,venue:"Venue",room_name:null,organizer:null,address:"1 Main St",lat,lng,location_latitude:null,location_longitude:null,starts_at:startsAt,ends_at:endsAt??new Date(new Date(startsAt).getTime()+60*60*1000).toISOString(),time_precision:"exact",time_unknown:false,cost:"Free",is_free:true,age_tags:[],age_min_months:null,age_max_months:null,age_band:null,is_outdoor:false,what_to_bring:[],registration_required:false,registration_url:null,source:"test",source_id:null,source_url:null,content_status:"keep",geography_tier:"pasco",experience_type:experienceType,weather_fit:"indoor",place_id:null,program_id:null,proposed_by_group:null,metro_area:"pasco",status:"published",last_verified_at:null,added_by:null,hours:null,season_start:null,season_end:null};}
+function place(overrides:Partial<PoppyCandidate>={}):PoppyCandidate{return{...event(28.2,-82.4),kind:"place",starts_at:null,ends_at:null,...overrides};}
 
 describe("proximity semantics",()=>{
  it("marks close and near-me language as explicit proximity",()=>{expect(parseIntent("what's close?").distanceExplicit).toBe(true);expect(parseIntent("find something near me").distanceExplicit).toBe(true);});
@@ -20,5 +20,5 @@ describe("Eastern calendar semantics",()=>{
  it("keeps tomorrow anchored to Eastern local dates",()=>{const now=new Date("2026-08-28T02:30:00Z");expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-28T23:00:00-04:00"),"tomorrow",now)).toBe(true);});
  it("handles Friday-to-Sunday weekend boundaries",()=>{const now=new Date("2026-08-28T16:00:00Z");expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-29T10:00:00-04:00"),"weekend",now)).toBe(true);expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-30T10:00:00-04:00"),"weekend",now)).toBe(true);expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-31T10:00:00-04:00"),"weekend",now)).toBe(false);});
  it("does not leak Monday into a Sunday weekend request",()=>{const now=new Date("2026-08-30T15:00:00-04:00");expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-30T16:00:00-04:00"),"weekend",now)).toBe(true);expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-31T10:00:00-04:00"),"weekend",now)).toBe(false);});
- it("treats evergreen places as available across calendar filters",()=>{const now=new Date("2026-08-28T16:00:00Z");expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-28T12:00:00-04:00",undefined,"evergreen_place"),"tomorrow",now)).toBe(true);expect(eventWithinTimeframe(event(28.2,-82.4,"2026-08-28T12:00:00-04:00",undefined,"evergreen_place"),"weekend",now)).toBe(true);});
+ it("treats a year-round, hours-unknown place as available across calendar filters",()=>{const now=new Date("2026-08-28T16:00:00Z");expect(eventWithinTimeframe(place(),"tomorrow",now)).toBe(true);expect(eventWithinTimeframe(place(),"weekend",now)).toBe(true);expect(eventWithinTimeframe(place(),"today",now)).toBe(true);});
 });
