@@ -1,4 +1,4 @@
-name: Phase 1 UI Audit — Browserbase
+name: Phase 1 UI Audit — Local Playwright
 
 on:
   push:
@@ -19,12 +19,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  browserbase-audit:
-    name: Browserbase mobile UI audit
+  playwright-audit:
+    name: Authenticated mobile UI audit
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
-      BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
       QA_BASE_URL: ${{ inputs.base_url || 'https://momma-s-group.vercel.app' }}
       QA_EMAIL: ${{ secrets.QA_EMAIL }}
       QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
@@ -41,16 +40,18 @@ jobs:
           cache: npm
 
       - name: Install audit dependencies
-        run: npm install --no-save @browserbasehq/sdk playwright-core
+        run: npm install --no-save playwright
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Verify QA credentials
         run: |
-          test -n "$BROWSERBASE_API_KEY" || { echo "BROWSERBASE_API_KEY GitHub Actions secret is missing."; exit 1; }
           test -n "$QA_EMAIL" || { echo "QA_EMAIL GitHub Actions secret is missing."; exit 1; }
           test -n "$QA_PASSWORD" || { echo "QA_PASSWORD GitHub Actions secret is missing."; exit 1; }
 
       - name: Run authenticated read-only production UI audit
-        run: node qa/browserbase-phase1-readonly.mjs
+        run: node qa/local-phase1-readonly.mjs
 
       - name: Upload UI audit screenshots
         if: always()
