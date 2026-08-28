@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { overlapsNapWindow } from "@/lib/nap";
 import { distanceKm } from "@/lib/distance";
 import { createClient } from "@/lib/supabase/server";
@@ -10,13 +11,12 @@ import HomeAddressNudge from "@/components/HomeAddressNudge";
 import { deriveHomeStatus } from "@/lib/homeStatus";
 import { scorePlace } from "@/lib/recommend/score";
 import { easternDateKey } from "@/lib/recommend/filter";
-import { exposurePenalty, type ExposureState } from "@/lib/recommend/exposure";
+import { exposurePenalty, nextExposureState, type ExposureState } from "@/lib/recommend/exposure";
 import type { PoppyProfile, RecommendationConstraints } from "@/lib/recommend/types";
 import type { FeedEvent, EventComment, Place, PlaceTip, RsvpStatus } from "@/types";
 
 type AttendeeDisplay = { user_id: string; status: RsvpStatus; display_name: string; avatar_color: string };
 type TodayEvent = FeedEvent;
-type Weather = { temperature: number; apparentTemperature: number; precipitationProbability: number; weatherCode: number };
 
 const PLACE_CONTEXT_COLUMNS = "id, is_enclosed, has_changing_table, nursing_friendly, stroller_accessible, food_onsite, quiet_or_sensory_friendly, parking_notes, best_time_note, typical_crowd_note, what_to_bring, lat, lng";
 const CANDIDATE_POOL_SIZE = 12;
@@ -52,35 +52,6 @@ function dedupeTodayEvents(events: TodayEvent[]) {
   return result;
 }
 
-async function getWeatherAtLocation(location: { lat: number; lng: number }, targetTime: string): Promise<Weather | null> {
-  try {
-    const url = new URL("https://api.open-meteo.com/v1/forecast");
-    url.searchParams.set("latitude", String(location.lat));
-    url.searchParams.set("longitude", String(location.lng));
-    url.searchParams.set("hourly", "temperature_2m,apparent_temperature,precipitation_probability,weather_code");
-    url.searchParams.set("temperature_unit", "fahrenheit");
-    url.searchParams.set("timezone", "America/New_York");
-    url.searchParams.set("forecast_days", "2");
-    const response = await fetch(url, { next: { revalidate: 1800 } });
-    if (!response.ok) return null;
-    const data = await response.json();
-    const eventDate = new Date(targetTime);
-    const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hour12: false }).formatToParts(eventDate);
-    const part = (name: string) => parts.find((p) => p.type === name)?.value ?? "";
-    const target = `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:00`;
-    const index = Array.isArray(data.hourly?.time) ? data.hourly.time.findIndex((t: string) => t === target) : -1;
-    if (index < 0) return null;
-    return { temperature: Number(data.hourly.temperature_2m[index]), apparentTemperature: Number(data.hourly.apparent_temperature[index]), precipitationProbability: Number(data.hourly.precipitation_probability[index] ?? 0), weatherCode: Number(data.hourly.weather_code[index] ?? 0) };
-  } catch { return null; }
-}
-
-function weatherSummary(weather: Weather) {
-  const wet = weather.precipitationProbability >= 60 || weather.weatherCode >= 80;
-  const hot = weather.apparentTemperature >= 92;
-  if (wet) return `🌧️ ${weather.precipitationProbability}% rain around then`;
-  if (hot) return `🔥 Feels like ${Math.round(weather.apparentTemperature)}°`;
-  return `☀️ ${Math.round(weather.temperature)}° around then`;
-}
 function firstName(displayName: string | null | undefined) { const trimmed = (displayName ?? "").trim(); return trimmed ? trimmed.split(/\s+/)[0] : null; }
 function greeting(now: Date) { const hour = now.getHours(); if (hour < 12) return { text: "Good morning", emoji: "☀️" }; if (hour < 17) return { text: "Good afternoon", emoji: "🌤️" }; return { text: "Good evening", emoji: "🌙" }; }
 
@@ -151,7 +122,6 @@ export default async function TodayPage(props: PageProps<"/today">) {
   const straightLineByPlaceId = new Map<string, number>();
   if (home) for (const p of placeList) if (p.lat != null && p.lng != null) straightLineByPlaceId.set(p.id, distanceKm(home.lat, home.lng, p.lat, p.lng));
   const todayPlaceCandidates = home ? [...placeList].sort((a, b) => { const aKey = straightLineByPlaceId.get(a.id); const bKey = straightLineByPlaceId.get(b.id); if (aKey == null) return 1; if (bKey == null) return -1; return aKey - bKey; }).slice(0, todayCandidateLimit) : placeList.slice(0, todayCandidateLimit);
-  const driveTimeByPlaceId = new Map<string, number>();
   // Drive time is intentionally excluded from the initial Today render. Straight-line
   // distance is sufficient for the first paint; drive-time enrichment can be added later.
   const todayDateKey = easternDateKey(now);
@@ -168,6 +138,23 @@ export default async function TodayPage(props: PageProps<"/today">) {
     return { place: p, finalScore: relevance - penalty };
   }).sort((a, b) => b.finalScore - a.finalScore);
   placeList = rankedPlaceCandidates.slice(0, todayDisplayLimit).map((r) => r.place);
+
+  // Record today's showing after the response is sent — a concurrent perf
+  // pass dropped this write outright while removing the render-blocking
+  // weather/routing calls nearby, which silently froze the Phase 2 rotation
+  // mechanism (exposureByPlaceId would never advance past whatever was last
+  // recorded). after() keeps the actual page render non-blocking while
+  // still updating place_exposure for tomorrow's ranking.
+  if (placeList.length) {
+    const upserts = placeList.map((p) => {
+      const next = nextExposureState(exposureByPlaceId.get(p.id) ?? null, todayDateKey);
+      return { user_id: user.id, place_id: p.id, last_shown_at: next.lastShownAt, consecutive_days: next.consecutiveDays };
+    });
+    after(async () => {
+      const { error: exposureError } = await supabase.from("place_exposure").upsert(upserts, { onConflict: "user_id,place_id" });
+      if (exposureError) console.error("[today] place exposure upsert failed", exposureError.message);
+    });
+  }
 
   const placeIds = placeList.map((p) => p.id);
   const { data: placeTips } = activeGroupId && placeIds.length ? await supabase.from("place_tips").select("*").eq("group_id", activeGroupId).in("place_id", placeIds) : { data: [] };
