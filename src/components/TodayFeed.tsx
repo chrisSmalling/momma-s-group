@@ -107,7 +107,7 @@ export default function TodayFeed({
       hasActiveGroup &&
       bundles.some((b) =>
         b.attendees.some(
-          (a) => activeGroupMemberIds.includes(a.user_id) && a.status === "going"
+          (a) => a.user_id !== currentUserId && activeGroupMemberIds.includes(a.user_id) && a.status === "going"
         )
       )
     ) {
@@ -116,7 +116,7 @@ export default function TodayFeed({
         label: "Friends going",
         match: (b) =>
           b.attendees.some(
-            (a) => activeGroupMemberIds.includes(a.user_id) && a.status === "going"
+            (a) => a.user_id !== currentUserId && activeGroupMemberIds.includes(a.user_id) && a.status === "going"
           ),
       });
     }
@@ -130,7 +130,7 @@ export default function TodayFeed({
     }
 
     return [...base, ...extras];
-  }, [bundles, hasActiveGroup, activeGroupMemberIds]);
+  }, [bundles, hasActiveGroup, activeGroupMemberIds, currentUserId]);
 
   const activeFilter = filters.find((f) => f.id === selectedFilter) ?? filters[0];
   const visible = bundles.filter(activeFilter.match);
@@ -206,7 +206,7 @@ export default function TodayFeed({
               return (
                 <Link
                   key={b.event.id}
-                  href={`/calendar?event=${b.event.id}`}
+                  href={`/events/${b.event.id}`}
                   className="block rounded-xl border border-rose-100 bg-white p-3 transition hover:border-rose-300"
                 >
                   <div className="flex items-center justify-between gap-3">
