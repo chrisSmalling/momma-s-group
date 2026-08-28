@@ -263,6 +263,21 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
   const nextMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
   const groupQuery = activeGroupId ? `&group=${activeGroupId}` : "";
 
+  // The Calendar's "Group" mode: any event an active-group member is
+  // going/maybe to. rsvpRows already carries everyone I share a group with
+  // (RLS), so this is a filter over data already fetched, not a new query.
+  const groupEventIds = [
+    ...new Set(
+      rsvpRows
+        .filter(
+          (r) =>
+            activeGroupMemberIds.includes(r.user_id) &&
+            (r.status === "going" || r.status === "maybe"),
+        )
+        .map((r) => r.event_id),
+    ),
+  ];
+
   // Built once here and handed to MonthCalendar as pre-rendered nodes so its
   // client-side search/filter/day-selection state has a single set of full
   // detail cards to show — not a second, always-unfiltered feed underneath.
@@ -360,6 +375,8 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
           activeGroupId={activeGroupId}
           childAgeMonths={myProfile?.child_age_months ?? null}
           plansHref={activeGroupId ? `/plans?group=${activeGroupId}` : "/plans"}
+          groupEventIds={groupEventIds}
+          currentUserId={user.id}
         />
       </div>
     </div>
