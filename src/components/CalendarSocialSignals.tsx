@@ -12,13 +12,14 @@ export default function CalendarSocialSignals() {
     let mounted = true;
     const supabase = createClient();
     const load = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("group_activity_feed")
         .select("event_id,title,starts_at,going_count")
         .gt("going_count", 0)
         .gte("starts_at", new Date().toISOString())
         .order("starts_at", { ascending: true })
         .limit(5);
+      if (error) console.error("[calendar] group activity feed failed", error.message);
       if (mounted) setItems((data ?? []) as Activity[]);
     };
     load();
