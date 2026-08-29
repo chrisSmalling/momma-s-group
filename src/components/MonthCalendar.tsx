@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import { isGoodAgeFit } from "@/lib/ageFit";
 import { etYMD, isInEtMonth, isOnEtDay, type EtYMD } from "@/lib/date";
+import PoppyNudge from "@/components/poppy/PoppyNudge";
 import type { FeedEvent, RsvpStatus } from "@/types";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -14,9 +15,20 @@ type View = "agenda" | "grid";
 const FILTERS: { id: Filter; label: string }[] = [{ id: "all", label: "All" }, { id: "free", label: "Free" }, { id: "indoor", label: "Indoor" }, { id: "outdoor", label: "Outdoor" }, { id: "mine", label: "Proposed" }, { id: "going", label: "I'm going" }, { id: "age_fit", label: "Good age fit" }];
 
 function EmptyState({ mode, plansHref, onShowAll }: { mode: Mode; plansHref: string; onShowAll: () => void }) {
-  if (mode === "mine") return <p className="mt-4 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-5 text-sm text-zinc-600">You haven&apos;t RSVP&apos;d or proposed anything this month. <button type="button" onClick={onShowAll} className="underline">Browse all events</button> to find something.</p>;
-  if (mode === "group") return <p className="mt-4 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-5 text-sm text-zinc-600">No one in your group has plans this month yet. <button type="button" onClick={onShowAll} className="underline">Browse all events</button> to propose something, or <Link href="/groups" className="underline">invite someone</Link>.</p>;
-  return <p className="mt-4 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-5 text-sm text-zinc-600">Nothing on the calendar this month. Try Prev/Next month, or <Link href={plansHref} className="underline">see what your group&apos;s up to</Link>.</p>;
+  const message =
+    mode === "mine" ? <>You haven&apos;t RSVP&apos;d or proposed anything this month. <button type="button" onClick={onShowAll} className="underline">Browse all events</button> to find something.</>
+    : mode === "group" ? <>No one in your group has plans this month yet. <button type="button" onClick={onShowAll} className="underline">Browse all events</button> to propose something, or <Link href="/groups" className="underline">invite someone</Link>.</>
+    : <>Nothing on the calendar this month. Try Prev/Next month, or <Link href={plansHref} className="underline">see what your group&apos;s up to</Link>.</>;
+  const nudge =
+    mode === "group"
+      ? { heading: "Get the ball rolling", subtext: "Ask Poppy for something to propose to your group.", ask: "Something fun for a group to do this weekend" }
+      : { heading: "Need an idea?", ask: "Something fun to do this month" };
+  return (
+    <div className="mt-4 flex flex-col gap-3">
+      <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-5 text-sm text-zinc-600">{message}</p>
+      <PoppyNudge heading={nudge.heading} subtext={nudge.subtext} ask={nudge.ask} />
+    </div>
+  );
 }
 
 // A human day header, today-forward: "Today"/"Tomorrow" take priority over
