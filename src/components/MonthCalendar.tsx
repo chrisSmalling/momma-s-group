@@ -14,19 +14,19 @@ type View = "agenda" | "grid";
 
 const FILTERS: { id: Filter; label: string }[] = [{ id: "all", label: "All" }, { id: "free", label: "Free" }, { id: "indoor", label: "Indoor" }, { id: "outdoor", label: "Outdoor" }, { id: "mine", label: "Proposed" }, { id: "going", label: "I'm going" }, { id: "age_fit", label: "Good age fit" }];
 
-function EmptyState({ mode, plansHref, onShowAll }: { mode: Mode; plansHref: string; onShowAll: () => void }) {
+function EmptyState({ mode, plansHref, onShowAll, activeGroupId }: { mode: Mode; plansHref: string; onShowAll: () => void; activeGroupId: string | null }) {
   const message =
     mode === "mine" ? <>You haven&apos;t RSVP&apos;d or proposed anything this month. <button type="button" onClick={onShowAll} className="underline">Browse all events</button> to find something.</>
     : mode === "group" ? <>No one in your group has plans this month yet. <button type="button" onClick={onShowAll} className="underline">Browse all events</button> to propose something, or <Link href="/groups" className="underline">invite someone</Link>.</>
     : <>Nothing on the calendar this month. Try Prev/Next month, or <Link href={plansHref} className="underline">see what your group&apos;s up to</Link>.</>;
   const nudge =
     mode === "group"
-      ? { heading: "Get the ball rolling", subtext: "Ask Poppy for something to propose to your group.", ask: "Something fun for a group to do this weekend" }
-      : { heading: "Need an idea?", ask: "Something fun to do this month" };
+      ? { heading: "Get the ball rolling", subtext: "Ask Poppy for something to propose to your group.", ask: "Something fun for a group to do this weekend", groupId: activeGroupId }
+      : { heading: "Need an idea?", ask: "Something fun to do this month", groupId: null };
   return (
     <div className="mt-4 flex flex-col gap-3">
       <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-5 text-sm text-zinc-600">{message}</p>
-      <PoppyNudge heading={nudge.heading} subtext={nudge.subtext} ask={nudge.ask} />
+      <PoppyNudge heading={nudge.heading} subtext={nudge.subtext} ask={nudge.ask} groupId={nudge.groupId} />
     </div>
   );
 }
@@ -97,7 +97,7 @@ export default function MonthCalendar({ year, month0, events, prevHref, nextHref
 
     {/* Mobile agenda: one grouped, day-headered list — the default mobile view. */}
     <div className={`${view === "agenda" ? "block" : "hidden"} sm:hidden`}>
-      {filtered.length === 0 ? <EmptyState mode={mode} plansHref={plansHref} onShowAll={() => switchMode("all")} /> : (
+      {filtered.length === 0 ? <EmptyState mode={mode} plansHref={plansHref} onShowAll={() => switchMode("all")} activeGroupId={activeGroupId} /> : (
         <div className="flex flex-col gap-5">
           {dayGroups.map((group) => (
             <div key={group.key}>
@@ -115,7 +115,7 @@ export default function MonthCalendar({ year, month0, events, prevHref, nextHref
     {/* Month grid: always on desktop, opt-in "zoom out" on mobile. */}
     <div className={`${view === "grid" ? "block" : "hidden"} sm:block`}>
       <div className="grid grid-cols-7 gap-px overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-200 text-sm shadow-sm">{WEEKDAYS.map((day) => <div key={day} className="bg-zinc-50 px-2 py-2 text-center text-xs font-bold text-zinc-500">{day}</div>)}{cells.map((day, i) => { const dayEvents = day !== null ? (eventsByDay.get(day) ?? []) : []; const selected = day !== null && selectedDay === day; const proposal = day !== null && proposalDays.has(day); return <div key={i} className={`min-h-20 px-2 py-2 ${day === null ? "bg-zinc-50" : proposal ? "bg-amber-50" : "bg-white"} ${selected ? "ring-2 ring-inset ring-rose-400" : ""}`}>{day !== null && <button type="button" onClick={() => dayEvents.length > 0 && selectDay(day)} disabled={dayEvents.length === 0} className={proposal ? "inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white" : isCurrentMonth && day === todayEt.d ? "inline-flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-xs font-bold text-white" : "inline-flex h-7 w-7 items-center justify-center text-xs font-semibold text-zinc-700 disabled:cursor-default"}>{day}</button>}{day !== null && <div className="mt-1 flex flex-col gap-0.5">{dayEvents.slice(0, 2).map((event) => { const p = event.proposed_by_group === activeGroupId; return <button key={event.id} type="button" onClick={() => selectDay(day)} className={event.status === "cancelled" ? "truncate rounded-lg bg-zinc-100 px-1.5 py-1 text-left text-[11px] text-zinc-400 line-through" : p ? "truncate rounded-lg bg-amber-200 px-1.5 py-1 text-left text-[11px] font-bold text-amber-950" : "truncate rounded-lg bg-rose-50 px-1.5 py-1 text-left text-[11px] font-semibold text-rose-800"} title={event.title}>{p ? "✨ " : ""}{event.title}</button>; })}{dayEvents.length > 2 && <button type="button" onClick={() => selectDay(day)} className="text-left text-[11px] font-semibold text-zinc-400">+{dayEvents.length - 2} more</button>}</div>}</div>; })}</div>
-      {filtered.length === 0 && <EmptyState mode={mode} plansHref={plansHref} onShowAll={() => switchMode("all")} />}
+      {filtered.length === 0 && <EmptyState mode={mode} plansHref={plansHref} onShowAll={() => switchMode("all")} activeGroupId={activeGroupId} />}
     </div>
 
     {/* Flat detail-card list: pairs with the grid (day-selection results on

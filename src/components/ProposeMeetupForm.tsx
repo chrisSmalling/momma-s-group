@@ -29,9 +29,11 @@ function toIsoInstant(localValue: string) {
 export default function ProposeMeetupForm({
   placeId,
   groups,
+  defaultGroupId,
 }: {
   placeId: string;
   groups: { id: string; name: string }[];
+  defaultGroupId?: string;
 }) {
   const [localDateTime, setLocalDateTime] = useState("");
 
@@ -59,7 +61,7 @@ export default function ProposeMeetupForm({
           <select
             name="group_id"
             required
-            defaultValue=""
+            defaultValue={defaultGroupId ?? ""}
             className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500"
           >
             <option value="" disabled>

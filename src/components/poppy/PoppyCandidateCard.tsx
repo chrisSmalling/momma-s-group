@@ -69,11 +69,14 @@ function AgeFit({ candidate }: { candidate: RecommendationCandidate }) {
   return <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-semibold text-zinc-500">Age fit unknown</span>;
 }
 
-export default function PoppyCandidateCard({ candidate, rankLabel }: { candidate: RecommendationCandidate; rankLabel: string }) {
+export default function PoppyCandidateCard({ candidate, rankLabel, groupId }: { candidate: RecommendationCandidate; rankLabel: string; groupId?: string | null }) {
   const when = formatWhen(candidate);
   const venue = candidate.address?.trim() || null;
   const description = candidate.description?.trim() || null;
   const why = buildGroundedWhy(candidate);
+  // Only the place->/propose href has a group picker to pre-select; event
+  // hrefs go to /events/[id], which doesn't take a group param.
+  const href = candidate.type === "place" && groupId ? `${candidate.href}?group=${encodeURIComponent(groupId)}` : candidate.href;
   return (
     <article className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition hover:border-rose-200 hover:shadow-md">
       <div className="p-4">
@@ -100,7 +103,7 @@ export default function PoppyCandidateCard({ candidate, rankLabel }: { candidate
         {why.length > 0 && <WhyPoppy candidate={candidate} />}
         <PracticalDetails candidate={candidate} />
         <div className="mt-4">
-          <Link href={candidate.href} className="inline-flex min-h-11 items-center justify-center rounded-full bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2">
+          <Link href={href} className="inline-flex min-h-11 items-center justify-center rounded-full bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2">
             {candidate.type === "place" ? "View & plan a meetup" : "View details"}
           </Link>
         </div>

@@ -8,11 +8,15 @@ export default function PoppyNudge({
   heading,
   subtext,
   ask,
+  groupId,
 }: {
   heading: string;
   subtext?: string;
   ask: string;
+  groupId?: string | null;
 }) {
+  const params = new URLSearchParams({ ask });
+  if (groupId) params.set("group", groupId);
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4">
       <div className="min-w-0">
@@ -20,7 +24,7 @@ export default function PoppyNudge({
         {subtext && <p className="mt-1 text-xs text-rose-800">{subtext}</p>}
       </div>
       <Link
-        href={`/places?ask=${encodeURIComponent(ask)}`}
+        href={`/places?${params.toString()}`}
         prefetch={false}
         className="shrink-0 rounded-full bg-rose-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700"
       >

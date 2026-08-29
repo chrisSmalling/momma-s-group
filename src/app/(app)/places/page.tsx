@@ -8,6 +8,7 @@ import { getWeatherContext } from "@/lib/weather-context";
 export default async function PlacesPage(props: PageProps<"/places">) {
   const searchParams = await props.searchParams;
   const ask = typeof searchParams.ask === "string" ? searchParams.ask : null;
+  const groupId = typeof searchParams.group === "string" ? searchParams.group : null;
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -34,7 +35,7 @@ export default async function PlacesPage(props: PageProps<"/places">) {
         <Nav email={user.email ?? ""} />
         <div className="flex flex-col gap-5">
           <WeatherContextCard weather={weather} />
-          <Poppy childName={childName} hasHome={hasSavedHome} initialMessage={ask} />
+          <Poppy childName={childName} hasHome={hasSavedHome} initialMessage={ask} groupId={groupId} />
           {!hasSavedHome && (
             <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
               Add your home address in <a href="/settings" className="underline">Settings</a> so Poppy can sort ideas by how close they are.

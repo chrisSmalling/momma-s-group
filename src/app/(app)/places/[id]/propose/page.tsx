@@ -10,6 +10,8 @@ export default async function ProposeMeetupPage(
   const searchParams = await props.searchParams;
   const paramError =
     typeof searchParams.error === "string" ? searchParams.error : undefined;
+  const requestedGroupId =
+    typeof searchParams.group === "string" ? searchParams.group : undefined;
 
   const supabase = await createClient();
   const {
@@ -57,7 +59,15 @@ export default async function ProposeMeetupPage(
             .
           </p>
         ) : (
-          <ProposeMeetupForm placeId={place.id} groups={groupList} />
+          <ProposeMeetupForm
+            placeId={place.id}
+            groups={groupList}
+            defaultGroupId={
+              requestedGroupId && groupList.some((g) => g.id === requestedGroupId)
+                ? requestedGroupId
+                : undefined
+            }
+          />
         )}
       </div>
     </div>
