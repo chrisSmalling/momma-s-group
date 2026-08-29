@@ -79,6 +79,20 @@ where status = 'published'
 -- ---------- Live venue canonicalization ----------------------
 create table if not exists public.venue_aliases (pattern text primary key, canonical text not null);
 
+-- ---------- Live group proposal notifications -----------------
+create table if not exists public.group_proposal_notifications (
+  id           uuid        primary key default gen_random_uuid(),
+  event_id     uuid        not null references public.events(id) on delete cascade,
+  group_id     uuid        not null references public.groups(id) on delete cascade,
+  recipient_id uuid        not null references auth.users(id)    on delete cascade,
+  created_at   timestamptz not null default now(),
+  read_at      timestamptz,
+  unique (event_id, recipient_id)
+);
+-- RLS: recipient can select/update only their own rows. No client INSERT
+-- policy — rows are written only by propose_event_for_group() below. Full
+-- definition: supabase/migrations/20260829140000_capture_group_proposal_notifications.sql.
+
 -- ---------- Live RLS facts -----------------------------------
 -- Operational/discovery tables with RLS and no client policies are intentionally
 -- service-role-only. Parent-facing code uses feed_events rather than events.
@@ -93,6 +107,10 @@ create table if not exists public.venue_aliases (pattern text primary key, canon
 -- public.record_recommendation_execution(uuid,text,text,jsonb,integer,uuid[],text) -> uuid
 -- authenticated role has EXECUTE on record_recommendation_execution; function
 -- is SECURITY DEFINER and enforces auth.uid() = p_user_id.
+-- public.propose_event_for_group(p_place_id uuid, p_group_id uuid, p_starts_at timestamptz) -> uuid
+-- SECURITY DEFINER; authorizes on group creator or membership; inserts the
+-- proposed event, auto-RSVPs the proposer as 'going', and fans out one row
+-- per OTHER group member into group_proposal_notifications.
 -- (Other application signatures remain defined by their migrations.)
 
 -- ---------- Live indexes of particular ingestion importance --
