@@ -1,0 +1,62 @@
+name: Schema drift check
+
+# Guards the thing that caused the original bug: supabase/migrations/ and
+# db/schema-snapshot.sql silently diverging. Builds a fresh Postgres from
+# supabase/migrations/ (the canonical source), builds a second fresh Postgres
+# straight from db/schema-snapshot.sql (the generated bootstrap file), and
+# fails if their resulting `public` schemas differ. See db/README.md.
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/config.toml"
+      - "db/schema-snapshot.sql"
+      - ".github/workflows/schema-drift.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/config.toml"
+      - "db/schema-snapshot.sql"
+      - ".github/workflows/schema-drift.yml"
+  workflow_dispatch:
+
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase stack (applies supabase/migrations/)
+        run: supabase start --exclude studio,edge-runtime,imgproxy,logflare,vector,pgadmin-schema-diff,pgadmin-http,realtime,storage-api
+
+      - name: Dump schema built from supabase/migrations/
+        run: supabase db dump --local --schema public -f /tmp/from-migrations.sql
+
+      - name: Rebuild the public schema straight from db/schema-snapshot.sql
+        env:
+          PGURL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: |
+          set -euo pipefail
+          psql "$PGURL" -v ON_ERROR_STOP=1 -c 'drop schema public cascade; create schema public;'
+          psql "$PGURL" -v ON_ERROR_STOP=1 -f db/schema-snapshot.sql
+
+      - name: Dump schema built from db/schema-snapshot.sql
+        run: supabase db dump --local --schema public -f /tmp/from-snapshot.sql
+
+      - name: Diff the two
+        run: |
+          set -euo pipefail
+          if ! diff -u /tmp/from-migrations.sql /tmp/from-snapshot.sql; then
+            echo
+            echo "::error::supabase/migrations/ and db/schema-snapshot.sql produce different schemas."
+            echo "::error::Regenerate db/schema-snapshot.sql from the live database (see db/README.md) and commit it alongside your migration."
+            exit 1
+          fi

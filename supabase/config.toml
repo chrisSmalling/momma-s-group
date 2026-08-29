@@ -1,0 +1,35 @@
+# Supabase CLI project config. Enables `supabase db push`, `supabase db diff`,
+# `supabase db reset`/`db start` (local dev stack), and the CI schema-drift
+# check in .github/workflows/schema-drift.yml.
+#
+# See db/README.md for how this fits into the repo's schema-management setup.
+project_id = "uiuibwufzhirpntdtqpj"
+
+[db]
+# Matches the live project (Postgres 17.6 on the Supabase platform).
+major_version = 17
+
+[db.pooler]
+enabled = false
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["https://127.0.0.1:3000"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false

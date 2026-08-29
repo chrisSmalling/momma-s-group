@@ -23,7 +23,7 @@ RSVPs that sync between devices.**
 says: you can read an RSVP row only if you share at least one group with the
 person who made it. That's why "both my groups see my RSVP" is the *simpler*
 design — the RSVP is stored per person per event, and visibility falls out of
-shared membership automatically. See `schema.sql`.
+shared membership automatically. See `db/schema-snapshot.sql`.
 
 ---
 
@@ -35,7 +35,9 @@ mommas-meetup/
   .env.example
   package.json
   db/
-    schema.sql              # run this in the Supabase SQL editor
+    schema-snapshot.sql     # generated; paste into the Supabase SQL editor to bootstrap
+  supabase/
+    migrations/              # canonical schema history (supabase db push/diff)
   src/
     lib/supabase/
       client.ts             # browser client
@@ -61,8 +63,9 @@ mommas-meetup/
 ## Phases (each ends with something you can actually test)
 
 **Phase 0 — Foundations**
-Create the Next.js app, create a Supabase project, run `schema.sql`, wire the
-Supabase client. Done when: one account can sign in and land on an empty calendar.
+Create the Next.js app, create a Supabase project, run `db/schema-snapshot.sql`,
+wire the Supabase client. Done when: one account can sign in and land on an
+empty calendar.
 
 **Phase 1 — Groups & invites**
 Create a group (auto-generates an invite code), join a group by code.
@@ -90,8 +93,12 @@ You reach a genuinely usable two-person app at the end of **Phase 2**.
 
 ## Setup steps
 
-1. **Supabase**: create a project → SQL Editor → paste and run `db/schema.sql`.
-   Under Authentication, enable Email (magic link is simplest for two accounts).
+1. **Supabase**: create a project → SQL Editor → paste and run
+   `db/schema-snapshot.sql` (a generated snapshot of the full live schema —
+   see `db/README.md`). Under Authentication, enable Email (magic link is
+   simplest for two accounts). Alternatively, use the Supabase CLI
+   (`supabase link` then `supabase db push`) to apply
+   `supabase/migrations/` directly.
 2. **Env**: copy `.env.example` to `.env.local` and fill in the project URL and
    anon key from Supabase → Project Settings → API.
 3. **Run**: `npm install` then `npm run dev`.
@@ -128,6 +135,6 @@ const { data } = await supabase
 ## Next step
 
 This is a repo you grow over several sessions, not a one-shot generate. Open it in
-**Claude Code**, run the schema, and build phase by phase — I can generate the
+**Claude Code**, run `db/schema-snapshot.sql`, and build phase by phase — I can generate the
 Next.js scaffolding, the auth pages, and the ported calendar component on request.
 Start with Phase 0 and don't wire real event feeds until the two-user RSVP loop works.
