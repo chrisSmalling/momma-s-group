@@ -25,15 +25,20 @@ To regenerate it from the live database:
 
 1. Dump `information_schema` / `pg_catalog` for the `public` schema: columns,
    constraints (`pg_get_constraintdef`), indexes (`pg_indexes`), functions
-   (`pg_get_functiondef`), views (`pg_get_viewdef`), triggers
-   (`pg_get_triggerdef`), and RLS policies (`pg_policies`) — via the Supabase
-   MCP `execute_sql` tool or the SQL editor.
+   (`pg_get_functiondef`), function privileges (`pg_proc.proacl`), views
+   (`pg_get_viewdef`), triggers (`pg_get_triggerdef`), and RLS policies
+   (`pg_policies`) — via the Supabase MCP `execute_sql` tool or the SQL
+   editor.
 2. Assemble those into DDL in dependency order: extensions → enum types →
    `create table` (bare) → primary/unique constraints → foreign keys → check
    constraints → indexes not already created by a constraint → functions →
-   views → triggers → `enable row level security` → policies. Creating all
-   tables before any constraint/FK avoids ordering issues between tables that
-   reference each other.
+   function privileges (`revoke all ... from public` + `grant execute ...`
+   for every function whose `proacl` isn't null — Supabase revokes PUBLIC
+   execute by default on new functions, and that's security-relevant: e.g.
+   `delete_my_account()` must not be callable by `anon` on a fresh project
+   either) → views → triggers → `enable row level security` → policies.
+   Creating all tables before any constraint/FK avoids ordering issues
+   between tables that reference each other.
 3. Cross-check the result against `supabase/migrations/` — anything present
    live but not reachable by replaying the migrations in order is drift that
    needs its own captured migration (see the `-- Capture schema drift: ...`

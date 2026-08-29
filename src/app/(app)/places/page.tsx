@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Nav from "@/components/Nav";
@@ -36,6 +37,9 @@ export default async function PlacesPage(props: PageProps<"/places">) {
         <div className="flex flex-col gap-5">
           <WeatherContextCard weather={weather} />
           <Poppy childName={childName} hasHome={hasSavedHome} initialMessage={ask} groupId={groupId} />
+          <Link href="/places/browse" className="self-start text-sm font-semibold text-rose-700 hover:underline">
+            Browse all places by category &rarr;
+          </Link>
           {!hasSavedHome && (
             <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
               Add your home address in <a href="/settings" className="underline">Settings</a> so Poppy can sort ideas by how close they are.

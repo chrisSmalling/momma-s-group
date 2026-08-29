@@ -1,7 +1,7 @@
 -- GENERATED FILE. DO NOT HAND-EDIT.
 -- Generated from a live dump of the production Supabase database (project uiuibwufzhirpntdtqpj)
--- on 2026-08-29, cross-checked against supabase/migrations/. See db/README.md for how to
--- regenerate this file; never edit it by hand.
+-- on 2026-08-29, cross-checked against supabase/migrations/. Regenerate via the same process
+-- (see db/README.md) whenever supabase/migrations/ changes; never edit this file by hand.
 --
 -- Paste this into a fresh Supabase project's SQL editor to bootstrap a schema matching production.
 
@@ -3414,6 +3414,39 @@ CREATE OR REPLACE FUNCTION public.score_recommendation_candidate(p_kind text, p_
 AS $function$ select round((case when p_distance_miles is null then 0 else greatest(0,25 - p_distance_miles) end + case when p_starts_at is null then 0 else 20 end + case when p_activity_vibe is null then 10 else 15 end + case when p_budget_max is null then 5 else 10 end)::numeric,2); $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.search_places(p_term text DEFAULT NULL::text, p_tags text[] DEFAULT NULL::text[], p_limit integer DEFAULT 30)
+ RETURNS SETOF places
+ LANGUAGE sql
+ STABLE
+AS $function$
+  select p.*
+  from public.places p
+  where
+    (
+      p_term is null or btrim(p_term) = '' or
+      p.name ilike '%' || p_term || '%' or
+      p.description ilike '%' || p_term || '%' or
+      p.toddler_notes ilike '%' || p_term || '%' or
+      exists (
+        select 1 from unnest(p.category_tags) tag
+        where tag ilike '%' || p_term || '%'
+      )
+    )
+    and (
+      p_tags is null or array_length(p_tags, 1) is null or p.category_tags && p_tags
+    )
+  order by
+    case
+      when p_term is not null and p.name ilike p_term then 0
+      when p_term is not null and p.name ilike p_term || '%' then 1
+      else 2
+    end,
+    p.discovery_priority desc nulls last,
+    p.name asc
+  limit greatest(1, least(coalesce(p_limit, 30), 100));
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.set_candidate_idempotency_key()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -3650,6 +3683,278 @@ AS $function$
   from mine m order by m.starts_at;
 $function$
 ;
+
+-- Function privileges
+-- Supabase revokes PUBLIC execute on every new function by default and
+-- grants back only specific roles; reproduce that here so a snapshot-
+-- bootstrapped project has the same access surface as production (e.g.
+-- delete_my_account() must NOT be callable by anon on a fresh project).
+revoke all on function public.add_creator_as_member() from public;
+grant execute on function public.add_creator_as_member() to authenticated;
+grant execute on function public.add_creator_as_member() to service_role;
+revoke all on function public.add_organizer_source(p_organizer_id uuid, p_source_url text, p_source_kind text, p_priority integer) from public;
+grant execute on function public.add_organizer_source(p_organizer_id uuid, p_source_url text, p_source_kind text, p_priority integer) to service_role;
+revoke all on function public.apply_event_enrichment(p_event_id uuid, p_is_kid_relevant boolean, p_age_band text, p_age_min_months integer, p_age_max_months integer, p_experience_type text, p_is_outdoor boolean, p_weather_fit text, p_confidence integer, p_reason text, p_model text) from public;
+grant execute on function public.apply_event_enrichment(p_event_id uuid, p_is_kid_relevant boolean, p_age_band text, p_age_min_months integer, p_age_max_months integer, p_experience_type text, p_is_outdoor boolean, p_weather_fit text, p_confidence integer, p_reason text, p_model text) to service_role;
+revoke all on function public.apply_local_event_quality_rules() from public;
+grant execute on function public.apply_local_event_quality_rules() to service_role;
+revoke all on function public.apply_organizer_feedback() from public;
+grant execute on function public.apply_organizer_feedback() to service_role;
+revoke all on function public.apply_place_enrichment(p_place_id uuid, p_has_changing_table boolean, p_nursing_friendly boolean, p_stroller_accessible boolean, p_quiet_or_sensory_friendly boolean, p_what_to_bring text[], p_price_note text, p_parking_notes text, p_model text) from public;
+grant execute on function public.apply_place_enrichment(p_place_id uuid, p_has_changing_table boolean, p_nursing_friendly boolean, p_stroller_accessible boolean, p_quiet_or_sensory_friendly boolean, p_what_to_bring text[], p_price_note text, p_parking_notes text, p_model text) to service_role;
+revoke all on function public.apply_place_enrichment_v2(p_place_id uuid, p_claims jsonb, p_model text) from public;
+grant execute on function public.apply_place_enrichment_v2(p_place_id uuid, p_claims jsonb, p_model text) to service_role;
+revoke all on function public.ask_group_about_event(p_group_id uuid, p_event_id uuid, p_question text) from public;
+grant execute on function public.ask_group_about_event(p_group_id uuid, p_event_id uuid, p_question text) to authenticated;
+grant execute on function public.ask_group_about_event(p_group_id uuid, p_event_id uuid, p_question text) to service_role;
+revoke all on function public.audit_event_pipeline_health() from public;
+grant execute on function public.audit_event_pipeline_health() to service_role;
+revoke all on function public.auto_approve_discovery_candidates() from public;
+grant execute on function public.auto_approve_discovery_candidates() to service_role;
+revoke all on function public.cancel_event(target_event uuid, reason text) from public;
+grant execute on function public.cancel_event(target_event uuid, reason text) to service_role;
+grant execute on function public.candidate_identity_key(p_source_url text, p_starts_at timestamp with time zone, p_title text) to service_role;
+grant execute on function public.canonicalize_venue() to service_role;
+grant execute on function public.classify_event_content_type() to service_role;
+grant execute on function public.clean_venue_text(t text) to anon;
+grant execute on function public.clean_venue_text(t text) to authenticated;
+grant execute on function public.clean_venue_text(t text) to service_role;
+revoke all on function public.cleanup_recommendation_cache() from public;
+grant execute on function public.cleanup_recommendation_cache() to service_role;
+revoke all on function public.cleanup_recommendation_response_cache() from public;
+grant execute on function public.cleanup_recommendation_response_cache() to service_role;
+revoke all on function public.crawler_canary_assertions() from public;
+grant execute on function public.crawler_canary_assertions() to service_role;
+revoke all on function public.crawler_record_source_result(p_source_id uuid, p_success boolean, p_yield integer, p_http_status integer, p_duration_ms integer, p_error text) from public;
+grant execute on function public.crawler_record_source_result(p_source_id uuid, p_success boolean, p_yield integer, p_http_status integer, p_duration_ms integer, p_error text) to service_role;
+revoke all on function public.crawler_source_health() from public;
+grant execute on function public.crawler_source_health() to service_role;
+revoke all on function public.delete_my_account() from public;
+grant execute on function public.delete_my_account() to service_role;
+grant execute on function public.discover_places(p_user_id uuid, p_category text, p_indoor text, p_max_distance_miles numeric, p_limit integer) to anon;
+grant execute on function public.discover_places(p_user_id uuid, p_category text, p_indoor text, p_max_distance_miles numeric, p_limit integer) to authenticated;
+grant execute on function public.discover_places(p_user_id uuid, p_category text, p_indoor text, p_max_distance_miles numeric, p_limit integer) to service_role;
+revoke all on function public.discovery_coverage_report() from public;
+grant execute on function public.discovery_coverage_report() to service_role;
+grant execute on function public.distance_km(lat1 double precision, lng1 double precision, lat2 double precision, lng2 double precision) to anon;
+grant execute on function public.distance_km(lat1 double precision, lng1 double precision, lat2 double precision, lng2 double precision) to authenticated;
+grant execute on function public.distance_km(lat1 double precision, lng1 double precision, lat2 double precision, lng2 double precision) to service_role;
+revoke all on function public.enforce_candidate_promotion_safety() from public;
+grant execute on function public.enforce_candidate_promotion_safety() to service_role;
+revoke all on function public.enforce_candidate_safety_filters() from public;
+grant execute on function public.enforce_candidate_safety_filters() to service_role;
+grant execute on function public.enforce_crawler_next_crawl() to service_role;
+revoke all on function public.enforce_crawler_next_crawl_schedule() from public;
+grant execute on function public.enforce_crawler_next_crawl_schedule() to service_role;
+revoke all on function public.enforce_crawler_source_admission() from public;
+grant execute on function public.enforce_crawler_source_admission() to service_role;
+revoke all on function public.enforce_discovery_candidate_safety() from public;
+grant execute on function public.enforce_discovery_candidate_safety() to service_role;
+revoke all on function public.enforce_discovery_promotion_readiness() from public;
+grant execute on function public.enforce_discovery_promotion_readiness() to service_role;
+grant execute on function public.enforce_event_freshness_publish_guard() to service_role;
+revoke all on function public.enforce_event_publication_safety() from public;
+grant execute on function public.enforce_event_publication_safety() to service_role;
+revoke all on function public.enforce_verified_feed_gate() from public;
+grant execute on function public.enforce_verified_feed_gate() to service_role;
+revoke all on function public.evaluate_event_discovery_candidate_shadow(p_candidate_id uuid) from public;
+grant execute on function public.evaluate_event_discovery_candidate_shadow(p_candidate_id uuid) to service_role;
+grant execute on function public.event_local_hour(ts timestamp with time zone) to anon;
+grant execute on function public.event_local_hour(ts timestamp with time zone) to authenticated;
+grant execute on function public.event_local_hour(ts timestamp with time zone) to service_role;
+revoke all on function public.execute_recommendation_request(p_lat double precision, p_lng double precision, p_constraints jsonb, p_start timestamp with time zone, p_end timestamp with time zone, p_limit integer) from public;
+grant execute on function public.execute_recommendation_request(p_lat double precision, p_lng double precision, p_constraints jsonb, p_start timestamp with time zone, p_end timestamp with time zone, p_limit integer) to service_role;
+revoke all on function public.filter_recommendation_candidates(p_lat double precision, p_lng double precision, p_max_distance_miles double precision, p_child_age_months integer, p_indoor boolean, p_limit integer) from public;
+grant execute on function public.filter_recommendation_candidates(p_lat double precision, p_lng double precision, p_max_distance_miles double precision, p_child_age_months integer, p_indoor boolean, p_limit integer) to service_role;
+revoke all on function public.get_cached_recommendation(p_request_hash text) from public;
+grant execute on function public.get_cached_recommendation(p_request_hash text) to service_role;
+revoke all on function public.get_events_for_enrichment(p_limit integer) from public;
+grant execute on function public.get_events_for_enrichment(p_limit integer) to service_role;
+revoke all on function public.get_freshness_queue(limit_count integer) from public;
+grant execute on function public.get_freshness_queue(limit_count integer) to service_role;
+revoke all on function public.get_gemini_key() from public;
+grant execute on function public.get_gemini_key() to service_role;
+revoke all on function public.get_places_for_enrichment(p_limit integer) from public;
+grant execute on function public.get_places_for_enrichment(p_limit integer) to service_role;
+revoke all on function public.get_places_for_revalidation(p_limit integer) from public;
+grant execute on function public.get_places_for_revalidation(p_limit integer) to service_role;
+revoke all on function public.get_recommendation_candidates(p_lat double precision, p_lng double precision, p_max_distance_miles double precision, p_child_age_months integer, p_indoor boolean, p_limit integer, p_start timestamp with time zone, p_end timestamp with time zone) from public;
+grant execute on function public.get_recommendation_candidates(p_lat double precision, p_lng double precision, p_max_distance_miles double precision, p_child_age_months integer, p_indoor boolean, p_limit integer, p_start timestamp with time zone, p_end timestamp with time zone) to service_role;
+revoke all on function public.get_recommendation_candidates(p_lat double precision, p_lng double precision, p_start timestamp with time zone, p_end timestamp with time zone, p_max_distance_miles double precision, p_child_age_months integer, p_indoor boolean, p_limit integer) from public;
+grant execute on function public.get_recommendation_candidates(p_lat double precision, p_lng double precision, p_start timestamp with time zone, p_end timestamp with time zone, p_max_distance_miles double precision, p_child_age_months integer, p_indoor boolean, p_limit integer) to service_role;
+revoke all on function public.get_recommendation_candidates(p_lat double precision, p_lng double precision, p_start timestamp with time zone, p_end timestamp with time zone, p_max_distance_miles double precision, p_child_age_months integer, p_indoor boolean, p_needs_changing_table boolean, p_needs_nursing_friendly boolean, p_needs_stroller_accessible boolean, p_needs_quiet_or_sensory_friendly boolean, p_budget_max numeric, p_limit integer) from public;
+grant execute on function public.get_recommendation_candidates(p_lat double precision, p_lng double precision, p_start timestamp with time zone, p_end timestamp with time zone, p_max_distance_miles double precision, p_child_age_months integer, p_indoor boolean, p_needs_changing_table boolean, p_needs_nursing_friendly boolean, p_needs_stroller_accessible boolean, p_needs_quiet_or_sensory_friendly boolean, p_budget_max numeric, p_limit integer) to service_role;
+revoke all on function public.get_recommendation_candidates(p_lat double precision, p_lng double precision, p_start timestamp with time zone, p_end timestamp with time zone, p_max_distance_miles double precision, p_child_age_months integer, p_indoor boolean, p_needs_changing_table boolean, p_needs_nursing_friendly boolean, p_needs_stroller_accessible boolean, p_needs_quiet_or_sensory_friendly boolean, p_limit integer) from public;
+grant execute on function public.get_recommendation_candidates(p_lat double precision, p_lng double precision, p_start timestamp with time zone, p_end timestamp with time zone, p_max_distance_miles double precision, p_child_age_months integer, p_indoor boolean, p_needs_changing_table boolean, p_needs_nursing_friendly boolean, p_needs_stroller_accessible boolean, p_needs_quiet_or_sensory_friendly boolean, p_limit integer) to service_role;
+revoke all on function public.get_recommendation_candidates(p_lat double precision, p_lng double precision, p_max_distance_miles double precision, p_child_age_months integer, p_indoor boolean, p_limit integer) from public;
+grant execute on function public.get_recommendation_candidates(p_lat double precision, p_lng double precision, p_max_distance_miles double precision, p_child_age_months integer, p_indoor boolean, p_limit integer) to service_role;
+revoke all on function public.get_recommendation_learning_summary(p_candidate_id uuid) from public;
+grant execute on function public.get_recommendation_learning_summary(p_candidate_id uuid) to service_role;
+grant execute on function public.guard_recurring_event_occurrence() to anon;
+grant execute on function public.guard_recurring_event_occurrence() to authenticated;
+grant execute on function public.guard_recurring_event_occurrence() to service_role;
+grant execute on function public.guard_source_verification() to anon;
+grant execute on function public.guard_source_verification() to authenticated;
+grant execute on function public.guard_source_verification() to service_role;
+revoke all on function public.handle_new_user() from public;
+grant execute on function public.handle_new_user() to service_role;
+revoke all on function public.infer_event_is_outdoor(p_place_id uuid, p_title text, p_description text, p_venue_name text) from public;
+grant execute on function public.infer_event_is_outdoor(p_place_id uuid, p_title text, p_description text, p_venue_name text) to anon;
+grant execute on function public.infer_event_is_outdoor(p_place_id uuid, p_title text, p_description text, p_venue_name text) to authenticated;
+grant execute on function public.infer_event_is_outdoor(p_place_id uuid, p_title text, p_description text, p_venue_name text) to service_role;
+revoke all on function public.invalidate_recommendation_cache() from public;
+grant execute on function public.invalidate_recommendation_cache() to service_role;
+revoke all on function public.inventory_market_coverage_report(days_ahead integer) from public;
+grant execute on function public.inventory_market_coverage_report(days_ahead integer) to service_role;
+grant execute on function public.is_event_outdoor(p_title text, p_venue_name text, p_description text) to anon;
+grant execute on function public.is_event_outdoor(p_title text, p_venue_name text, p_description text) to authenticated;
+grant execute on function public.is_event_outdoor(p_title text, p_venue_name text, p_description text) to service_role;
+grant execute on function public.is_kid_relevant_event(p_title text, p_venue_name text, p_source text) to service_role;
+revoke all on function public.is_member(g uuid) from public;
+grant execute on function public.is_member(g uuid) to authenticated;
+grant execute on function public.is_member(g uuid) to service_role;
+revoke all on function public.join_group_by_code(code text) from public;
+grant execute on function public.join_group_by_code(code text) to service_role;
+revoke all on function public.maintain_event_pipeline() from public;
+grant execute on function public.maintain_event_pipeline() to service_role;
+revoke all on function public.materialize_programs(days_ahead integer) from public;
+grant execute on function public.materialize_programs(days_ahead integer) to service_role;
+revoke all on function public.merge_safe_event_duplicates() from public;
+grant execute on function public.merge_safe_event_duplicates() to service_role;
+revoke all on function public.normalize_crawler_source_health() from public;
+grant execute on function public.normalize_crawler_source_health() to service_role;
+grant execute on function public.normalize_dedup_key(title text, venue text, event_date date) to service_role;
+revoke all on function public.normalize_discovery_run_partial_status() from public;
+grant execute on function public.normalize_discovery_run_partial_status() to service_role;
+revoke all on function public.normalize_discovery_run_status() from public;
+grant execute on function public.normalize_discovery_run_status() to service_role;
+grant execute on function public.normalize_event_key(p_title text, p_starts_at timestamp with time zone, p_venue text) to service_role;
+grant execute on function public.normalize_event_text(input text) to anon;
+grant execute on function public.normalize_event_text(input text) to authenticated;
+grant execute on function public.normalize_event_text(input text) to service_role;
+grant execute on function public.normalize_event_text_fields() to anon;
+grant execute on function public.normalize_event_text_fields() to authenticated;
+grant execute on function public.normalize_event_text_fields() to service_role;
+revoke all on function public.normalize_family_candidate_quality() from public;
+grant execute on function public.normalize_family_candidate_quality() to service_role;
+grant execute on function public.normalize_for_evidence(t text) to anon;
+grant execute on function public.normalize_for_evidence(t text) to authenticated;
+grant execute on function public.normalize_for_evidence(t text) to service_role;
+revoke all on function public.normalize_recommendation_context(p_lat double precision, p_lng double precision, p_constraints jsonb, p_start timestamp with time zone, p_end timestamp with time zone) from public;
+grant execute on function public.normalize_recommendation_context(p_lat double precision, p_lng double precision, p_constraints jsonb, p_start timestamp with time zone, p_end timestamp with time zone) to authenticated;
+grant execute on function public.normalize_recommendation_context(p_lat double precision, p_lng double precision, p_constraints jsonb, p_start timestamp with time zone, p_end timestamp with time zone) to service_role;
+revoke all on function public.normalize_verified_event_source() from public;
+grant execute on function public.normalize_verified_event_source() to service_role;
+grant execute on function public.parse_activity_intent(p_request text, p_child_age_months integer) to anon;
+grant execute on function public.parse_activity_intent(p_request text, p_child_age_months integer) to authenticated;
+grant execute on function public.parse_activity_intent(p_request text, p_child_age_months integer) to service_role;
+revoke all on function public.parse_recommendation_time_window(p_start timestamp with time zone, p_end timestamp with time zone) from public;
+grant execute on function public.parse_recommendation_time_window(p_start timestamp with time zone, p_end timestamp with time zone) to authenticated;
+grant execute on function public.parse_recommendation_time_window(p_start timestamp with time zone, p_end timestamp with time zone) to service_role;
+revoke all on function public.phase1_product_qa_gate() from public;
+grant execute on function public.phase1_product_qa_gate() to service_role;
+grant execute on function public.place_evidence_supported(p_description text, p_evidence text) to anon;
+grant execute on function public.place_evidence_supported(p_description text, p_evidence text) to authenticated;
+grant execute on function public.place_evidence_supported(p_description text, p_evidence text) to service_role;
+revoke all on function public.prepare_crawler_due_sources() from public;
+grant execute on function public.prepare_crawler_due_sources() to service_role;
+revoke all on function public.promote_comment_to_tip(comment_id uuid, tip_category text) from public;
+grant execute on function public.promote_comment_to_tip(comment_id uuid, tip_category text) to service_role;
+revoke all on function public.promote_event_discovery_candidate(candidate_id uuid) from public;
+grant execute on function public.promote_event_discovery_candidate(candidate_id uuid) to service_role;
+revoke all on function public.propose_event_for_group(p_place_id uuid, p_group_id uuid, p_starts_at timestamp with time zone) from public;
+grant execute on function public.propose_event_for_group(p_place_id uuid, p_group_id uuid, p_starts_at timestamp with time zone) to anon;
+grant execute on function public.propose_event_for_group(p_place_id uuid, p_group_id uuid, p_starts_at timestamp with time zone) to authenticated;
+grant execute on function public.propose_event_for_group(p_place_id uuid, p_group_id uuid, p_starts_at timestamp with time zone) to service_role;
+revoke all on function public.publish_discovery_candidates_batch(p_limit integer) from public;
+grant execute on function public.publish_discovery_candidates_batch(p_limit integer) to service_role;
+revoke all on function public.publish_priority_discovery_candidates_batch(p_limit integer) from public;
+grant execute on function public.publish_priority_discovery_candidates_batch(p_limit integer) to service_role;
+revoke all on function public.publish_qualified_discovery_events(p_limit integer) from public;
+grant execute on function public.publish_qualified_discovery_events(p_limit integer) to service_role;
+revoke all on function public.rank_recommendation_candidates(p_request_id uuid, p_limit integer) from public;
+grant execute on function public.rank_recommendation_candidates(p_request_id uuid, p_limit integer) to service_role;
+revoke all on function public.reactivate_deferred_discovery_candidates() from public;
+grant execute on function public.reactivate_deferred_discovery_candidates() to service_role;
+revoke all on function public.recommendation_cache_key(p_lat double precision, p_lng double precision, p_constraints jsonb, p_start timestamp with time zone, p_end timestamp with time zone) from public;
+grant execute on function public.recommendation_cache_key(p_lat double precision, p_lng double precision, p_constraints jsonb, p_start timestamp with time zone, p_end timestamp with time zone) to authenticated;
+grant execute on function public.recommendation_cache_key(p_lat double precision, p_lng double precision, p_constraints jsonb, p_start timestamp with time zone, p_end timestamp with time zone) to service_role;
+revoke all on function public.recompute_feed_scores() from public;
+grant execute on function public.recompute_feed_scores() to service_role;
+revoke all on function public.recompute_place_evidence_status(p_place_id uuid) from public;
+grant execute on function public.recompute_place_evidence_status(p_place_id uuid) to service_role;
+revoke all on function public.reconcile_discovery_duplicate(p_candidate_id uuid, p_existing_event_id uuid) from public;
+grant execute on function public.reconcile_discovery_duplicate(p_candidate_id uuid, p_existing_event_id uuid) to service_role;
+revoke all on function public.reconcile_stuck_discovery_runs() from public;
+grant execute on function public.reconcile_stuck_discovery_runs() to service_role;
+revoke all on function public.record_event_pipeline_health() from public;
+grant execute on function public.record_event_pipeline_health() to service_role;
+revoke all on function public.record_event_pipeline_observability() from public;
+grant execute on function public.record_event_pipeline_observability() to service_role;
+revoke all on function public.record_recommendation_execution(p_user_id uuid, p_raw_prompt text, p_intent text, p_constraints jsonb, p_candidate_count integer, p_selected_ids uuid[], p_model text) from public;
+grant execute on function public.record_recommendation_execution(p_user_id uuid, p_raw_prompt text, p_intent text, p_constraints jsonb, p_candidate_count integer, p_selected_ids uuid[], p_model text) to authenticated;
+grant execute on function public.record_recommendation_execution(p_user_id uuid, p_raw_prompt text, p_intent text, p_constraints jsonb, p_candidate_count integer, p_selected_ids uuid[], p_model text) to service_role;
+revoke all on function public.recover_stuck_content_sync_runs() from public;
+grant execute on function public.recover_stuck_content_sync_runs() to service_role;
+grant execute on function public.recurrence_occurrence_matches(ts timestamp with time zone, rrule text) to anon;
+grant execute on function public.recurrence_occurrence_matches(ts timestamp with time zone, rrule text) to authenticated;
+grant execute on function public.recurrence_occurrence_matches(ts timestamp with time zone, rrule text) to service_role;
+revoke all on function public.refresh_event_duplicate_clusters() from public;
+grant execute on function public.refresh_event_duplicate_clusters() to service_role;
+revoke all on function public.refresh_event_freshness() from public;
+grant execute on function public.refresh_event_freshness() to service_role;
+revoke all on function public.refresh_event_suppression() from public;
+grant execute on function public.refresh_event_suppression() to service_role;
+revoke all on function public.refresh_fuzzy_event_duplicate_clusters() from public;
+grant execute on function public.refresh_fuzzy_event_duplicate_clusters() to service_role;
+revoke all on function public.refresh_market_coverage_slo() from public;
+grant execute on function public.refresh_market_coverage_slo() to service_role;
+revoke all on function public.refresh_phase2_quality_feedback() from public;
+grant execute on function public.refresh_phase2_quality_feedback() to service_role;
+revoke all on function public.revalidate_places_with_evidence(p_limit integer) from public;
+grant execute on function public.revalidate_places_with_evidence(p_limit integer) to service_role;
+revoke all on function public.run_discovery_v4_batch4() from public;
+grant execute on function public.run_discovery_v4_batch4() to service_role;
+revoke all on function public.run_discovery_v4_canary() from public;
+grant execute on function public.run_discovery_v4_canary() to service_role;
+revoke all on function public.run_event_reverification_worker() from public;
+grant execute on function public.run_event_reverification_worker() to service_role;
+revoke all on function public.score_organizer_candidate(p_id uuid) from public;
+grant execute on function public.score_organizer_candidate(p_id uuid) to service_role;
+revoke all on function public.score_recommendation_candidate(p_kind text, p_id uuid, p_distance_miles double precision, p_starts_at timestamp with time zone, p_child_age_months integer, p_activity_vibe text, p_budget_max numeric) from public;
+grant execute on function public.score_recommendation_candidate(p_kind text, p_id uuid, p_distance_miles double precision, p_starts_at timestamp with time zone, p_child_age_months integer, p_activity_vibe text, p_budget_max numeric) to service_role;
+grant execute on function public.search_places(p_term text, p_tags text[], p_limit integer) to authenticated;
+grant execute on function public.search_places(p_term text, p_tags text[], p_limit integer) to service_role;
+grant execute on function public.set_candidate_idempotency_key() to service_role;
+revoke all on function public.set_event_setting_from_context() from public;
+grant execute on function public.set_event_setting_from_context() to service_role;
+revoke all on function public.shares_group_with(target uuid) from public;
+grant execute on function public.shares_group_with(target uuid) to authenticated;
+grant execute on function public.shares_group_with(target uuid) to service_role;
+revoke all on function public.store_recommendation_cache(p_request_hash text, p_user_id uuid, p_request_id uuid, p_response jsonb, p_model text, p_ttl_minutes integer) from public;
+grant execute on function public.store_recommendation_cache(p_request_hash text, p_user_id uuid, p_request_id uuid, p_response jsonb, p_model text, p_ttl_minutes integer) to service_role;
+revoke all on function public.update_source_health_from_sync_run() from public;
+grant execute on function public.update_source_health_from_sync_run() to service_role;
+revoke all on function public.update_source_reliability(p_source_id uuid, p_outcome text) from public;
+grant execute on function public.update_source_reliability(p_source_id uuid, p_outcome text) to service_role;
+revoke all on function public.upsert_crawled_place(p_name text, p_address text, p_description text, p_website text, p_source_url text, p_age_min_months integer, p_age_max_months integer) from public;
+grant execute on function public.upsert_crawled_place(p_name text, p_address text, p_description text, p_website text, p_source_url text, p_age_min_months integer, p_age_max_months integer) to service_role;
+revoke all on function public.upsert_discovery_candidate(p_source_id uuid, p_external_id text, p_title text, p_description text, p_venue_name text, p_address text, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone, p_source_url text, p_status text, p_candidate_status text, p_confidence numeric, p_score integer, p_age_band text, p_organizer_id uuid, p_reason text) from public;
+grant execute on function public.upsert_discovery_candidate(p_source_id uuid, p_external_id text, p_title text, p_description text, p_venue_name text, p_address text, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone, p_source_url text, p_status text, p_candidate_status text, p_confidence numeric, p_score integer, p_age_band text, p_organizer_id uuid, p_reason text) to service_role;
+revoke all on function public.upsert_organizer_candidate(p_name text, p_category text, p_locality text, p_website_url text, p_discovery_url text, p_method text, p_confidence numeric, p_relevance integer) from public;
+grant execute on function public.upsert_organizer_candidate(p_name text, p_category text, p_locality text, p_website_url text, p_discovery_url text, p_method text, p_confidence numeric, p_relevance integer) to service_role;
+revoke all on function public.validate_community_cron_secret(provided_secret text) from public;
+grant execute on function public.validate_community_cron_secret(provided_secret text) to service_role;
+revoke all on function public.validate_cron_secret(candidate text) from public;
+grant execute on function public.validate_cron_secret(candidate text) to service_role;
+revoke all on function public.validate_recommendation_constraints(p_constraints jsonb) from public;
+grant execute on function public.validate_recommendation_constraints(p_constraints jsonb) to authenticated;
+grant execute on function public.validate_recommendation_constraints(p_constraints jsonb) to service_role;
+revoke all on function public.validate_recommendation_request(p_constraints jsonb, p_start timestamp with time zone, p_end timestamp with time zone) from public;
+grant execute on function public.validate_recommendation_request(p_constraints jsonb, p_start timestamp with time zone, p_end timestamp with time zone) to authenticated;
+grant execute on function public.validate_recommendation_request(p_constraints jsonb, p_start timestamp with time zone, p_end timestamp with time zone) to service_role;
+revoke all on function public.who_is_free(target_group uuid, days_ahead integer) from public;
+grant execute on function public.who_is_free(target_group uuid, days_ahead integer) to service_role;
 
 -- Views
 create view public."event_pipeline_command_center" as
