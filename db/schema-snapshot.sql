@@ -76,6 +76,28 @@ where status = 'published'
 -- source/review metadata, classification and verification scores,
 -- recurrence/discovery metadata, venue display fields and lifecycle flags.
 
+-- ---------- Live group activity feed view ---------------------
+-- Backs CalendarSocialSignals's "friends going" strip. security_invoker=true
+-- is load-bearing: it makes the view run under the querying user's privileges
+-- so events RLS scopes rows to the viewer's own groups. Without it the view
+-- runs as owner and leaks every group's proposed meetups to every user. Full
+-- definition: supabase/migrations/20260829150000_capture_group_activity_feed.sql.
+create or replace view public.group_activity_feed
+with (security_invoker = true) as
+select
+  e.id                as event_id,
+  e.proposed_by_group as group_id,
+  e.added_by          as proposer_id,
+  e.title,
+  e.venue_name,
+  e.starts_at,
+  (select count(*) from public.rsvps r where r.event_id = e.id and r.status = 'going')::integer as going_count,
+  (exists (select 1 from public.rsvps r where r.event_id = e.id and r.status = 'going' and r.user_id = auth.uid())) as viewer_is_going
+from public.events e
+where e.proposed_by_group is not null
+  and e.status = 'published'
+  and coalesce(e.is_suppressed, false) = false;
+
 -- ---------- Live venue canonicalization ----------------------
 create table if not exists public.venue_aliases (pattern text primary key, canonical text not null);
 
