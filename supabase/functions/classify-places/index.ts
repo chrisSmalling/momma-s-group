@@ -21,8 +21,14 @@ async function gemini(rows:Row[],k:string){const payload=rows.map(r=>({id:r.id,n
 async function writePlace(r:Row,v:V){const fields:any={};const evidence:any={};const rejected:string[]=[];const specs:any=[['has_changing_table',bool(v.has_changing_table)],['nursing_friendly',bool(v.nursing_friendly)],['stroller_accessible',bool(v.stroller_accessible)],['quiet_or_sensory_friendly',bool(v.quiet_or_sensory_friendly)],['what_to_bring',arr(v.what_to_bring)],['price_note',str(v.price_note)],['parking_notes',str(v.parking_notes)]];
 for(const [name,value] of specs){if(value===null||value===false&&name==='what_to_bring')continue;const quote=ev(v.evidence?.[name]);if((name==='what_to_bring'&&value.length===0)||!quote||!supported(r.description,quote)){if(value!==null&&(name!=='what_to_bring'||value.length>0))rejected.push(name);continue;}if(name==='what_to_bring')fields[name]=value;else fields[name]=value;evidence[name]=quote;}
 const acceptedCount=Object.keys(evidence).length;const status=acceptedCount>0&&rejected.length===0?'verified':rejected.length>0?'needs_review':'unverified';
-const body:any={...fields,llm_enrichment_evidence:evidence,llm_enrichment_provenance:{verified_ai:evidence},llm_last_revalidation:{accepted:evidence,rejected,verified:status==='verified'},llm_verification_status:status};
-if(acceptedCount>0){body.llm_enriched_at=new Date().toISOString();body.llm_model=MODEL;}if(status==='verified')body.llm_verified_at=new Date().toISOString();
+// NOTE: this function extracts facility amenities only. It must NEVER write
+// llm_verification_status / llm_verified_at -- toddler-appropriateness
+// eligibility is decided exclusively by apply_place_toddler_gate (see
+// verify-toddler-fit and 20260830120000_place_toddler_appropriateness_gate.sql).
+// `status` here is a same-run reporting label only (claims accepted/rejected),
+// not written to the DB.
+const body:any={...fields,llm_enrichment_evidence:evidence,llm_enrichment_provenance:{verified_ai:evidence},llm_last_revalidation:{accepted:evidence,rejected,claims_clean:status==='verified'}};
+if(acceptedCount>0){body.llm_enriched_at=new Date().toISOString();body.llm_model=MODEL;}
 // Fill gaps only: never overwrite a non-null scalar and never replace a non-empty text field.
 const {data:current,error:ce}=await db.from('places').select('has_changing_table,nursing_friendly,stroller_accessible,quiet_or_sensory_friendly,price_note,parking_notes,llm_enrichment_evidence,llm_enrichment_provenance').eq('id',r.id).eq('active',true).single();if(ce)throw ce;
 for(const n of ['has_changing_table','nursing_friendly','stroller_accessible','quiet_or_sensory_friendly'])if(current[n]!==null)delete body[n];
