@@ -69,7 +69,7 @@ in `supabase/migrations/20260827195000_poppy_honest_unified_candidate_model.sql`
 This directory is frozen — no new files, nothing here is applied to
 anything — kept for historical reference only.
 
-## CI
+## CI — and the gap it does NOT close
 
 `.github/workflows/schema-drift.yml` builds a fresh Postgres from
 `supabase/migrations/` (via the Supabase CLI's local stack) and diffs its
@@ -77,3 +77,28 @@ schema against `db/schema-snapshot.sql`, the committed baseline. A mismatch
 fails the build — that's what stops this file and the migrations from
 silently drifting apart again. If you change `supabase/migrations/`,
 regenerate `db/schema-snapshot.sql` (see above) in the same PR.
+
+**This only checks that the repo is internally consistent with itself.** It
+never touches the live database, so it cannot catch the drift that actually
+bit this project twice: a migration gets committed but never applied to
+production. Concretely, on 2026-08-29 two already-committed migrations
+(`20260822223500_add_self_service_account_deletion.sql`,
+`20260822224000_lock_account_deletion_execute.sql`) said `delete_my_account`
+should be executable by `authenticated` — CI was green the whole time,
+because CI never checked production, and production only had `service_role`.
+Self-service account deletion was broken for every real user until this was
+caught by hand and fixed live (see
+`supabase/migrations/20260829180000_reconcile_function_privileges.sql`).
+
+Closing that gap for real means a check that runs against the live database
+(schema **and** `pg_proc.proacl`/`aclexplode` for every function) and
+compares it to what replaying `supabase/migrations/` in order produces. That
+needs read access to the production database from wherever the check runs.
+This repo doesn't have that wired up — doing it from GitHub Actions would
+mean putting a production Supabase credential in the repo's CI secrets,
+which is a call for whoever owns this project to make, not something to add
+unilaterally. Until that's set up, the practical mitigation is what caught
+this: periodically audit live against `supabase/migrations/` by hand (or via
+a Claude Code session with Supabase MCP access, as this one did) — dump
+`pg_proc.proacl` and the schema, compare against the committed baseline,
+fix forward with a new migration for anything that's drifted.
