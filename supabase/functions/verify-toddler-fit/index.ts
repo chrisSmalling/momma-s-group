@@ -99,8 +99,26 @@ Deno.serve(async (req) => {
   // Hard-reject pass against this run's actual backlog (real predicate,
   // via RPC -- see place_hard_reject_reason).
   let hardRejected = 0;
+  let noEvidence = 0;
   const remaining: Row[] = [];
   for (const r of queue) {
+    // No description at all means no possible evidence quote -- verified
+    // and rejected both require one (apply_place_toddler_gate enforces
+    // this server-side), so this outcome is already fixed: skip the LLM
+    // call entirely and land it in needs_review directly.
+    if (!r.description || !r.description.trim()) {
+      const { error: applyError } = await db.rpc("apply_place_toddler_gate", {
+        p_place_id: r.id,
+        p_verdict: "needs_review",
+        p_age_min_months: null,
+        p_age_max_months: null,
+        p_verdict_quote: null,
+        p_age_quote: null,
+        p_reasoning: "no description available to establish toddler-appropriateness",
+        p_model: "no-evidence-v1",
+      });
+      if (!applyError) { noEvidence++; continue; }
+    }
     const { data: reason, error: reasonError } = await db.rpc("place_hard_reject_reason", {
       p_name: r.name,
       p_description: r.description,
@@ -166,8 +184,9 @@ Deno.serve(async (req) => {
   return Response.json({
     ok: true,
     model: MODEL,
-    queue_pulled: queue.length + hardRejected,
+    queue_pulled: queue.length + hardRejected + noEvidence,
     hard_rejected: hardRejected,
+    no_evidence_needs_review: noEvidence,
     llm_verified: verified,
     llm_rejected: rejected,
     needs_review: needsReview,
