@@ -2564,6 +2564,66 @@ begin
 end; $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.place_category_coverage_report()
+ RETURNS TABLE(category text, verified_count integer, target integer, below_target boolean)
+ LANGUAGE sql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  with targets(category, target) as (
+    values
+      ('playground', 15),
+      ('outdoor', 15),
+      ('indoor', 10),
+      ('water_play', 5),
+      ('storytime', 8),
+      ('animals', 5),
+      ('arts_learning', 5),
+      ('active_play', 5),
+      ('sensory_play', 3),
+      ('toddler_gym', 5),
+      ('gymnastics', 3),
+      ('farm', 3),
+      ('kids_class', 5)
+  ),
+  counts as (
+    select unnest(p.category_tags) as category, count(*) as verified_count
+    from public.places p
+    where p.active = true and p.llm_verification_status = 'verified'
+    group by 1
+  )
+  select t.category, coalesce(c.verified_count, 0)::integer, t.target,
+         coalesce(c.verified_count, 0) < t.target as below_target
+  from targets t
+  left join counts c on c.category = t.category
+  order by below_target desc, t.category;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.place_discovery_duplicate_exists(p_lat double precision, p_lng double precision)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select exists (
+    select 1
+    from public.places p
+    where p.active = true
+      and coalesce(p.lat, p.latitude) is not null
+      and coalesce(p.lng, p.longitude) is not null
+      and p_lat is not null and p_lng is not null
+      and 1609.34 * 3958.7613 * 2 * asin(sqrt(
+            power(sin(radians(coalesce(p.lat, p.latitude) - p_lat) / 2), 2)
+            + cos(radians(p_lat)) * cos(radians(coalesce(p.lat, p.latitude)))
+              * power(sin(radians(coalesce(p.lng, p.longitude) - p_lng) / 2), 2)
+          )) <= 200
+  );
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.place_evidence_supported(p_description text, p_evidence text)
  RETURNS boolean
  LANGUAGE sql
@@ -3956,9 +4016,25 @@ grant execute on function public.parse_recommendation_time_window(p_start timest
 grant execute on function public.parse_recommendation_time_window(p_start timestamp with time zone, p_end timestamp with time zone) to service_role;
 revoke all on function public.phase1_product_qa_gate() from public;
 grant execute on function public.phase1_product_qa_gate() to service_role;
+revoke all on function public.apply_place_toddler_gate(p_place_id uuid, p_verdict text, p_age_min_months integer, p_age_max_months integer, p_verdict_quote text, p_age_quote text, p_reasoning text, p_model text) from public;
+grant execute on function public.apply_place_toddler_gate(p_place_id uuid, p_verdict text, p_age_min_months integer, p_age_max_months integer, p_verdict_quote text, p_age_quote text, p_reasoning text, p_model text) to service_role;
+
+revoke all on function public.get_places_for_toddler_gate(p_limit integer) from public;
+grant execute on function public.get_places_for_toddler_gate(p_limit integer) to service_role;
+
+revoke all on function public.place_category_coverage_report() from public;
+grant execute on function public.place_category_coverage_report() to authenticated;
+grant execute on function public.place_category_coverage_report() to service_role;
+
+revoke all on function public.place_discovery_duplicate_exists(p_lat double precision, p_lng double precision) from public;
+grant execute on function public.place_discovery_duplicate_exists(p_lat double precision, p_lng double precision) to service_role;
+
 revoke all on function public.place_evidence_supported(p_description text, p_evidence text) from public;
 grant execute on function public.place_evidence_supported(p_description text, p_evidence text) to authenticated;
 grant execute on function public.place_evidence_supported(p_description text, p_evidence text) to service_role;
+
+revoke all on function public.place_hard_reject_reason(p_name text, p_description text, p_category_tags text[]) from public;
+grant execute on function public.place_hard_reject_reason(p_name text, p_description text, p_category_tags text[]) to service_role;
 revoke all on function public.prepare_crawler_due_sources() from public;
 grant execute on function public.prepare_crawler_due_sources() to service_role;
 revoke all on function public.promote_comment_to_tip(comment_id uuid, tip_category text) from public;
