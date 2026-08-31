@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { applyAgeGate } from "@/lib/ageGate";
 import { monthParam } from "@/lib/date";
 import { overlapsNapWindow } from "@/lib/nap";
 import MonthCalendar from "@/components/MonthCalendar";
@@ -113,7 +114,10 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
     .gte("starts_at", rangeStart.toISOString())
     .lt("starts_at", rangeEnd.toISOString())
     .order("starts_at", { ascending: true });
-  const eventList = (events ?? []) as FeedEvent[];
+  // Hard toddler age-fit gate (src/lib/ageGate.ts) -- the same one every
+  // other surface applies. feed_events is kid-relevant in general
+  // (is_kid_relevant) but says nothing about THIS child's specific age.
+  const eventList = applyAgeGate((events ?? []) as FeedEvent[], myProfile?.child_age_months ?? null);
   const eventIds = eventList.map((e) => e.id);
 
   // RSVPs for those events: RLS already limits rows to mine + anyone I share

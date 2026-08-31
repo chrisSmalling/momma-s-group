@@ -10,6 +10,7 @@
 // active-market only) applies automatically since search_places runs with
 // invoker rights, not security definer.
 import { isGoodAgeFit } from "@/lib/ageFit";
+import { applyAgeGate } from "@/lib/ageGate";
 import { milesBetween } from "@/lib/recommend/filter";
 import { applyDriveTimeGate } from "@/lib/routing/driveTimeGate";
 import type { createClient } from "@/lib/supabase/server";
@@ -62,7 +63,13 @@ export async function searchPlaces(
   const gate = await applyDriveTimeGate(places, origin);
   if (origin && !gate.available) return { results: [], routingAvailable: false };
 
-  const results: PlaceSearchResult[] = gate.kept.map((place) => ({
+  // Hard toddler age-fit gate — same one applied on every surface (see
+  // src/lib/ageGate.ts). Places without any age data don't pass here
+  // even though they're eligible in general (RLS/search_places already
+  // gated on toddler-appropriateness); age fit is a separate check.
+  const ageAppropriate = applyAgeGate(gate.kept, options.childAgeMonths ?? null);
+
+  const results: PlaceSearchResult[] = ageAppropriate.map((place) => ({
     place,
     miles: milesBetween(origin, place),
     driveMinutes: gate.driveMinutesById.get(place.id) ?? null,

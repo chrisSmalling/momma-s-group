@@ -1,5 +1,6 @@
 // Deterministic recommendation pipeline: hard filters -> scoring -> ranking -> structured candidates.
 import type { WeatherContext } from "@/lib/weather-context";
+import { applyAgeGate } from "@/lib/ageGate";
 import { filterEvents } from "./filter";
 import { goodAgeFit, scoreEvent } from "./score";
 import { buildResponseText } from "./text";
@@ -18,9 +19,13 @@ function eventReason(event: PoppyCandidate,miles:number|null,fit:boolean,profile
 // view); see filter.ts's per-kind eligibility for how places qualify at
 // all without a fabricated occurrence time.
 export function recommend(inputs:CandidateInputs,constraints:RecommendationConstraints,profile:PoppyProfile,origin:{lat:number;lng:number}|null,weather:WeatherContext|null,now:Date,maxResults=MAX_RESULTS):{candidates:RecommendationCandidate[];droppedCount:number}{
- const eventsFiltered=filterEvents(inputs.events,constraints,origin,now);
+ // Hard toddler age-fit gate (src/lib/ageGate.ts) -- the same one every
+ // other surface applies. Events and places both flow through this one
+ // unified list (Phase A), so one call covers both kinds.
+ const ageEligible=applyAgeGate(inputs.events,profile.childAgeMonths);
+ const eventsFiltered=filterEvents(ageEligible,constraints,origin,now);
  const eventCandidates:RecommendationCandidate[]=eventsFiltered.kept.map(({event,miles})=>{const trusted=event as TrustedCandidate;const fit=goodAgeFit(profile.childAgeMonths,event.age_min_months,event.age_max_months);const isPlace=event.kind==="place";return{type:isPlace?"place":"event",id:event.id,title:event.title,description:event.description,address:event.address??event.venue,distanceMiles:miles,driveMinutes:null,distanceLabel:distanceLabel(miles),startsAt:isPlace?null:(event.time_unknown?null:event.starts_at),endsAt:isPlace?null:event.ends_at,price:event.cost,isFree:event.is_free,isOutdoor:event.is_outdoor,ageMinMonths:event.age_min_months,ageMaxMonths:event.age_max_months,goodAgeFit:fit,reason:eventReason(event,miles,fit,profile),href:isPlace?`/places/${event.place_id ?? event.id}/propose`:`/events/${event.id}`,lastVerifiedAt:event.last_verified_at,score:scoreEvent(event,miles,constraints,profile,weather),whatToBring:event.what_to_bring??[],strollerAccessible:trusted.trust_stroller_accessible??null,changingTable:trusted.trust_changing_table??null,nursingFriendly:trusted.trust_nursing_friendly??null,parkingNotes:trusted.trust_parking_notes??null,typicalCrowdNote:trusted.trust_typical_crowd_note??null,bestTimeNote:trusted.trust_best_time_note??null,registrationRequired:event.registration_required===true,communityTips:trusted.trust_community_tips??[]};});
- const ranked=eventCandidates.sort((a,b)=>b.score-a.score).slice(0,Math.max(MAX_RESULTS,maxResults)); return{candidates:ranked,droppedCount:eventsFiltered.droppedCount};
+ const ranked=eventCandidates.sort((a,b)=>b.score-a.score).slice(0,Math.max(MAX_RESULTS,maxResults)); return{candidates:ranked,droppedCount:eventsFiltered.droppedCount+(inputs.events.length-ageEligible.length)};
 }
 
 export function buildFallbacks(constraints:RecommendationConstraints):FallbackAction[]{const actions:FallbackAction[]=[];if(constraints.maxMiles!=null)actions.push({key:"farther",label:"Search farther",patch:{maxMiles:Math.min(60,Math.round((constraints.maxMiles??15)*2))}});if(constraints.indoor!=="indoor")actions.push({key:"indoors",label:"Try indoors",patch:{indoor:"indoor",indoorExplicit:true,mood:"indoor"}});if(constraints.indoor!=="outdoor")actions.push({key:"outdoors",label:"Try outdoors",patch:{indoor:"outdoor",indoorExplicit:true,mood:"outdoor"}});if(constraints.timeframe!=="any")actions.push({key:"anyday",label:"Try another day",patch:{timeframe:"any"}});if(constraints.timeOfDay!=="any")actions.push({key:"anytime",label:"Try another time",patch:{timeOfDay:"any"}});if(constraints.maxPriceDollars!=null)actions.push({key:"more_budget",label:"Raise the budget",patch:{maxPriceDollars:null,budget:"any"}});actions.push({key:"anything",label:"Show anything nearby",patch:{mood:"all",indoor:"either",indoorExplicit:false,budget:"any",maxPriceDollars:null}});return actions;}

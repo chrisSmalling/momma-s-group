@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { after } from "next/server";
+import { applyAgeGate } from "@/lib/ageGate";
 import { overlapsNapWindow } from "@/lib/nap";
 import { distanceKm } from "@/lib/distance";
 import { createClient } from "@/lib/supabase/server";
@@ -78,7 +79,10 @@ export default async function TodayPage(props: PageProps<"/today">) {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1);
   const { data: events } = await supabase.from("feed_events").select("*").gte("ends_at", now.toISOString()).lt("starts_at", todayEnd.toISOString()).order("starts_at", { ascending: true });
-  const rawEventList = (events ?? []) as TodayEvent[];
+  // Hard toddler age-fit gate (src/lib/ageGate.ts) -- the same one every
+  // other surface applies (search, Poppy, calendar). feed_events is
+  // kid-relevant in general but says nothing about THIS child's age.
+  const rawEventList = applyAgeGate((events ?? []) as TodayEvent[], myProfile?.child_age_months ?? null);
   const placeIdsForEvents = [...new Set(rawEventList.map((e) => e.place_id).filter((id): id is string => Boolean(id)))];
   const { data: eventPlaces } = placeIdsForEvents.length ? await supabase.from("places").select(PLACE_CONTEXT_COLUMNS).in("id", placeIdsForEvents) : { data: [] };
   const eventPlaceById = new Map((eventPlaces ?? []).map((p) => [p.id, p as Partial<Place>]));
@@ -116,7 +120,10 @@ export default async function TodayPage(props: PageProps<"/today">) {
   const eventBundles: EventBundle[] = eventList.map((event) => { const proposedBy = event.proposed_by_group && event.added_by ? { user_id: event.added_by, display_name: profileById.get(event.added_by)?.display_name ?? "Someone" } : null; const place = event.place_id ? (eventPlaceById.get(event.place_id) ?? null) : null; const duringNap = overlapsNapWindow(event.starts_at, event.ends_at, myProfile?.nap_start ?? null, myProfile?.nap_end ?? null); const tips = event.place_id ? (eventTipsByPlaceId[event.place_id] ?? []) : (eventTipsByEventId[event.id] ?? []); return { event, currentStatus: myRsvpByEvent[event.id] ?? null, currentNote: myNoteByEvent[event.id] ?? null, proposedBy, place: place as EventBundle["place"], duringNap, tips, comments: commentsByEvent[event.id] ?? [], attendees: rsvpsByEvent[event.id] ?? [], weatherSummary: null, distance: eventDistanceById.get(event.id) }; });
 
   const { data: places } = await supabase.from("places").select("*").eq("active", true).order("name", { ascending: true });
-  let placeList = (places ?? []) as Place[];
+  // Same hard age-fit gate as everywhere else. This list bypasses
+  // search_places/searchPlaces() (it's queried directly for the "Today"
+  // ranking below), so it needs its own call rather than inheriting one.
+  let placeList = applyAgeGate((places ?? []) as Place[], myProfile?.child_age_months ?? null);
   const todayCandidateLimit = 24;
   const todayDisplayLimit = 5;
   const straightLineByPlaceId = new Map<string, number>();

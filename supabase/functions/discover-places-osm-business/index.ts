@@ -1,86 +1,104 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-// Part 1 discovery: OpenStreetMap Overpass (free, keyless, real
-// municipal/community-mapped data). There is no Google Places /
-// business-directory API credential in this project -- see the header
-// comment on 20260830140000_place_discovery_osm.sql for why this source
-// was chosen and which categories it does NOT cover well.
+// Sibling of discover-places-osm, split out 2026-08-31: business/activity
+// OSM tags (dance, gymnastics, gyms, music, martial arts, farms, indoor
+// play) that OSM's infrastructure tags (playgrounds/libraries/museums/
+// nature) don't cover. Same free, keyless OSM Overpass source, same
+// dedup (place_discovery_duplicate_exists), same toddler gate
+// (apply_place_toddler_gate via verify-toddler-fit) -- discovery only
+// proposes candidates with honest provenance, it never decides
+// toddler-appropriateness. Kept in its own function/cron schedule rather
+// than merged into discover-places-osm because running all 14 tag
+// categories in one invocation hit Supabase's edge function compute
+// limit (WORKER_RESOURCE_LIMIT) partway through (verified live
+// 2026-08-31) -- splitting keeps each invocation's footprint small
+// enough to reliably finish all of its own categories.
 //
-// Every row this writes lands as llm_verification_status='unverified'
-// with a real, honest description built only from actual OSM tags (no
-// invented facts) -- it is picked up by the SAME toddler gate
-// (verify-toddler-fit / apply_place_toddler_gate) as every other place
-// before it can ever surface in search or Poppy. Discovery proposes
-// candidates; it never decides toddler-appropriateness.
+// None of these descriptions claim toddler-specific programming OSM
+// doesn't actually state; a fitness centre or dance studio is exactly
+// that and nothing more until the toddler gate finds real evidence
+// otherwise -- these are meant to land in needs_review/rejected as often
+// as verified, that's the gate working as intended, not a discovery bug.
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-// Public Overpass endpoints are flaky from shared cloud egress IPs
-// (verified live 2026-08-30: overpass-api.de returned 429, then
-// overpass.kumi.systems returned a transient 500 on the next attempt).
-// Configurable via env var so a bad endpoint can be swapped without a
-// redeploy; defaults to the main instance.
 const OVERPASS_URL = Deno.env.get("OVERPASS_URL") ?? "https://overpass-api.de/api/interpreter";
 
-// Centroid + half-extent of the existing curated Tampa Bay / Pasco
-// dataset (verified live 2026-08-30: lat 27.77-28.46, lng -82.80 to
-// -81.97), used as the launch-metro search box for discovery. This
-// intentionally mirrors where the curated set already lives rather than
-// asserting a new "true" launch center.
+// Same launch-metro box as discover-places-osm.
 const CENTER = { lat: 28.11775, lng: -82.3836 };
 const BBOX = { south: 27.75775, west: -82.7936, north: 28.47775, east: -81.9736 };
 
-// OSM tag -> our vocabulary. Deliberately conservative: category_tags
-// only assert what the tag itself confirms (a playground IS a
-// playground), never programming details OSM doesn't know (e.g. we do
-// NOT tag a library "storytime" just because it's a library -- that's
-// an unverified claim the toddler gate would rightly be unable to
-// evidence).
 const OSM_QUERIES: { tag: string; description: (name: string) => string; category_tags: string[]; place_type: string; is_outdoor: boolean }[] = [
   {
-    tag: '"leisure"="playground"',
-    description: (name) => `${name} is a public playground (OpenStreetMap leisure=playground).`,
-    category_tags: ["playground", "outdoor"],
-    place_type: "outdoor",
-    is_outdoor: true,
-  },
-  {
-    tag: '"leisure"="water_park"',
-    description: (name) => `${name} is a public water park (OpenStreetMap leisure=water_park).`,
-    category_tags: ["water_play", "outdoor"],
-    place_type: "outdoor",
-    is_outdoor: true,
-  },
-  {
-    tag: '"amenity"="library"',
-    description: (name) => `${name} is a public library (OpenStreetMap amenity=library).`,
-    category_tags: ["indoor"],
+    tag: '"leisure"="dance"',
+    description: (name) => `${name} is a dance venue (OpenStreetMap leisure=dance).`,
+    category_tags: ["dance"],
     place_type: "indoor",
     is_outdoor: false,
   },
   {
-    tag: '"tourism"="museum"',
-    description: (name) => `${name} is a public museum (OpenStreetMap tourism=museum).`,
-    category_tags: ["indoor"],
+    tag: '"amenity"="dancing_school"',
+    description: (name) => `${name} is a dance school (OpenStreetMap amenity=dancing_school).`,
+    category_tags: ["dance"],
     place_type: "indoor",
     is_outdoor: false,
   },
   {
-    tag: '"leisure"="nature_reserve"',
-    description: (name) => `${name} is a nature reserve open to the public (OpenStreetMap leisure=nature_reserve).`,
-    category_tags: ["outdoor"],
+    tag: '"sport"="gymnastics"',
+    description: (name) => `${name} is a gymnastics facility (OpenStreetMap sport=gymnastics).`,
+    category_tags: ["gymnastics"],
+    place_type: "indoor",
+    is_outdoor: false,
+  },
+  {
+    tag: '"leisure"="fitness_centre"',
+    description: (name) => `${name} is a fitness centre (OpenStreetMap leisure=fitness_centre).`,
+    category_tags: ["toddler_gym"],
+    place_type: "indoor",
+    is_outdoor: false,
+  },
+  {
+    tag: '"leisure"="sports_centre"',
+    description: (name) => `${name} is a sports centre (OpenStreetMap leisure=sports_centre).`,
+    category_tags: ["toddler_gym"],
+    place_type: "indoor",
+    is_outdoor: false,
+  },
+  {
+    tag: '"amenity"="music_school"',
+    description: (name) => `${name} is a music school (OpenStreetMap amenity=music_school).`,
+    category_tags: ["music"],
+    place_type: "indoor",
+    is_outdoor: false,
+  },
+  {
+    tag: '"sport"="martial_arts"',
+    description: (name) => `${name} is a martial arts facility (OpenStreetMap sport=martial_arts).`,
+    category_tags: ["kids_class"],
+    place_type: "indoor",
+    is_outdoor: false,
+  },
+  {
+    tag: '"tourism"="farm"',
+    description: (name) => `${name} is a working/visitable farm (OpenStreetMap tourism=farm).`,
+    category_tags: ["farm", "outdoor"],
     place_type: "outdoor",
     is_outdoor: true,
+  },
+  {
+    tag: '"leisure"="indoor_play"',
+    description: (name) => `${name} is an indoor play facility (OpenStreetMap leisure=indoor_play).`,
+    category_tags: ["playground", "indoor"],
+    place_type: "indoor",
+    is_outdoor: false,
   },
 ];
-// Business/activity tags (dance, gymnastics, gyms, music, martial arts,
-// farms, indoor play) live in the sibling discover-places-osm-business
-// function, not here -- verified live 2026-08-31 that running all 14
-// categories in one invocation hits Supabase's edge function compute
-// limit (WORKER_RESOURCE_LIMIT) partway through, and since categories
-// run in a fixed order, whichever ones sort last would then NEVER
-// complete on any run. Splitting into two functions/cron schedules keeps
-// each invocation's footprint small enough to reliably finish.
+// Deliberately NOT queried: shop=games (retail, not an activity venue --
+// out of scope for a "places to take your toddler" directory) and
+// leisure=amusement_arcade (OSM doesn't distinguish family arcades from
+// adult/bar-attached ones, and the tag alone gives the gate too little
+// to work with either way -- flagged here rather than silently included
+// or silently dropped).
 
 interface OverpassElement {
   type: "node" | "way" | "relation";
@@ -102,9 +120,6 @@ async function fetchOverpassQuery(tag: string): Promise<OverpassElement[]> {
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
       "Accept": "application/json",
-      // Overpass's usage policy asks automated clients to identify
-      // themselves; an unrecognized/absent UA can get a 406 from the
-      // fronting Apache.
       "User-Agent": "mommas-meetup-place-discovery/1.0 (+https://uiuibwufzhirpntdtqpj.supabase.co)",
     },
     body: "data=" + encodeURIComponent(buildQuery(tag)),
@@ -168,8 +183,6 @@ async function insertElement(el: OverpassElement, match: OsmQuery, stats: RunSta
   });
 
   if (insertError) {
-    // Unique violation on source_url means a prior run already inserted
-    // this exact OSM element -- expected on repeat runs, not a real error.
     if (insertError.code === "23505") { stats.alreadyKnown++; return; }
     stats.errors++;
     if (stats.errorSamples.length < 5) stats.errorSamples.push(insertError.message);
@@ -189,18 +202,11 @@ Deno.serve(async (req) => {
   const failedTags: string[] = [];
   let elementsFetched = 0;
 
-  // Fetch AND insert one category at a time (rather than fetching all 14
-  // categories first and inserting afterward): with this many tags now
-  // queried, the whole run can approach platform/timeout limits, and a
-  // late category failing or the function getting killed should never
-  // throw away progress already made on earlier categories.
   for (let i = 0; i < OSM_QUERIES.length; i++) {
     const q = OSM_QUERIES[i];
     try {
       const elements = await fetchOverpassQuery(q.tag);
       elementsFetched += elements.length;
-      // Overpass already server-side filtered this batch to exactly q.tag
-      // (each request queries one tag), so every returned element matches.
       for (const el of elements) await insertElement(el, q, stats);
     } catch (e) {
       failedTags.push(`${q.tag}: ${String(e instanceof Error ? e.message : e).slice(0, 150)}`);
