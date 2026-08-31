@@ -17,14 +17,33 @@
 // for a specific child (or for the no-profile default) if its own age
 // range doesn't cover them.
 //
-// Unknown is never a pass, uniformly on both events and places: an item
-// with no age_min_months/age_max_months at all is excluded regardless of
-// whether the child's age is known -- verified live 2026-08-31 that
-// applying this to places drops ~45 of 120 currently-verified places
-// (ones that passed the toddler gate but never had a numeric range
-// extracted from evidence); that's the deliberate, accepted cost of "unknown
-// is never a pass" rather than a bug to route around. Never infer a
-// range to make an item pass.
+// Unknown is never a pass when we have a specific child to check against:
+// if childAgeMonths is known and an item has no age_min_months/
+// age_max_months at all, it's excluded -- we can't confirm fit, and we
+// don't guess (ticket: "an event whose description establishes toddler
+// suitability verifies; a 'kids ages 6-10' event does not surface for
+// toddlers", and the events-side acceptance test that hides the 10
+// age_min_months>=48 events for a 2-year-old profile -- both go through
+// this branch and are unaffected by the change below).
+//
+// When there's NO known child age (nothing saved on the profile, or a
+// browse/directory context with no specific child in play), the
+// question is different: is this item plausibly fine for *some* toddler?
+// An item with an explicit age range must at least overlap the default
+// toddler window [0, DEFAULT_TODDLER_MAX_MONTHS] -- a place starting at
+// "ages 5+" still correctly never shows. But an item with NO age range
+// data at all is no longer excluded here: verified live 2026-08-31 that
+// treating "no item age data" as a hard exclude in the no-profile case
+// broke the places directory outright (P1 -- every category chip
+// returned zero, since roughly half of all toddler-gate-verified places
+// have no separately-extracted numeric age range at all). The toddler-
+// appropriateness gate (apply_place_toddler_gate / apply_event_toddler_gate)
+// has ALREADY evidence-vetted these items as toddler-appropriate in
+// general; a missing supplementary age *range* is not the same claim as
+// an unverified item, and withholding it from an anonymous browse when
+// nothing else says otherwise was over-applying "unknown is never a
+// pass" past what it was meant to prevent (inferring a false age range,
+// not staying silent when there's no specific child to fail).
 export const DEFAULT_TODDLER_MAX_MONTHS = 48;
 
 export interface AgeGateItem {
@@ -33,30 +52,21 @@ export interface AgeGateItem {
   age_max_months: number | null;
 }
 
-// childAgeMonths known: the item passes only if that exact age falls
-// inside [age_min_months, age_max_months] (an open-ended bound -- only
-// one of the two stated -- is a real fact, not "unknown," and is
-// evaluated as such).
-//
-// childAgeMonths unknown (no saved profile age): fall back to the
-// default toddler window [0, DEFAULT_TODDLER_MAX_MONTHS]. The item's OWN
-// range must fit entirely inside that window (not merely overlap it) --
-// with no specific child to reason about, an open-ended "18mo+" item
-// that might extend well past toddlerhood should not show by default;
-// that's "unknown is never a pass" applied to the no-profile case too.
 export function passesAgeGate(
   childAgeMonths: number | null,
   ageMinMonths: number | null,
   ageMaxMonths: number | null,
 ): boolean {
-  if (ageMinMonths == null && ageMaxMonths == null) return false;
   if (childAgeMonths != null) {
+    if (ageMinMonths == null && ageMaxMonths == null) return false;
     const lo = ageMinMonths ?? 0;
     const hi = ageMaxMonths ?? Number.POSITIVE_INFINITY;
     return childAgeMonths >= lo && childAgeMonths <= hi;
   }
+  if (ageMinMonths == null && ageMaxMonths == null) return true;
+  const lo = ageMinMonths ?? 0;
   const hi = ageMaxMonths ?? Number.POSITIVE_INFINITY;
-  return hi <= DEFAULT_TODDLER_MAX_MONTHS;
+  return lo <= DEFAULT_TODDLER_MAX_MONTHS && hi >= 0;
 }
 
 export function applyAgeGate<T extends AgeGateItem>(items: T[], childAgeMonths: number | null): T[] {

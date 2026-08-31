@@ -64,9 +64,13 @@ export async function searchPlaces(
   if (origin && !gate.available) return { results: [], routingAvailable: false };
 
   // Hard toddler age-fit gate — same one applied on every surface (see
-  // src/lib/ageGate.ts). Places without any age data don't pass here
-  // even though they're eligible in general (RLS/search_places already
-  // gated on toddler-appropriateness); age fit is a separate check.
+  // src/lib/ageGate.ts). A KNOWN child age still excludes places with no
+  // stated range (can't confirm fit); with no saved child age, a place
+  // with no range at all now passes through (it's already been
+  // evidence-vetted as toddler-appropriate by apply_place_toddler_gate —
+  // see ageGate.ts's own comment for why "no item data" stopped being a
+  // hard exclude in the no-profile case, fixed 2026-08-31 after it broke
+  // the places directory outright).
   const ageAppropriate = applyAgeGate(gate.kept, options.childAgeMonths ?? null);
 
   const results: PlaceSearchResult[] = ageAppropriate.map((place) => ({

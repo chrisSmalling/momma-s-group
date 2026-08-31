@@ -4,7 +4,7 @@ import Nav from "@/components/Nav";
 import PlaceSearchCard from "@/components/PlaceSearchCard";
 import { createClient } from "@/lib/supabase/server";
 import { searchPlaces } from "@/lib/places/search";
-import { PLACE_CATEGORY_TAGS } from "@/lib/places/tags";
+import { PLACE_CATEGORY_TAGS, getPlaceCategoryCounts } from "@/lib/places/tags";
 
 function chipClass(active: boolean) {
   return active
@@ -52,6 +52,22 @@ export default async function BrowsePlacesPage(props: PageProps<"/places/browse"
       searchFailed = true;
     }
   }
+
+  // Empty state, redesigned: a category can legitimately be sparse (or
+  // temporarily zero) — that's the honest-unknown data model working as
+  // intended, not a dead end. Suggest categories that DO have places
+  // instead of leaving the screen blank below a "nothing here" message.
+  const isEmpty = hasQuery && !searchFailed && !routingUnavailable && results.length === 0;
+  let categorySuggestions: { value: string; label: string; count: number }[] = [];
+  if (isEmpty && activeTag) {
+    const counts = await getPlaceCategoryCounts(supabase);
+    categorySuggestions = PLACE_CATEGORY_TAGS
+      .filter((tag) => tag.value !== activeTag && (counts.get(tag.value) ?? 0) > 0)
+      .map((tag) => ({ ...tag, count: counts.get(tag.value) ?? 0 }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 2);
+  }
+  const activeTagLabel = PLACE_CATEGORY_TAGS.find((tag) => tag.value === activeTag)?.label ?? null;
 
   return (
     <div className="flex flex-1 flex-col items-center px-4 py-10">
@@ -106,12 +122,38 @@ export default async function BrowsePlacesPage(props: PageProps<"/places/browse"
             </p>
           )}
 
-          {hasQuery && !searchFailed && !routingUnavailable && results.length === 0 && (
-            <p className="rounded-xl bg-zinc-50 px-3 py-3 text-sm text-zinc-600">
-              {q
-                ? `I don't have any ${q} places on file yet.`
-                : "No places on file in this category yet."}
-            </p>
+          {isEmpty && (
+            <div className="flex flex-col gap-3 rounded-xl bg-zinc-50 px-4 py-4 text-sm text-zinc-600">
+              <p>
+                {activeTagLabel
+                  ? `Nothing verified in ${activeTagLabel} near you yet.`
+                  : q
+                    ? `Nothing verified matching "${q}" near you yet.`
+                    : "Nothing verified here yet."}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {categorySuggestions.length > 0 && (
+                  <>
+                    <span className="text-zinc-500">Try:</span>
+                    {categorySuggestions.map((tag) => (
+                      <Link
+                        key={tag.value}
+                        href={`/places/browse?tag=${tag.value}`}
+                        className="rounded-full border border-zinc-300 bg-white px-3 py-1.5 font-semibold text-zinc-700 hover:border-zinc-500"
+                      >
+                        {tag.label} ({tag.count})
+                      </Link>
+                    ))}
+                  </>
+                )}
+                <Link
+                  href="/places"
+                  className="rounded-full bg-rose-50 px-3 py-1.5 font-semibold text-rose-700 hover:bg-rose-100"
+                >
+                  🌼 Ask Poppy instead
+                </Link>
+              </div>
+            </div>
           )}
 
           {results.length > 0 && (
