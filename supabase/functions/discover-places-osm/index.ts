@@ -72,7 +72,85 @@ const OSM_QUERIES: { tag: string; description: (name: string) => string; categor
     place_type: "outdoor",
     is_outdoor: true,
   },
+  // Business/activity tags added 2026-08-31 to cover the categories OSM's
+  // infrastructure tags miss (dance/gymnastics/gyms/music/martial arts/
+  // farms) -- still free, keyless OSM data, just a wider tag list on the
+  // same query/dedup/gate/schedule. None of these descriptions claim
+  // toddler-specific programming OSM doesn't actually state; a fitness
+  // centre or dance studio is exactly that and nothing more until the
+  // toddler gate finds real evidence otherwise -- these are meant to go
+  // to needs_review/rejected as often as verified, that's the gate
+  // working as intended, not a discovery bug.
+  {
+    tag: '"leisure"="dance"',
+    description: (name) => `${name} is a dance venue (OpenStreetMap leisure=dance).`,
+    category_tags: ["dance"],
+    place_type: "indoor",
+    is_outdoor: false,
+  },
+  {
+    tag: '"amenity"="dancing_school"',
+    description: (name) => `${name} is a dance school (OpenStreetMap amenity=dancing_school).`,
+    category_tags: ["dance"],
+    place_type: "indoor",
+    is_outdoor: false,
+  },
+  {
+    tag: '"sport"="gymnastics"',
+    description: (name) => `${name} is a gymnastics facility (OpenStreetMap sport=gymnastics).`,
+    category_tags: ["gymnastics"],
+    place_type: "indoor",
+    is_outdoor: false,
+  },
+  {
+    tag: '"leisure"="fitness_centre"',
+    description: (name) => `${name} is a fitness centre (OpenStreetMap leisure=fitness_centre).`,
+    category_tags: ["toddler_gym"],
+    place_type: "indoor",
+    is_outdoor: false,
+  },
+  {
+    tag: '"leisure"="sports_centre"',
+    description: (name) => `${name} is a sports centre (OpenStreetMap leisure=sports_centre).`,
+    category_tags: ["toddler_gym"],
+    place_type: "indoor",
+    is_outdoor: false,
+  },
+  {
+    tag: '"amenity"="music_school"',
+    description: (name) => `${name} is a music school (OpenStreetMap amenity=music_school).`,
+    category_tags: ["music"],
+    place_type: "indoor",
+    is_outdoor: false,
+  },
+  {
+    tag: '"sport"="martial_arts"',
+    description: (name) => `${name} is a martial arts facility (OpenStreetMap sport=martial_arts).`,
+    category_tags: ["kids_class"],
+    place_type: "indoor",
+    is_outdoor: false,
+  },
+  {
+    tag: '"tourism"="farm"',
+    description: (name) => `${name} is a working/visitable farm (OpenStreetMap tourism=farm).`,
+    category_tags: ["farm", "outdoor"],
+    place_type: "outdoor",
+    is_outdoor: true,
+  },
+  {
+    tag: '"leisure"="indoor_play"',
+    description: (name) => `${name} is an indoor play facility (OpenStreetMap leisure=indoor_play).`,
+    category_tags: ["playground", "indoor"],
+    place_type: "indoor",
+    is_outdoor: false,
+  },
 ];
+// Deliberately NOT queried: shop=games (retail, not an activity venue --
+// out of scope for a "places to take your toddler" directory) and
+// leisure=amusement_arcade (OSM doesn't distinguish family arcades from
+// adult/bar-attached ones, and the tag alone gives the gate too little
+// to work with either way -- flagged here rather than silently included
+// or silently dropped).
 
 interface OverpassElement {
   type: "node" | "way" | "relation";
@@ -107,34 +185,67 @@ async function fetchOverpassQuery(tag: string): Promise<OverpassElement[]> {
   return Array.isArray(json?.elements) ? json.elements : [];
 }
 
-// One request per category rather than one combined multi-tag query: a
-// single 5-tag x (node+way) union over this whole bbox hit 500/504 on
-// two different public Overpass endpoints (verified live 2026-08-30) --
-// almost certainly a server-side complexity/time budget on the shared
-// free instances, not a query-syntax problem. Splitting it into 5
-// smaller, independent requests (paced 2s apart) keeps each one cheap
-// enough to actually complete, and one category failing doesn't take
-// the others down with it.
-async function fetchOverpass(): Promise<{ elements: OverpassElement[]; failedTags: string[] }> {
-  const elements: OverpassElement[] = [];
-  const failedTags: string[] = [];
-  for (let i = 0; i < OSM_QUERIES.length; i++) {
-    try {
-      elements.push(...(await fetchOverpassQuery(OSM_QUERIES[i].tag)));
-    } catch (e) {
-      failedTags.push(`${OSM_QUERIES[i].tag}: ${String(e instanceof Error ? e.message : e).slice(0, 150)}`);
-    }
-    if (i + 1 < OSM_QUERIES.length) await new Promise((r) => setTimeout(r, 2000));
-  }
-  return { elements, failedTags };
+interface RunStats {
+  inserted: number;
+  duplicates: number;
+  skippedNoName: number;
+  alreadyKnown: number;
+  errors: number;
+  errorSamples: string[];
 }
 
-function matchQuery(tags: Record<string, string>) {
-  for (const q of OSM_QUERIES) {
-    const [key, value] = q.tag.split("=").map((s) => s.replace(/"/g, ""));
-    if (tags[key] === value) return q;
+type OsmQuery = (typeof OSM_QUERIES)[number];
+
+async function insertElement(el: OverpassElement, match: OsmQuery, stats: RunStats) {
+  const tags = el.tags ?? {};
+  const name = tags.name?.trim();
+  if (!name) { stats.skippedNoName++; return; }
+
+  const lat = el.type === "node" ? el.lat : el.center?.lat;
+  const lng = el.type === "node" ? el.lon : el.center?.lon;
+  if (typeof lat !== "number" || typeof lng !== "number") return;
+
+  const sourceUrl = `https://www.openstreetmap.org/${el.type}/${el.id}`;
+
+  const { data: isDup, error: dupError } = await db.rpc("place_discovery_duplicate_exists", {
+    p_lat: lat,
+    p_lng: lng,
+  });
+  if (dupError) { stats.errors++; if (stats.errorSamples.length < 5) stats.errorSamples.push(dupError.message); return; }
+  if (isDup) { stats.duplicates++; return; }
+
+  const addressParts = [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean);
+  const { error: insertError } = await db.from("places").insert({
+    name,
+    lat,
+    lng,
+    latitude: lat,
+    longitude: lng,
+    city: tags["addr:city"] ?? null,
+    state: tags["addr:state"] ?? null,
+    zip_code: tags["addr:postcode"] ?? null,
+    address: addressParts.length > 0 ? addressParts.join(" ") : null,
+    website: tags.website ?? tags["contact:website"] ?? null,
+    phone: tags.phone ?? tags["contact:phone"] ?? null,
+    description: match.description(name),
+    place_type: match.place_type,
+    category_tags: match.category_tags,
+    is_outdoor: match.is_outdoor,
+    metro_area: "tampa_bay",
+    facility_data_source: "osm_overpass",
+    source_url: sourceUrl,
+    discovery_priority: 40,
+  });
+
+  if (insertError) {
+    // Unique violation on source_url means a prior run already inserted
+    // this exact OSM element -- expected on repeat runs, not a real error.
+    if (insertError.code === "23505") { stats.alreadyKnown++; return; }
+    stats.errors++;
+    if (stats.errorSamples.length < 5) stats.errorSamples.push(insertError.message);
+    return;
   }
-  return null;
+  stats.inserted++;
 }
 
 Deno.serve(async (req) => {
@@ -144,68 +255,31 @@ Deno.serve(async (req) => {
   const { data: validSecret } = await db.rpc("validate_community_cron_secret", { provided_secret: secret });
   if (validSecret !== true) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { elements, failedTags } = await fetchOverpass();
-  if (elements.length === 0 && failedTags.length > 0) {
-    return Response.json({ error: "all category queries failed", failedTags }, { status: 502 });
+  const stats: RunStats = { inserted: 0, duplicates: 0, skippedNoName: 0, alreadyKnown: 0, errors: 0, errorSamples: [] };
+  const failedTags: string[] = [];
+  let elementsFetched = 0;
+
+  // Fetch AND insert one category at a time (rather than fetching all 14
+  // categories first and inserting afterward): with this many tags now
+  // queried, the whole run can approach platform/timeout limits, and a
+  // late category failing or the function getting killed should never
+  // throw away progress already made on earlier categories.
+  for (let i = 0; i < OSM_QUERIES.length; i++) {
+    const q = OSM_QUERIES[i];
+    try {
+      const elements = await fetchOverpassQuery(q.tag);
+      elementsFetched += elements.length;
+      // Overpass already server-side filtered this batch to exactly q.tag
+      // (each request queries one tag), so every returned element matches.
+      for (const el of elements) await insertElement(el, q, stats);
+    } catch (e) {
+      failedTags.push(`${q.tag}: ${String(e instanceof Error ? e.message : e).slice(0, 150)}`);
+    }
+    if (i + 1 < OSM_QUERIES.length) await new Promise((r) => setTimeout(r, 1500));
   }
 
-  let inserted = 0, duplicates = 0, skippedNoName = 0, alreadyKnown = 0, errors = 0;
-  const errorSamples: string[] = [];
-
-  for (const el of elements) {
-    const tags = el.tags ?? {};
-    const name = tags.name?.trim();
-    if (!name) { skippedNoName++; continue; }
-
-    const match = matchQuery(tags);
-    if (!match) continue;
-
-    const lat = el.type === "node" ? el.lat : el.center?.lat;
-    const lng = el.type === "node" ? el.lon : el.center?.lon;
-    if (typeof lat !== "number" || typeof lng !== "number") continue;
-
-    const sourceUrl = `https://www.openstreetmap.org/${el.type}/${el.id}`;
-
-    const { data: isDup, error: dupError } = await db.rpc("place_discovery_duplicate_exists", {
-      p_lat: lat,
-      p_lng: lng,
-    });
-    if (dupError) { errors++; if (errorSamples.length < 5) errorSamples.push(dupError.message); continue; }
-    if (isDup) { duplicates++; continue; }
-
-    const addressParts = [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean);
-    const { error: insertError } = await db.from("places").insert({
-      name,
-      lat,
-      lng,
-      latitude: lat,
-      longitude: lng,
-      city: tags["addr:city"] ?? null,
-      state: tags["addr:state"] ?? null,
-      zip_code: tags["addr:postcode"] ?? null,
-      address: addressParts.length > 0 ? addressParts.join(" ") : null,
-      website: tags.website ?? tags["contact:website"] ?? null,
-      phone: tags.phone ?? tags["contact:phone"] ?? null,
-      description: match.description(name),
-      place_type: match.place_type,
-      category_tags: match.category_tags,
-      is_outdoor: match.is_outdoor,
-      metro_area: "tampa_bay",
-      facility_data_source: "osm_overpass",
-      source_url: sourceUrl,
-      discovery_priority: 40,
-    });
-
-    if (insertError) {
-      // Unique violation on source_url means a prior run already
-      // inserted this exact OSM element -- expected on repeat runs, not
-      // a real error.
-      if (insertError.code === "23505") { alreadyKnown++; continue; }
-      errors++;
-      if (errorSamples.length < 5) errorSamples.push(insertError.message);
-      continue;
-    }
-    inserted++;
+  if (elementsFetched === 0 && failedTags.length === OSM_QUERIES.length) {
+    return Response.json({ error: "all category queries failed", failedTags }, { status: 502 });
   }
 
   const { data: coverage } = await db.rpc("place_category_coverage_report");
@@ -213,14 +287,14 @@ Deno.serve(async (req) => {
   return Response.json({
     ok: true,
     center: CENTER,
-    elements_fetched: elements.length,
+    elements_fetched: elementsFetched,
     failed_category_queries: failedTags,
-    inserted,
-    duplicates_by_proximity: duplicates,
-    already_known_by_source_url: alreadyKnown,
-    skipped_no_name: skippedNoName,
-    errors,
-    error_samples: errorSamples,
+    inserted: stats.inserted,
+    duplicates_by_proximity: stats.duplicates,
+    already_known_by_source_url: stats.alreadyKnown,
+    skipped_no_name: stats.skippedNoName,
+    errors: stats.errors,
+    error_samples: stats.errorSamples,
     coverage_below_target: (coverage ?? []).filter((c: { below_target: boolean }) => c.below_target),
   });
 });
