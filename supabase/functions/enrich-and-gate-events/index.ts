@@ -1,36 +1,43 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-// Toddler-appropriateness gate. The ONLY thing allowed to set
-// places.llm_verification_status (see apply_place_toddler_gate in
-// 20260830120000_place_toddler_appropriateness_gate.sql) -- classify-places
-// only extracts facility amenities now, it no longer decides eligibility.
+// Event-side toddler-appropriateness gate. The ONLY thing allowed to
+// set events.toddler_verification_status -- apply_event_toddler_gate,
+// mirroring apply_place_toddler_gate exactly (same
+// place_evidence_supported substring-match discipline, same three
+// honest outcomes). is_kid_relevant (owned by classify-candidates /
+// apply_event_enrichment) stays a separate, general "not
+// inappropriate for kids" signal -- this is toddler-specific.
 //
-// Deterministic hard-reject rules (place_hard_reject_reason, free, no LLM
-// call) already ran once as part of that migration and re-run here on every
-// batch before any Gemini call, so obvious adult-oriented venues never cost
-// an LLM call. Everything else goes through Gemini for the ambiguous
-// middle, evidence-quote gated exactly like classify-places already proves
-// facts: a verdict without a literal supporting quote from the place's own
-// description is never trusted (apply_place_toddler_gate enforces this
-// server-side too, not just here -- this function cannot bypass that even
-// if it wanted to).
+// One representative event per recurring series is evaluated
+// (get_events_for_toddler_gate dedupes by coalesce(program_id, id)),
+// then propagate_event_toddler_gate_to_series copies that one real
+// verdict to every sibling occurrence -- a 10-occurrence recurring
+// event costs one Gemini call, not ten.
+//
+// Event descriptions are usually already reasonably rich (unlike the
+// bare OSM tags that motivated place-side evidence fetching), so this
+// evaluates the stored description directly rather than fetching an
+// external page -- but it still supports an optional source_url fetch
+// for genuinely thin descriptions, same free-first approach as
+// enrich-and-gate-places.
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.5-flash-lite";
 const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-const PLACES_PER_RUN = 100;
+const EVENTS_PER_RUN = 30;
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 1200;
+const MIN_DESCRIPTION_CHARS = 40;
 
-const SYSTEM = `You are checking whether a place is appropriate to bring a toddler (roughly ages 1-4). Using ONLY the supplied name/description/category_tags/place_type, decide a verdict for each place:
-- "verified": the evidence clearly supports this being an appropriate place for a toddler (explicit family/kids programming, age-appropriate amenities or activities, a venue type that is inherently toddler-friendly like a playground or children's museum).
-- "rejected": the evidence indicates an adult-oriented venue, a venue type incompatible with toddlers, or an explicit age restriction.
-- "needs_review": the evidence is ambiguous, insufficient, or you are not confident either way. NEVER guess -- if you are not sure, use needs_review.
-Require an exact quote copied verbatim from the supplied description for verdict_quote (for "verified" or "rejected" -- omit/null it for "needs_review" if there is nothing to quote). If you can determine an age range from an explicit age policy in the description, also give age_min_months/age_max_months with an exact supporting quote in age_quote; otherwise leave those null. Do not infer an age range from the venue category alone -- only from an explicit stated policy.
+const SYSTEM = `You are checking whether an EVENT is appropriate to bring a toddler (roughly ages 1-4) to. Using ONLY the supplied title/description, decide a verdict for each event:
+- "verified": the evidence clearly supports this being an appropriate event for a toddler (explicit toddler/preschool programming, family-friendly activity type, no incompatible age restriction).
+- "rejected": the evidence indicates the event targets an older age group (e.g. "ages 6-10", "adults only") or an adult-oriented event type.
+- "needs_review": the evidence is ambiguous, insufficient, or you are not confident either way. NEVER guess -- if the description doesn't establish toddler suitability, use needs_review even if the event type sounds plausibly kid-friendly. A general "kid-friendly" or "family event" claim alone is NOT enough for verified -- being kid-relevant in general is not the same as being toddler-appropriate specifically.
+Require an exact quote copied verbatim from the supplied description for verdict_quote (for "verified" or "rejected" -- omit/null it for "needs_review"). If an explicit age policy is stated, also give age_min_months/age_max_months with an exact supporting quote in age_quote; otherwise leave those null.
 Return ONLY a JSON array: [{"id":"<id>","verdict":"verified"|"needs_review"|"rejected","verdict_quote":"quote"|null,"age_min_months":number|null,"age_max_months":number|null,"age_quote":"quote"|null,"reasoning":"one short sentence"}]`;
 
-interface Row { id: string; name: string; description: string | null; category_tags: string[] | null; place_type: string | null }
+interface Row { id: string; program_id: string | null; title: string; description: string | null }
 interface Verdict {
   id: string;
   verdict?: unknown;
@@ -53,18 +60,12 @@ async function key(): Promise<string> {
 }
 
 async function gemini(rows: Row[], k: string): Promise<Map<string, Verdict>> {
-  const payload = rows.map((r) => ({
-    id: r.id,
-    name: r.name ?? "",
-    description: (r.description ?? "").slice(0, 2000),
-    category_tags: r.category_tags ?? [],
-    place_type: r.place_type ?? null,
-  }));
+  const payload = rows.map((r) => ({ id: r.id, title: r.title ?? "", description: (r.description ?? "").slice(0, 2000) }));
   const res = await fetch(URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": k },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: `${SYSTEM}\nPLACES:\n${JSON.stringify(payload)}` }] }],
+      contents: [{ parts: [{ text: `${SYSTEM}\nEVENTS:\n${JSON.stringify(payload)}` }] }],
       generationConfig: { temperature: 0, responseMimeType: "application/json", thinkingConfig: { thinkingLevel: "minimal" } },
     }),
     signal: AbortSignal.timeout(30000),
@@ -76,6 +77,20 @@ async function gemini(rows: Row[], k: string): Promise<Map<string, Verdict>> {
   const m = new Map<string, Verdict>();
   for (const x of Array.isArray(parsed) ? parsed : []) if (x?.id) m.set(String(x.id), x);
   return m;
+}
+
+async function applyAndPropagate(
+  eventId: string,
+  args: {
+    p_verdict: string; p_age_min_months: number | null; p_age_max_months: number | null;
+    p_verdict_quote: string | null; p_age_quote: string | null; p_reasoning: string; p_model: string;
+    p_evidence_text?: string; p_evidence_source_url?: string | null;
+  },
+): Promise<string | null> {
+  const { data: finalVerdict, error } = await db.rpc("apply_event_toddler_gate", { p_event_id: eventId, ...args });
+  if (error) throw error;
+  await db.rpc("propagate_event_toddler_gate_to_series", { p_representative_event_id: eventId });
+  return finalVerdict;
 }
 
 Deno.serve(async (req) => {
@@ -92,60 +107,43 @@ Deno.serve(async (req) => {
     return Response.json({ error: String(e) }, { status: 500 });
   }
 
-  const { data: queueData, error: queueError } = await db.rpc("get_places_for_toddler_gate", { p_limit: PLACES_PER_RUN });
+  const { data: queueData, error: queueError } = await db.rpc("get_events_for_toddler_gate", { p_limit: EVENTS_PER_RUN });
   if (queueError) return Response.json({ error: queueError.message }, { status: 500 });
   let queue = (queueData ?? []) as Row[];
 
-  // Hard-reject pass against this run's actual backlog (real predicate,
-  // via RPC -- see place_hard_reject_reason).
-  let hardRejected = 0;
-  let noEvidence = 0;
+  let hardRejected = 0, noEvidence = 0;
   const remaining: Row[] = [];
   for (const r of queue) {
-    // No description at all means no possible evidence quote -- verified
-    // and rejected both require one (apply_place_toddler_gate enforces
-    // this server-side), so this outcome is already fixed: skip the LLM
-    // call entirely and land it in needs_review directly.
-    if (!r.description || !r.description.trim()) {
-      const { error: applyError } = await db.rpc("apply_place_toddler_gate", {
-        p_place_id: r.id,
+    if (!r.description || r.description.trim().length < MIN_DESCRIPTION_CHARS) {
+      const finalVerdict = await applyAndPropagate(r.id, {
         p_verdict: "needs_review",
-        p_age_min_months: null,
-        p_age_max_months: null,
-        p_verdict_quote: null,
-        p_age_quote: null,
-        p_reasoning: "no description available to establish toddler-appropriateness",
+        p_age_min_months: null, p_age_max_months: null,
+        p_verdict_quote: null, p_age_quote: null,
+        p_reasoning: "no description (or too thin) to establish toddler-appropriateness",
         p_model: "no-evidence-v1",
-      });
-      if (!applyError) { noEvidence++; continue; }
+      }).catch(() => null);
+      if (finalVerdict !== null) { noEvidence++; continue; }
     }
-    const { data: reason, error: reasonError } = await db.rpc("place_hard_reject_reason", {
-      p_name: r.name,
+
+    const { data: reason, error: reasonError } = await db.rpc("event_hard_reject_reason", {
+      p_title: r.title,
       p_description: r.description,
-      p_category_tags: r.category_tags,
     });
     if (reasonError) { remaining.push(r); continue; }
     if (reason) {
-      // The evidence check verifies p_verdict_quote against `description`
-      // (+ p_evidence_text) -- r.name is usually NOT inside description,
-      // so passing it as the quote would silently fail evidence and
-      // downgrade to needs_review instead of actually rejecting. The
-      // real, verifiable evidence for a hard-reject IS the deterministic
-      // regex match itself: pass the reason as both the quote and the
-      // evidence text so it's trivially self-grounded, honestly.
-      const { error: applyError } = await db.rpc("apply_place_toddler_gate", {
-        p_place_id: r.id,
+      // Same fix as verify-toddler-fit's place-side hard-reject: the
+      // reason IS the real evidence (a deterministic regex match), not
+      // a quote from description -- pass it as both quote and evidence
+      // text so it's honestly self-grounded rather than silently
+      // failing the substring check and downgrading to needs_review.
+      const finalVerdict = await applyAndPropagate(r.id, {
         p_verdict: "rejected",
-        p_age_min_months: null,
-        p_age_max_months: null,
-        p_verdict_quote: reason,
-        p_age_quote: null,
-        p_reasoning: reason,
-        p_model: "hard-rule-v1",
+        p_age_min_months: null, p_age_max_months: null,
+        p_verdict_quote: reason, p_age_quote: null,
+        p_reasoning: reason, p_model: "hard-rule-v1",
         p_evidence_text: reason,
-        p_evidence_source_url: null,
-      });
-      if (!applyError) { hardRejected++; continue; }
+      }).catch(() => null);
+      if (finalVerdict !== null) { hardRejected++; continue; }
     }
     remaining.push(r);
   }
@@ -168,8 +166,7 @@ Deno.serve(async (req) => {
       const v = verdicts.get(r.id);
       if (!v) { missingVerdicts++; continue; }
       try {
-        const { data: finalVerdict, error } = await db.rpc("apply_place_toddler_gate", {
-          p_place_id: r.id,
+        const finalVerdict = await applyAndPropagate(r.id, {
           p_verdict: verdictOf(v.verdict),
           p_age_min_months: int(v.age_min_months),
           p_age_max_months: int(v.age_max_months),
@@ -178,7 +175,6 @@ Deno.serve(async (req) => {
           p_reasoning: str(v.reasoning) ?? "",
           p_model: MODEL,
         });
-        if (error) throw error;
         if (finalVerdict === "verified") verified++;
         else if (finalVerdict === "rejected") rejected++;
         else needsReview++;
