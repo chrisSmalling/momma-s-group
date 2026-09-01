@@ -115,7 +115,7 @@ export default function EventCard({ event, currentUserId, currentUserName, curre
           <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3"><span className="text-sm font-bold text-rose-700">View full event</span><span aria-hidden="true" className="text-lg font-semibold text-rose-600 transition-transform group-hover:translate-x-0.5">→</span></div>
         </Link>
 
-        {event.registration_required && event.registration_url && <div className="mt-3"><a href={event.registration_url} target="_blank" rel="noopener noreferrer" className="min-h-11 inline-flex items-center text-sm font-semibold text-rose-700 underline underline-offset-2">Register →</a></div>}
+        {event.registration_required && event.registration_url && <div className="mt-3 border-t border-zinc-100 pt-3"><a href={event.registration_url} target="_blank" rel="noopener noreferrer" className="min-h-11 inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-4 text-sm font-bold text-rose-700 hover:bg-rose-100">Register →</a></div>}
       </>}
     >
       <details className="mt-3 rounded-xl border border-zinc-100 bg-zinc-50/70 px-3"><summary className="flex min-h-11 cursor-pointer items-center justify-between text-sm font-bold text-zinc-700"><span>More about this event</span><span aria-hidden="true" className="text-zinc-400">⌄</span></summary><div className="pb-3">
