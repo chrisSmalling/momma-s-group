@@ -70,14 +70,18 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
       <div className="w-full max-w-md">
         <Nav email={user.email ?? ""} />
 
-        <h1 className="font-display mb-1 text-2xl font-bold text-zinc-900">Help Poppy get to know your family 🌼</h1>
+        <h1 className="font-display mb-6 text-2xl font-bold text-zinc-900">Settings</h1>
+
+        <div className="flex flex-col gap-5">
+        <section className="rounded-3xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5">
+        <h2 className="font-display mb-1 text-lg font-bold text-zinc-900">Help Poppy get to know your family 🌼</h2>
         <p className="mb-6 text-sm text-zinc-500">The more Poppy knows, the better her ideas. Everything here is optional — skip anything you like.</p>
 
         {poppySaved && <p className="mb-4 text-sm text-emerald-700">Saved — Poppy will use this next time.</p>}
 
-        <form action={updatePoppyProfile} className="mb-10 flex flex-col gap-5">
-          <label className="flex flex-col gap-1 text-sm text-zinc-600">Your name <span className="text-zinc-600">(optional)</span><input type="text" name="display_name" defaultValue={profile?.display_name ?? ""} maxLength={80} placeholder="Chris" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
-          <label className="flex flex-col gap-1 text-sm text-zinc-600">What&apos;s your little one&apos;s name?<input type="text" name="child_name" defaultValue={profile?.child_name ?? ""} maxLength={60} placeholder="Emma" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+        <form action={updatePoppyProfile} className="flex flex-col gap-5">
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">Your name <span className="text-zinc-600">(optional)</span><input type="text" name="display_name" defaultValue={profile?.display_name ?? ""} maxLength={80} placeholder="Chris" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" /></label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">What&apos;s your little one&apos;s name?<input type="text" name="child_name" defaultValue={profile?.child_name ?? ""} maxLength={60} placeholder="Emma" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" /></label>
 
           <fieldset className="flex flex-col gap-2">
             <legend className="text-sm text-zinc-600">What do they love? <span className="text-zinc-600">(pick any)</span></legend>
@@ -124,14 +128,16 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
             </div>
           </fieldset>
 
-          <label className="flex flex-col gap-1 text-sm text-zinc-600">How far are you usually willing to go? <span className="text-zinc-600">(miles, optional)</span><input type="number" name="max_distance_miles" min={1} max={200} defaultValue={profile?.max_distance_miles ?? ""} placeholder="e.g. 20" className="w-32 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">How far are you usually willing to go? <span className="text-zinc-600">(miles, optional)</span><input type="number" name="max_distance_miles" min={1} max={200} defaultValue={profile?.max_distance_miles ?? ""} placeholder="e.g. 20" className="w-32 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" /></label>
 
-          <label className="flex flex-col gap-1 text-sm text-zinc-600">Anything about budget? <span className="text-zinc-600">(optional)</span><input type="text" name="family_budget_note" defaultValue={profile?.family_budget_note ?? ""} maxLength={200} placeholder="Trying to keep it mostly free" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">Anything about budget? <span className="text-zinc-600">(optional)</span><input type="text" name="family_budget_note" defaultValue={profile?.family_budget_note ?? ""} maxLength={200} placeholder="Trying to keep it mostly free" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" /></label>
 
           <button type="submit" className="self-start rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white">Save for Poppy</button>
         </form>
+        </section>
 
-        <h1 className="font-display mb-1 text-2xl font-bold text-zinc-900">Nap window</h1>
+        <section className="rounded-3xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5">
+        <h2 className="font-display mb-1 text-lg font-bold text-zinc-900">Nap window</h2>
         <p className="mb-6 text-sm text-zinc-500">Events that overlap this window show dimmed on your calendar (never hidden) so you can plan around nap time.</p>
 
         {saved && <p className="mb-4 text-sm text-emerald-700">Saved.</p>}
@@ -139,14 +145,16 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
 
         <form action={updateNapSettings} className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-sm text-zinc-600">Nap starts<input type="time" name="nap_start" defaultValue={trimTime(profile?.nap_start)} className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
-            <label className="flex flex-col gap-1 text-sm text-zinc-600">Nap ends<input type="time" name="nap_end" defaultValue={trimTime(profile?.nap_end)} className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+            <label className="flex flex-col gap-1 text-sm text-zinc-600">Nap starts<input type="time" name="nap_start" defaultValue={trimTime(profile?.nap_start)} className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" /></label>
+            <label className="flex flex-col gap-1 text-sm text-zinc-600">Nap ends<input type="time" name="nap_end" defaultValue={trimTime(profile?.nap_end)} className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" /></label>
           </div>
-          <label className="flex flex-col gap-1 text-sm text-zinc-600">Child&apos;s age (months)<input type="number" name="child_age_months" min={0} defaultValue={profile?.child_age_months ?? ""} className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">Child&apos;s age (months)<input type="number" name="child_age_months" min={0} defaultValue={profile?.child_age_months ?? ""} className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" /></label>
           <button type="submit" className="self-start rounded-full bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700">Save</button>
         </form>
+        </section>
 
-        <h1 className="font-display mb-1 mt-10 text-xl font-bold text-zinc-900">Home address</h1>
+        <section className="rounded-3xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5">
+        <h2 className="font-display mb-1 text-lg font-bold text-zinc-900">Home address</h2>
         <p className="mb-4 text-sm text-zinc-500">Use your complete home address. We&apos;ll use it to calculate real driving distance and time to events and places. You never need to enter latitude or longitude.</p>
 
         {addressSaved === "verified" && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"><strong>✓ Home address saved and verified.</strong><span className="block text-xs text-emerald-700">Momma&apos;s Meetup can use it for personalized travel times.</span></div>}
@@ -156,12 +164,12 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
         {addressError && <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{addressError}</p>}
 
         <form action={updateHomeLocation} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1 text-sm text-zinc-600">Street address<input type="text" name="home_street" defaultValue={street} autoComplete="street-address" placeholder="123 Main St" required className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">Street address<input type="text" name="home_street" defaultValue={street} autoComplete="street-address" placeholder="123 Main St" required className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" /></label>
           <div className="grid grid-cols-[1fr_5rem] gap-3">
-            <label className="flex flex-col gap-1 text-sm text-zinc-600">City<input type="text" name="home_city" defaultValue={city} autoComplete="address-level2" placeholder="Wesley Chapel" required className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
-            <label className="flex flex-col gap-1 text-sm text-zinc-600">State<input type="text" name="home_state" defaultValue={state} autoComplete="address-level1" placeholder="FL" maxLength={2} required className="rounded-md border border-zinc-300 px-3 py-2 text-sm uppercase text-zinc-900 outline-none focus:border-zinc-500" /></label>
+            <label className="flex flex-col gap-1 text-sm text-zinc-600">City<input type="text" name="home_city" defaultValue={city} autoComplete="address-level2" placeholder="Wesley Chapel" required className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" /></label>
+            <label className="flex flex-col gap-1 text-sm text-zinc-600">State<input type="text" name="home_state" defaultValue={state} autoComplete="address-level1" placeholder="FL" maxLength={2} required className="rounded-md border border-zinc-300 px-3 py-2 text-sm uppercase text-zinc-900 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" /></label>
           </div>
-          <label className="flex flex-col gap-1 text-sm text-zinc-600">ZIP code<input type="text" name="home_zip" defaultValue={zip} inputMode="numeric" autoComplete="postal-code" placeholder="33543" pattern="[0-9]{5}(-[0-9]{4})?" required className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">ZIP code<input type="text" name="home_zip" defaultValue={zip} inputMode="numeric" autoComplete="postal-code" placeholder="33543" pattern="[0-9]{5}(-[0-9]{4})?" required className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" /></label>
 
           <div className="rounded-xl bg-zinc-50 px-3 py-2.5">
             <p className="text-xs font-semibold text-zinc-700">Your complete address</p>
@@ -172,14 +180,20 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
           {profile?.home_address && <p className="text-xs font-medium text-zinc-500">{addressVerified ? "✓ Location verified for routing" : "○ Address saved; location verification pending"}</p>}
           <button type="submit" className="self-start rounded-full bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700">Save home address</button>
         </form>
+        </section>
 
-        <h1 className="font-display mb-1 mt-10 text-xl font-bold text-zinc-900">About</h1>
+        <section className="rounded-3xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5">
+        <h2 className="font-display mb-2 text-lg font-bold text-zinc-900">About</h2>
         <nav aria-label="Legal" className="flex flex-col gap-2 text-sm"><Link href="/privacy" className="text-zinc-600 underline underline-offset-2 hover:text-zinc-900">Privacy policy</Link><Link href="/terms" className="text-zinc-600 underline underline-offset-2 hover:text-zinc-900">Terms of service</Link></nav>
+        </section>
 
-        <h1 className="font-display mb-1 mt-10 text-xl font-bold text-zinc-900">Account</h1>
+        <section className="rounded-3xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5">
+        <h2 className="font-display mb-2 text-lg font-bold text-zinc-900">Account</h2>
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5">
           <p className="text-xs text-rose-800">Deleting your account is permanent and can&apos;t be undone.</p>
           <Link href="/account/delete" className="mt-1.5 inline-block text-sm font-bold text-rose-700 underline underline-offset-2 hover:text-rose-800">Delete account</Link>
+        </div>
+        </section>
         </div>
       </div>
     </div>
