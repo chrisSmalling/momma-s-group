@@ -29,7 +29,7 @@ export default function TipsSection({
 }) {
   if (!groupId) {
     return (
-      <p className="text-sm text-zinc-400">Join a group to see and add tips.</p>
+      <p className="text-sm text-zinc-600">Join a group to see and add tips.</p>
     );
   }
 
@@ -40,7 +40,7 @@ export default function TipsSection({
           Tips from {groupName ?? "your group"}
         </p>
         {tips.length === 0 ? (
-          <p className="text-sm text-zinc-400">No tips yet.</p>
+          <p className="text-sm text-zinc-600">No tips yet.</p>
         ) : (
           <ul className="flex flex-col gap-1.5">
             {tips.map((tip) => (

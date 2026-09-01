@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { formatHours } from "@/lib/hours";
-import { isFreeCost } from "@/lib/cost";
 import PracticalityIcons from "@/components/PracticalityIcons";
 import IndoorOutdoorTag from "@/components/IndoorOutdoorTag";
 import AgeFitBadge from "@/components/AgeFitBadge";
+import CostPill from "@/components/CostPill";
 import type { PlaceSearchResult } from "@/lib/places/search";
 
 function distanceLabel(miles: number | null): string | null {
@@ -14,19 +14,6 @@ function distanceLabel(miles: number | null): string | null {
 function driveLabel(minutes: number | null): string | null {
   if (minutes == null) return null;
   return `~${Math.round(minutes)} min drive`;
-}
-
-// Used only here, not the rest of the app: a search-results grid is where a
-// parent is actively weighing options, so a plain "unknown" for the two
-// facts they're most likely deciding on (cost, hours) is more useful than
-// this app's usual "omit the field entirely" convention (see PracticalityIcons).
-function CostLine({ priceNote }: { priceNote: string | null }) {
-  if (priceNote?.trim()) {
-    return isFreeCost(priceNote)
-      ? <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">Free</span>
-      : <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">{priceNote.trim()}</span>;
-  }
-  return <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-500">Cost unknown</span>;
 }
 
 export default function PlaceSearchCard({ result }: { result: PlaceSearchResult }) {
@@ -41,7 +28,7 @@ export default function PlaceSearchCard({ result }: { result: PlaceSearchResult 
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <IndoorOutdoorTag isOutdoor={place.is_outdoor} />
           {goodAgeFit && <AgeFitBadge />}
-          <CostLine priceNote={place.price_note} />
+          <CostPill cost={place.price_note} />
         </div>
 
         {(driveLabel(driveMinutes) || distanceLabel(miles)) && (

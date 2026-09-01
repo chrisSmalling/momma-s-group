@@ -96,7 +96,7 @@ export default function CommitmentCard({
           ) : (
             <>
               <GoingAvatars going={displayGoing} currentUserId={currentUserId} groupName={groupName} hasActiveGroup />
-              {displayMaybeCount > 0 && <p className="mt-1 text-xs text-zinc-400">+{displayMaybeCount} maybe</p>}
+              {displayMaybeCount > 0 && <p className="mt-1 text-xs text-zinc-600">+{displayMaybeCount} maybe</p>}
             </>
           )}
         </div>

@@ -181,7 +181,7 @@ export default function EventComments({
 
   if (!groupId) {
     return (
-      <p className="text-sm text-zinc-400">
+      <p className="text-sm text-zinc-600">
         Join a group to see and post comments.
       </p>
     );
@@ -190,7 +190,7 @@ export default function EventComments({
   return (
     <div className="flex flex-col gap-3">
       {comments.length === 0 ? (
-        <p className="text-sm text-zinc-400">No comments yet.</p>
+        <p className="text-sm text-zinc-600">No comments yet.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {comments.map((c) => (
@@ -199,7 +199,7 @@ export default function EventComments({
                 <span className="font-medium text-zinc-700">
                   {c.user_id === currentUserId ? "You" : c.display_name}
                 </span>
-                <span className="text-[11px] text-zinc-400">
+                <span className="text-[11px] text-zinc-600">
                   {formatWhen(c.created_at)}
                 </span>
               </div>
@@ -229,7 +229,7 @@ export default function EventComments({
           className="rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
         />
         <div className="flex items-center justify-between">
-          <span className="text-[11px] text-zinc-400">{body.length}/1000</span>
+          <span className="text-[11px] text-zinc-600">{body.length}/1000</span>
           <button
             type="submit"
             disabled={isPending || !body.trim()}

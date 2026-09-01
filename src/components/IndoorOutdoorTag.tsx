@@ -7,7 +7,7 @@ export default function IndoorOutdoorTag({ isOutdoor }: { isOutdoor: boolean }) 
           : "inline-block rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600"
       }
     >
-      {isOutdoor ? "Outdoor" : "Indoor"}
+      {isOutdoor ? "🌳 Outside" : "🏠 Indoor"}
     </span>
   );
 }

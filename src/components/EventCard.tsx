@@ -7,8 +7,10 @@ import EventComments from "@/components/EventComments";
 import TipsSection from "@/components/TipsSection";
 import AskGroupButton from "@/components/AskGroupButton";
 import GroupAvailability from "@/components/GroupAvailability";
+import CostPill from "@/components/CostPill";
+import AgeFitBadge from "@/components/AgeFitBadge";
+import IndoorOutdoorTag from "@/components/IndoorOutdoorTag";
 import { isGoodAgeFit, formatAgeRange } from "@/lib/ageFit";
-import { isFreeCost } from "@/lib/cost";
 import type { FeedEvent, Place, PlaceTip, RsvpStatus, EventComment } from "@/types";
 
 type Attendee = { user_id: string; status: RsvpStatus; display_name: string; avatar_color: string };
@@ -32,28 +34,20 @@ function formatTime(event: FeedEvent) {
   return new Intl.DateTimeFormat("en-US", { timeZone: EVENT_TIME_ZONE, hour: "numeric", minute: "2-digit" }).format(new Date(event.starts_at));
 }
 
-function CostPill({ cost }: { cost: string | null }) {
-  if (isFreeCost(cost)) return <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">Free</span>;
-  if (!cost?.trim()) return <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">Cost unknown</span>;
-  return <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">{cost}</span>;
-}
-
 function CancelledPill() {
   return <span className="shrink-0 rounded-full bg-zinc-200 px-2.5 py-1 text-xs font-semibold text-zinc-600">Cancelled</span>;
 }
 
+// Age-fit and indoor/outdoor render via the same shared badges every other
+// surface (Places, Poppy) uses for these two facts — only drive-time and
+// registration stay local, since those aren't part of that shared set.
 function FitChips({ goodAgeFit, isOutdoor, driveMinutes, registrationRequired }: { goodAgeFit: boolean; isOutdoor: boolean; driveMinutes?: number; registrationRequired: boolean }) {
-  const chips: { key: string; label: string; tone: "sage" | "amber" }[] = [];
-  if (goodAgeFit) chips.push({ key: "age", label: "👶 Great for their age", tone: "sage" });
-  chips.push({ key: "indoor", label: isOutdoor ? "🌳 Outside" : "🏠 Indoor", tone: "sage" });
-  if (driveMinutes !== undefined) chips.push({ key: "drive", label: `🚗 ${Math.round(driveMinutes)} min`, tone: "sage" });
-  if (registrationRequired) chips.push({ key: "reg", label: "📝 Registration required", tone: "amber" });
-
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      {chips.map((chip) => (
-        <span key={chip.key} className={chip.tone === "sage" ? "inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700" : "inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800"}>{chip.label}</span>
-      ))}
+      {goodAgeFit && <AgeFitBadge />}
+      <IndoorOutdoorTag isOutdoor={isOutdoor} />
+      {driveMinutes !== undefined && <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">🚗 {Math.round(driveMinutes)} min</span>}
+      {registrationRequired && <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">📝 Registration required</span>}
     </div>
   );
 }
@@ -114,7 +108,7 @@ export default function EventCard({ event, currentUserId, currentUserName, curre
               {ageLabel && <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><span className="inline-block rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">{ageLabel}</span></div>}
               {!cancelled && <FitChips goodAgeFit={goodAgeFit} isOutdoor={event.is_outdoor} driveMinutes={distance?.driveMinutes} registrationRequired={event.registration_required} />}
               {!cancelled && (weatherSummary || distance) && <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-700 ring-1 ring-zinc-100">{weatherSummary && <span>{weatherSummary}</span>}{distance && <span>🚗 {distance.driveMinutes != null ? `${Math.round(distance.driveMinutes)} min` : "Drive time unavailable"}{miles != null ? ` · ${miles < 10 ? miles.toFixed(1) : Math.round(miles)} mi` : ""}</span>}</div>}
-              {proposedBy && <p className="mt-1.5 text-xs italic text-zinc-400">Proposed by {proposedBy.user_id === currentUserId ? "you" : proposedBy.display_name}</p>}
+              {proposedBy && <p className="mt-1.5 text-xs italic text-zinc-600">Proposed by {proposedBy.user_id === currentUserId ? "you" : proposedBy.display_name}</p>}
             </div>
           </div>
           <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3"><span className="text-sm font-bold text-rose-700">View full event</span><span aria-hidden="true" className="text-lg font-semibold text-rose-600 transition-transform group-hover:translate-x-0.5">→</span></div>

@@ -89,7 +89,7 @@ export default function LoginPage() {
               <button type="button" onClick={handleGoogleSignIn} disabled={googleStatus === "sending"} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
                 {googleStatus === "sending" ? "Connecting…" : "Continue with Google"}
               </button>
-              <div className="my-6 flex items-center gap-3 text-[11px] font-medium uppercase tracking-wider text-zinc-400"><div className="h-px flex-1 bg-zinc-200" /><span>or email</span><div className="h-px flex-1 bg-zinc-200" /></div>
+              <div className="my-6 flex items-center gap-3 text-[11px] font-medium uppercase tracking-wider text-zinc-600"><div className="h-px flex-1 bg-zinc-200" /><span>or email</span><div className="h-px flex-1 bg-zinc-200" /></div>
               <form onSubmit={handleSubmit} className="flex flex-col gap-3">
                 <label className="text-xs font-semibold text-zinc-700" htmlFor="email">Email address</label>
                 <input id="email" type="email" required autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="min-h-11 rounded-xl border border-zinc-300 px-3.5 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-950 focus:ring-2 focus:ring-zinc-950/10" />
@@ -98,7 +98,7 @@ export default function LoginPage() {
             </>
           )}
           {(status === "error" || googleStatus === "error") && <p role="alert" className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>}
-          <p className="mt-7 text-center text-[11px] leading-5 text-zinc-400">Private by design. Your groups and plans are only visible to the people who belong in them.</p>
+          <p className="mt-7 text-center text-[11px] leading-5 text-zinc-600">Private by design. Your groups and plans are only visible to the people who belong in them.</p>
         </section>
       </div>
     </main>

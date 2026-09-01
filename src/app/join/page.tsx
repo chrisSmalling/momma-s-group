@@ -24,7 +24,7 @@ export default async function JoinPage({ searchParams }: { searchParams: Promise
           <input type="hidden" name="code" value={code} />
           <button type="submit" className="min-h-12 w-full rounded-xl bg-rose-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-rose-700">Join {group.name}</button>
         </form>
-        <p className="mt-4 text-center text-[11px] leading-5 text-zinc-400">You&apos;ll only see activity shared with members of this group.</p>
+        <p className="mt-4 text-center text-[11px] leading-5 text-zinc-600">You&apos;ll only see activity shared with members of this group.</p>
       </div>
     </main>
   );

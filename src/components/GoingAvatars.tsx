@@ -23,7 +23,7 @@ export default function GoingAvatars({
 }) {
   if (!hasActiveGroup) {
     return (
-      <p className="text-sm text-zinc-400">
+      <p className="text-sm text-zinc-600">
         Join a group to see who else is going.
       </p>
     );
@@ -31,7 +31,7 @@ export default function GoingAvatars({
 
   if (going.length === 0) {
     return (
-      <p className="text-sm text-zinc-400">
+      <p className="text-sm text-zinc-600">
         No one from your group yet — be the first.
       </p>
     );

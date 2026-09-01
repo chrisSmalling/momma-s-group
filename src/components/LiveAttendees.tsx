@@ -100,12 +100,12 @@ export default function LiveAttendees({
         hasActiveGroup={hasActiveGroup}
       />
       {maybe.length > 0 && (
-        <p className="mt-1.5 text-xs text-zinc-400">
+        <p className="mt-1.5 text-xs text-zinc-600">
           {maybe.length} {maybe.length === 1 ? "undecided" : "undecided"}
         </p>
       )}
       {declineParts.length > 0 && (
-        <p className="mt-1.5 text-xs text-zinc-400">
+        <p className="mt-1.5 text-xs text-zinc-600">
           {declineParts.join(" · ")}
         </p>
       )}

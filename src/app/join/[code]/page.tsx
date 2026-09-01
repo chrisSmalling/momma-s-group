@@ -1,32 +1,15 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 
-export default async function JoinPage({
+// Was its own silent join-then-redirect implementation (no confirmation,
+// raw RPC error strings on failure) — a second, worse copy of what
+// /join?code= already does well. Redirecting here instead of duplicating
+// that logic means there's exactly one join flow to keep correct.
+export default async function JoinCodePage({
   params,
 }: {
   params: Promise<{ code: string }>;
 }) {
   const { code } = await params;
   const inviteCode = decodeURIComponent(code).trim().toLowerCase();
-
-  if (!inviteCode) redirect("/login");
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect(`/login?next=${encodeURIComponent(`/join/${inviteCode}`)}`);
-  }
-
-  const { error } = await supabase.rpc("join_group_by_code", {
-    code: inviteCode,
-  });
-
-  if (error) {
-    redirect(`/groups?error=${encodeURIComponent(error.message)}`);
-  }
-
-  redirect("/today");
+  redirect(`/join?code=${encodeURIComponent(inviteCode)}`);
 }

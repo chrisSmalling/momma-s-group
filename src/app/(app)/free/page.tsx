@@ -185,7 +185,7 @@ export default async function FreePage(props: PageProps<"/free">) {
                 Your upcoming free windows
               </h2>
               {myWindows.length === 0 ? (
-                <p className="text-sm text-zinc-400">Nothing marked yet.</p>
+                <p className="text-sm text-zinc-600">Nothing marked yet.</p>
               ) : (
                 <ul className="flex flex-col gap-2">
                   {myWindows.map((w) => (
@@ -205,7 +205,7 @@ export default async function FreePage(props: PageProps<"/free">) {
                         <input type="hidden" name="id" value={w.id} />
                         <button
                           type="submit"
-                          className="text-xs text-zinc-400 underline hover:text-zinc-600"
+                          className="inline-flex min-h-11 items-center rounded-full px-3 text-xs font-semibold text-rose-700 underline hover:bg-rose-50"
                         >
                           Remove
                         </button>
@@ -221,7 +221,7 @@ export default async function FreePage(props: PageProps<"/free">) {
                 Who else in {activeGroupName ?? "your group"} overlaps
               </h2>
               {overlapRows.length === 0 ? (
-                <p className="text-sm text-zinc-400">
+                <p className="text-sm text-zinc-600">
                   No overlapping free time yet.
                 </p>
               ) : (
@@ -248,7 +248,7 @@ export default async function FreePage(props: PageProps<"/free">) {
                 Events that fit
               </h2>
               {fittingEvents.length === 0 ? (
-                <p className="text-sm text-zinc-400">
+                <p className="text-sm text-zinc-600">
                   No upcoming events fall inside a free window yet.
                 </p>
               ) : (

@@ -4,9 +4,9 @@ import Nav from "@/components/Nav";
 import PracticalityIcons from "@/components/PracticalityIcons";
 import IndoorOutdoorTag from "@/components/IndoorOutdoorTag";
 import AgeFitBadge from "@/components/AgeFitBadge";
+import CostPill from "@/components/CostPill";
 import { createClient } from "@/lib/supabase/server";
 import { formatHours } from "@/lib/hours";
-import { isFreeCost } from "@/lib/cost";
 import { isGoodAgeFit, formatAgeRange } from "@/lib/ageFit";
 import type { Place } from "@/types";
 
@@ -58,15 +58,7 @@ export default async function PlaceDetailPage(props: PageProps<"/places/[id]">) 
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <IndoorOutdoorTag isOutdoor={place.is_outdoor} />
               {goodAgeFit && <AgeFitBadge />}
-              {place.price_note?.trim() ? (
-                isFreeCost(place.price_note) ? (
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">Free</span>
-                ) : (
-                  <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">{place.price_note.trim()}</span>
-                )
-              ) : (
-                <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-500">Cost unknown</span>
-              )}
+              <CostPill cost={place.price_note} />
               {ageRangeLabel && (
                 <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">Ages {ageRangeLabel}</span>
               )}
@@ -81,13 +73,13 @@ export default async function PlaceDetailPage(props: PageProps<"/places/[id]">) 
 
           {place.address && (
             <div className="rounded-2xl border border-zinc-200 bg-white p-4">
-              <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-400">Address</h2>
+              <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-600">Address</h2>
               <p className="mt-1 text-sm text-zinc-700">{place.address}</p>
             </div>
           )}
 
           <div className="rounded-2xl border border-zinc-200 bg-white p-4">
-            <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-400">Hours</h2>
+            <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-600">Hours</h2>
             {hours.length > 0 ? (
               <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
                 {hours.map(({ day, range }) => (

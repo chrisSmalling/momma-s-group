@@ -4,7 +4,7 @@
 export default function AgeFitBadge() {
   return (
     <span className="inline-block rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-      Good fit for your child&apos;s age
+      👶 Great for their age
     </span>
   );
 }

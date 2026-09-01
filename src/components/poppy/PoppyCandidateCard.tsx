@@ -1,4 +1,6 @@
 import Link from "next/link";
+import AgeFitBadge from "@/components/AgeFitBadge";
+import IndoorOutdoorTag from "@/components/IndoorOutdoorTag";
 import type { RecommendationCandidate } from "@/lib/recommend/types";
 import { buildGroundedWhy, getTrustSummary } from "@/lib/recommend/trust";
 
@@ -63,8 +65,12 @@ function WhyPoppy({ candidate }: { candidate: RecommendationCandidate }) {
   );
 }
 
+// The positive branch uses the same shared badge every other surface uses
+// for a confirmed age match; the other two states have no "not a match"/
+// "unknown" counterpart in that shared component by design (see
+// AgeFitBadge.tsx), so they stay local to this richer recommendation card.
 function AgeFit({ candidate }: { candidate: RecommendationCandidate }) {
-  if (candidate.goodAgeFit) return <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">👶 Great age fit</span>;
+  if (candidate.goodAgeFit) return <AgeFitBadge />;
   if (candidate.ageMinMonths != null || candidate.ageMaxMonths != null) return <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-semibold text-zinc-600">Age range on file</span>;
   return <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-semibold text-zinc-500">Age fit unknown</span>;
 }
@@ -97,7 +103,7 @@ export default function PoppyCandidateCard({ candidate, rankLabel, groupId }: { 
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <AgeFit candidate={candidate} />
-          {candidate.isOutdoor != null && <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-semibold text-zinc-600">{candidate.isOutdoor ? "🌳 Outside" : "🏠 Indoor"}</span>}
+          {candidate.isOutdoor != null && <IndoorOutdoorTag isOutdoor={candidate.isOutdoor} />}
           {candidate.registrationRequired && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">Registration required</span>}
         </div>
         {why.length > 0 && <WhyPoppy candidate={candidate} />}

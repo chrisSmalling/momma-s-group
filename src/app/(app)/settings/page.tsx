@@ -76,11 +76,11 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
         {poppySaved && <p className="mb-4 text-sm text-emerald-700">Saved — Poppy will use this next time.</p>}
 
         <form action={updatePoppyProfile} className="mb-10 flex flex-col gap-5">
-          <label className="flex flex-col gap-1 text-sm text-zinc-600">Your name <span className="text-zinc-400">(optional)</span><input type="text" name="display_name" defaultValue={profile?.display_name ?? ""} maxLength={80} placeholder="Chris" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">Your name <span className="text-zinc-600">(optional)</span><input type="text" name="display_name" defaultValue={profile?.display_name ?? ""} maxLength={80} placeholder="Chris" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
           <label className="flex flex-col gap-1 text-sm text-zinc-600">What&apos;s your little one&apos;s name?<input type="text" name="child_name" defaultValue={profile?.child_name ?? ""} maxLength={60} placeholder="Emma" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
 
           <fieldset className="flex flex-col gap-2">
-            <legend className="text-sm text-zinc-600">What do they love? <span className="text-zinc-400">(pick any)</span></legend>
+            <legend className="text-sm text-zinc-600">What do they love? <span className="text-zinc-600">(pick any)</span></legend>
             <div className="flex flex-wrap gap-2">
               {INTERESTS.map((interest) => {
                 const checked = (profile?.child_interests ?? []).includes(interest.value);
@@ -95,7 +95,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
           </fieldset>
 
           <fieldset className="flex flex-col gap-2">
-            <legend className="text-sm text-zinc-600">Favorite outing styles <span className="text-zinc-400">(pick any)</span></legend>
+            <legend className="text-sm text-zinc-600">Favorite outing styles <span className="text-zinc-600">(pick any)</span></legend>
             <div className="flex flex-wrap gap-2">
               {CATEGORIES.map((category) => {
                 const checked = (profile?.preferred_categories ?? []).includes(category.value);
@@ -124,9 +124,9 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
             </div>
           </fieldset>
 
-          <label className="flex flex-col gap-1 text-sm text-zinc-600">How far are you usually willing to go? <span className="text-zinc-400">(miles, optional)</span><input type="number" name="max_distance_miles" min={1} max={200} defaultValue={profile?.max_distance_miles ?? ""} placeholder="e.g. 20" className="w-32 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">How far are you usually willing to go? <span className="text-zinc-600">(miles, optional)</span><input type="number" name="max_distance_miles" min={1} max={200} defaultValue={profile?.max_distance_miles ?? ""} placeholder="e.g. 20" className="w-32 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
 
-          <label className="flex flex-col gap-1 text-sm text-zinc-600">Anything about budget? <span className="text-zinc-400">(optional)</span><input type="text" name="family_budget_note" defaultValue={profile?.family_budget_note ?? ""} maxLength={200} placeholder="Trying to keep it mostly free" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">Anything about budget? <span className="text-zinc-600">(optional)</span><input type="text" name="family_budget_note" defaultValue={profile?.family_budget_note ?? ""} maxLength={200} placeholder="Trying to keep it mostly free" className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
 
           <button type="submit" className="self-start rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white">Save for Poppy</button>
         </form>
@@ -165,7 +165,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
           <div className="rounded-xl bg-zinc-50 px-3 py-2.5">
             <p className="text-xs font-semibold text-zinc-700">Your complete address</p>
             <p className="mt-1 text-sm text-zinc-600">{street || "Street"}{city ? `, ${city}` : ""}{state ? `, ${state}` : ""}{zip ? ` ${zip}` : ""}</p>
-            <p className="mt-1 text-[11px] text-zinc-400">The address you enter is the source of truth. Coordinates are only an internal routing cache.</p>
+            <p className="mt-1 text-[11px] text-zinc-600">The address you enter is the source of truth. Coordinates are only an internal routing cache.</p>
           </div>
 
           {profile?.home_address && <p className="text-xs font-medium text-zinc-500">{addressVerified ? "✓ Location verified for routing" : "○ Address saved; location verification pending"}</p>}
