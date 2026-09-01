@@ -14,6 +14,21 @@ const ALLOWED_CATEGORIES = new Set([
   "active_play", "animals", "arts_learning", "playground", "storytime", "water_play",
 ]);
 
+// A validation failure redirects back to /onboarding, which is a real
+// navigation that remounts ActivationFlow from scratch — so every value
+// already entered (including earlier, already-valid steps) needs to ride
+// along in the query string as defaults, or the whole flow resets to step 1
+// over one bad ZIP code on step 3.
+function carryForward(step: 1 | 2 | 3, formData: FormData, extra: Record<string, string>): string {
+  const params = new URLSearchParams(extra);
+  params.set("step", String(step));
+  const fields = ["child_age_months", "child_name", "indoor_preference", "family_budget_note", "max_distance_miles", "home_street", "home_city", "home_state", "home_zip"];
+  for (const field of fields) { const value = formData.get(field); if (typeof value === "string" && value) params.set(field, value); }
+  for (const value of formData.getAll("child_interests")) if (typeof value === "string") params.append("child_interests", value);
+  for (const value of formData.getAll("preferred_categories")) if (typeof value === "string") params.append("preferred_categories", value);
+  return params.toString();
+}
+
 export async function completeOnboarding(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -22,7 +37,7 @@ export async function completeOnboarding(formData: FormData) {
   const childAgeRaw = String(formData.get("child_age_months") ?? "").trim();
   const childAgeMonths = Number(childAgeRaw);
   if (!childAgeRaw || !Number.isFinite(childAgeMonths) || childAgeMonths < 0 || childAgeMonths > 144) {
-    redirect("/onboarding?error=Tell%20Poppy%20your%20child%27s%20age%20so%20she%20can%20make%20better%20picks.");
+    redirect(`/onboarding?${carryForward(1, formData, { error: "Tell Poppy your child's age so she can make better picks." })}`);
   }
 
   const childName = String(formData.get("child_name") ?? "").trim().slice(0, 60);
@@ -54,10 +69,10 @@ export async function completeOnboarding(formData: FormData) {
   const hasAnyAddress = Boolean(street || city || state || zip);
 
   if (hasAnyAddress && (!street || !city || !state || !zip)) {
-    redirect("/onboarding?error=If%20you%20add%20a%20home%20location%2C%20please%20complete%20the%20street%2C%20city%2C%20state%2C%20and%20ZIP.");
+    redirect(`/onboarding?${carryForward(3, formData, { error: "If you add a home location, please complete the street, city, state, and ZIP." })}`);
   }
   if (hasAnyAddress && (!/^[A-Z]{2}$/.test(state) || !/^\d{5}(?:-\d{4})?$/.test(zip))) {
-    redirect("/onboarding?error=Please%20enter%20a%20valid%20state%20and%20ZIP%20code.");
+    redirect(`/onboarding?${carryForward(3, formData, { error: "Please enter a valid state and ZIP code." })}`);
   }
 
   let homeAddress: string | null = null;
@@ -92,7 +107,7 @@ export async function completeOnboarding(formData: FormData) {
     onboarding_completed_at: new Date().toISOString(),
   });
 
-  if (error) redirect(`/onboarding?error=${encodeURIComponent(error.message)}`);
+  if (error) redirect(`/onboarding?${carryForward(3, formData, { error: error.message })}`);
 
   revalidatePath("/today");
   revalidatePath("/places");

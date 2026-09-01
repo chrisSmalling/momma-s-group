@@ -21,16 +21,31 @@ function SubmitButton() {
   return <button type="submit" disabled={pending} className="min-h-12 w-full rounded-2xl bg-rose-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60">{pending ? "Getting Poppy ready…" : "Finish & show me today"}</button>;
 }
 
-export default function ActivationFlow({ error }: { error?: string }) {
-  const [step, setStep] = useState(1);
-  const [age, setAge] = useState("");
+type Initial = {
+  step: 1 | 2 | 3;
+  age: string;
+  childName: string;
+  interests: string[];
+  categories: string[];
+  indoorPreference: string;
+  budget: string;
+  maxDistance: string;
+  homeStreet: string;
+  homeCity: string;
+  homeState: string;
+  homeZip: string;
+};
+
+export default function ActivationFlow({ error, initial }: { error?: string; initial?: Initial }) {
+  const [step, setStep] = useState(initial?.step ?? 1);
+  const [age, setAge] = useState(initial?.age ?? "");
   const [ageError, setAgeError] = useState<string | null>(null);
-  const [childName, setChildName] = useState("");
-  const [interests, setInterests] = useState<string[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [indoorPreference, setIndoorPreference] = useState("either");
-  const [budget, setBudget] = useState("");
-  const [maxDistance, setMaxDistance] = useState("20");
+  const [childName, setChildName] = useState(initial?.childName ?? "");
+  const [interests, setInterests] = useState<string[]>(initial?.interests ?? []);
+  const [categories, setCategories] = useState<string[]>(initial?.categories ?? []);
+  const [indoorPreference, setIndoorPreference] = useState(initial?.indoorPreference ?? "either");
+  const [budget, setBudget] = useState(initial?.budget ?? "");
+  const [maxDistance, setMaxDistance] = useState(initial?.maxDistance ?? "20");
 
   function toggle(setter: (value: string[]) => void, current: string[], value: string) {
     setter(current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
@@ -97,10 +112,10 @@ export default function ActivationFlow({ error }: { error?: string }) {
           <h2 className="mt-2 font-display text-2xl font-bold tracking-tight text-zinc-950">One last thing: where should Poppy look?</h2>
           <p className="mt-2 text-sm leading-6 text-zinc-600">A home location makes distance-based picks better. It’s optional, and you can use your current location later instead.</p>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <label className="text-xs font-semibold text-zinc-600 sm:col-span-2">Street address<input name="home_street" type="text" autoComplete="street-address" placeholder="123 Main St" className="mt-1 min-h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-rose-500" /></label>
-            <label className="text-xs font-semibold text-zinc-600">City<input name="home_city" type="text" autoComplete="address-level2" placeholder="Wesley Chapel" className="mt-1 min-h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-rose-500" /></label>
-            <label className="text-xs font-semibold text-zinc-600">State<input name="home_state" type="text" maxLength={2} autoComplete="address-level1" placeholder="FL" className="mt-1 min-h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm uppercase outline-none focus:border-rose-500" /></label>
-            <label className="text-xs font-semibold text-zinc-600">ZIP code<input name="home_zip" type="text" inputMode="numeric" autoComplete="postal-code" placeholder="33544" className="mt-1 min-h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-rose-500" /></label>
+            <label className="text-xs font-semibold text-zinc-600 sm:col-span-2">Street address<input name="home_street" type="text" defaultValue={initial?.homeStreet} autoComplete="street-address" placeholder="123 Main St" className="mt-1 min-h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-rose-500" /></label>
+            <label className="text-xs font-semibold text-zinc-600">City<input name="home_city" type="text" defaultValue={initial?.homeCity} autoComplete="address-level2" placeholder="Wesley Chapel" className="mt-1 min-h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-rose-500" /></label>
+            <label className="text-xs font-semibold text-zinc-600">State<input name="home_state" type="text" defaultValue={initial?.homeState} maxLength={2} autoComplete="address-level1" placeholder="FL" className="mt-1 min-h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm uppercase outline-none focus:border-rose-500" /></label>
+            <label className="text-xs font-semibold text-zinc-600">ZIP code<input name="home_zip" type="text" defaultValue={initial?.homeZip} inputMode="numeric" autoComplete="postal-code" placeholder="33544" className="mt-1 min-h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-rose-500" /></label>
           </div>
           <p className="mt-4 text-xs text-zinc-500">Prefer not to save a home address? Leave it blank. Poppy can still use “Find near me” when you’re out.</p>
           <div className="mt-6 grid grid-cols-2 gap-2"><button type="button" onClick={() => setStep(2)} className="min-h-12 rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-bold text-zinc-700">Back</button><SubmitButton /></div>

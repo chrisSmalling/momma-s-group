@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [googleStatus, setGoogleStatus] = useState<"idle" | "sending" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const next = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("next") ?? "/today" : "/today";
+  const deleted = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("deleted") === "1";
 
   async function handleGoogleSignIn() {
     setGoogleStatus("sending");
@@ -71,8 +72,13 @@ export default function LoginPage() {
         <section className="p-7 sm:p-10">
           <div className="mb-8 md:hidden">
             <div className="text-lg font-extrabold tracking-tight text-zinc-950">Momma&apos;s Meetup</div>
-            <p className="mt-1 text-sm text-zinc-500">Find something worth doing.</p>
+            <p className="mt-1 text-sm text-zinc-500">Local outings sized to your kid&apos;s age, plus what your group&apos;s already up to.</p>
           </div>
+          {deleted && (
+            <div className="mb-6 rounded-2xl bg-zinc-50 border border-zinc-200 p-4 text-sm text-zinc-700">
+              Your account has been deleted. Thanks for using Momma&apos;s Meetup.
+            </div>
+          )}
           <div className="mb-7">
             <h2 className="text-2xl font-bold tracking-tight text-zinc-950">Welcome back</h2>
             <p className="mt-2 text-sm leading-6 text-zinc-500">Sign in to see what&apos;s happening around your family today.</p>
