@@ -150,6 +150,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
         <p className="mb-4 text-sm text-zinc-500">Use your complete home address. We&apos;ll use it to calculate real driving distance and time to events and places. You never need to enter latitude or longitude.</p>
 
         {addressSaved === "verified" && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"><strong>✓ Home address saved and verified.</strong><span className="block text-xs text-emerald-700">Momma&apos;s Meetup can use it for personalized travel times.</span></div>}
+        {addressSaved === "approximate" && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"><strong>✓ Home address saved.</strong><span className="block text-xs text-amber-700">We couldn&apos;t pinpoint your exact street, so distances use your ZIP code&apos;s general area for now.</span></div>}
         {addressSaved === "saved" && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"><strong>✓ Home address saved.</strong><span className="block text-xs text-amber-700">We&apos;ll verify the location when the geocoding service is available.</span></div>}
         {addressSaved === "cleared" && <p className="mb-4 text-sm text-zinc-600">Home address removed.</p>}
         {addressError && <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{addressError}</p>}

@@ -64,7 +64,7 @@ export default async function TodayPage(props: PageProps<"/today">) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: myProfile } = await supabase.from("profiles").select("display_name, nap_start, nap_end, home_address, home_lat, home_lng, child_age_months, child_name").eq("id", user.id).maybeSingle();
+  const { data: myProfile } = await supabase.from("profiles").select("display_name, nap_start, nap_end, home_address, home_lat, home_lng, child_age_months, child_name, child_interests, child_activity_preferences, preferred_categories, preferred_place_types, indoor_preference, family_budget_note, max_distance_miles").eq("id", user.id).maybeSingle();
   const currentUserName = myProfile?.display_name ?? "You";
   const home = myProfile?.home_lat != null && myProfile?.home_lng != null ? { lat: myProfile.home_lat, lng: myProfile.home_lng } : null;
   const homeStatus = deriveHomeStatus(myProfile?.home_address, myProfile?.home_lat, myProfile?.home_lng);
@@ -135,7 +135,12 @@ export default async function TodayPage(props: PageProps<"/today">) {
   const candidateIds = todayPlaceCandidates.map((p) => p.id);
   const { data: exposureRows } = candidateIds.length ? await supabase.from("place_exposure").select("place_id, last_shown_at, consecutive_days").eq("user_id", user.id).in("place_id", candidateIds) : { data: [] };
   const exposureByPlaceId = new Map<string, ExposureState>((exposureRows ?? []).map((r) => [r.place_id, { lastShownAt: r.last_shown_at, consecutiveDays: r.consecutive_days }]));
-  const todayProfile: PoppyProfile = { childAgeMonths: myProfile?.child_age_months ?? null, childInterests: [], childActivityPreferences: [], preferredCategories: [], preferredPlaceTypes: [], indoorPreference: "either", maxDistanceMiles: null, familyBudgetNote: null, napStart: myProfile?.nap_start ?? null, napEnd: myProfile?.nap_end ?? null, homeLat: myProfile?.home_lat ?? null, homeLng: myProfile?.home_lng ?? null };
+  // Read the same preferences the user actually set in onboarding/Settings
+  // (interests, categories, indoor preference, budget note) — this used to
+  // hardcode all of them blank, so Today's ranking never used anything but
+  // age and distance to differentiate places, no matter what a family told
+  // Poppy they cared about.
+  const todayProfile: PoppyProfile = { childAgeMonths: myProfile?.child_age_months ?? null, childInterests: myProfile?.child_interests ?? [], childActivityPreferences: myProfile?.child_activity_preferences ?? [], preferredCategories: myProfile?.preferred_categories ?? [], preferredPlaceTypes: myProfile?.preferred_place_types ?? [], indoorPreference: (myProfile?.indoor_preference as "indoor" | "outdoor" | "either" | null) ?? "either", maxDistanceMiles: myProfile?.max_distance_miles ?? null, familyBudgetNote: myProfile?.family_budget_note ?? null, napStart: myProfile?.nap_start ?? null, napEnd: myProfile?.nap_end ?? null, homeLat: myProfile?.home_lat ?? null, homeLng: myProfile?.home_lng ?? null };
   const todayConstraints: RecommendationConstraints = { mood: "all", indoor: "either", indoorExplicit: false, budget: "any", maxMiles: null, timeframe: "any", timeOfDay: "any" };
   const rankedPlaceCandidates = todayPlaceCandidates.map((p) => {
     const km = straightLineByPlaceId.get(p.id);

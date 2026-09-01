@@ -117,5 +117,6 @@ export async function updateHomeLocation(formData: FormData) {
     .eq("id", user.id);
 
   if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
-  redirect(`/settings?address_saved=${geocoded ? "verified" : "saved"}`);
+  const status = geocoded?.precision === "address" ? "verified" : geocoded ? "approximate" : "saved";
+  redirect(`/settings?address_saved=${status}`);
 }
