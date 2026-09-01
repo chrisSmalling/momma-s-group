@@ -51,9 +51,9 @@ function PromoteControl({
         type="button"
         disabled={pending}
         onClick={() => onPromote(category)}
-        className="text-[11px] font-medium text-rose-600 underline disabled:opacity-50"
+        className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
       >
-        {pending ? "Saving…" : "Promote to tip"}
+        {pending ? "Saving…" : "💡 Promote to tip"}
       </button>
     </div>
   );

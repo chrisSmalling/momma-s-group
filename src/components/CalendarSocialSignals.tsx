@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export default function CalendarSocialSignals() {
   const [items, setItems] = useState<Activity[]>([]);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     let mounted = true;
     const supabase = createClient();
@@ -20,12 +21,21 @@ export default function CalendarSocialSignals() {
         .order("starts_at", { ascending: true })
         .limit(5);
       if (error) console.error("[calendar] group activity feed failed", error.message);
-      if (mounted) setItems((data ?? []) as Activity[]);
+      if (mounted) { setItems((data ?? []) as Activity[]); setLoading(false); }
     };
     load();
     return () => { mounted = false; };
   }, []);
 
+  // While loading, a lightweight placeholder — otherwise "still fetching",
+  // "the fetch failed", and "your group genuinely has nothing going" all
+  // render as the exact same nothing, and a slow connection looks
+  // indistinguishable from a bug.
+  if (loading) {
+    return (
+      <div aria-hidden="true" className="mb-5 h-[104px] animate-pulse rounded-2xl border border-zinc-100 bg-zinc-50" />
+    );
+  }
   if (!items.length) return null;
   return <section aria-label="Friends going" className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 shadow-sm">
     <div className="mb-2 flex items-center justify-between gap-3">
