@@ -1,12 +1,23 @@
 "use client";
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { isGoodAgeFit } from "@/lib/ageFit";
 import { etYMD, isInEtMonth, isOnEtDay, type EtYMD } from "@/lib/date";
 import PoppyNudge from "@/components/poppy/PoppyNudge";
 import type { FeedEvent, RsvpStatus } from "@/types";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// Tailwind's `sm` breakpoint, mirrored in JS so mount decisions (not just
+// CSS visibility) can key off it — see the isDesktop comment below.
+function subscribeToDesktopQuery(callback: () => void) {
+  const mq = window.matchMedia("(min-width: 640px)");
+  mq.addEventListener("change", callback);
+  return () => mq.removeEventListener("change", callback);
+}
+function getIsDesktopSnapshot() {
+  return window.matchMedia("(min-width: 640px)").matches;
+}
 
 type Filter = "all" | "free" | "indoor" | "outdoor" | "mine" | "going" | "age_fit";
 type Mode = "all" | "mine" | "group";
@@ -60,6 +71,20 @@ function groupByDay(items: FeedEvent[], year: number, month0: number, todayEt: E
 
 export default function MonthCalendar({ year, month0, events, prevHref, nextHref, cards, myRsvpByEvent, activeGroupId, childAgeMonths, plansHref, groupEventIds, currentUserId }: { year: number; month0: number; events: FeedEvent[]; prevHref: string; nextHref: string; cards: Record<string, ReactNode>; myRsvpByEvent: Record<string, RsvpStatus>; activeGroupId: string | null; childAgeMonths: number | null; plansHref: string; groupEventIds: string[]; currentUserId: string }) {
   const [query, setQuery] = useState(""); const [filter, setFilter] = useState<Filter>("all"); const [mode, setMode] = useState<Mode>("all"); const [selectedDay, setSelectedDay] = useState<number | null>(null); const [view, setView] = useState<View>("agenda");
+  // Which of {agenda, grid+flat-list} actually MOUNTS, not just which is
+  // visible. The two used to differ only by CSS (sm:hidden/sm:block), which
+  // left both permanently mounted at every breakpoint — and since the same
+  // event's card (cards[event.id]) commonly appears in both (agenda and the
+  // flat list both source from `filtered` whenever no day is selected),
+  // every card's realtime-subscribing children (LiveAttendees, EventComments)
+  // mounted TWICE for the same event id. The second mount's channel().on()
+  // call reaches the first mount's already-subscribed channel (Supabase
+  // dedupes by topic) and throws "cannot add callbacks after subscribe()",
+  // which crashes the page to the nearest error boundary. Defaults to the
+  // mobile layout (matching SSR) until the media query resolves client-side.
+  const isDesktop = useSyncExternalStore(subscribeToDesktopQuery, getIsDesktopSnapshot, () => false);
+  const showAgenda = !isDesktop && view === "agenda";
+  const showGridAndFlat = isDesktop || view === "grid";
   const groupEventIdSet = useMemo(() => new Set(groupEventIds), [groupEventIds]);
   const scoped = useMemo(() => {
     if (mode === "all") return events;
@@ -96,7 +121,7 @@ export default function MonthCalendar({ year, month0, events, prevHref, nextHref
     {selectedDay != null && <button type="button" onClick={() => setSelectedDay(null)} className={`mb-3 min-h-9 items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 ${view === "grid" ? "inline-flex" : "hidden"} sm:inline-flex`}>← Show the whole month</button>}
 
     {/* Mobile agenda: one grouped, day-headered list — the default mobile view. */}
-    <div className={`${view === "agenda" ? "block" : "hidden"} sm:hidden`}>
+    {showAgenda && <div>
       {filtered.length === 0 ? <EmptyState mode={mode} plansHref={plansHref} onShowAll={() => switchMode("all")} activeGroupId={activeGroupId} /> : (
         <div className="flex flex-col gap-5">
           {dayGroups.map((group) => (
@@ -110,19 +135,22 @@ export default function MonthCalendar({ year, month0, events, prevHref, nextHref
           ))}
         </div>
       )}
-    </div>
+    </div>}
 
-    {/* Month grid: always on desktop, opt-in "zoom out" on mobile. */}
-    <div className={`${view === "grid" ? "block" : "hidden"} sm:block`}>
+    {/* Month grid + flat detail-card list: always on desktop, opt-in
+        "zoom out" on mobile. Mounted together, as a pair, only when active —
+        never alongside the agenda above, which already covers this ground
+        on mobile by default (see showAgenda/showGridAndFlat: the same event
+        card must never be mounted by both at once, since each card's
+        realtime subscriptions are keyed only by event id). */}
+    {showGridAndFlat && <>
+    <div>
       <div className="grid grid-cols-7 gap-px overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-200 text-sm shadow-sm">{WEEKDAYS.map((day) => <div key={day} className="bg-zinc-50 px-2 py-2 text-center text-xs font-bold text-zinc-500">{day}</div>)}{cells.map((day, i) => { const dayEvents = day !== null ? (eventsByDay.get(day) ?? []) : []; const selected = day !== null && selectedDay === day; const proposal = day !== null && proposalDays.has(day); return <div key={i} className={`min-h-20 px-2 py-2 ${day === null ? "bg-zinc-50" : proposal ? "bg-amber-50" : "bg-white"} ${selected ? "ring-2 ring-inset ring-rose-400" : ""}`}>{day !== null && <button type="button" onClick={() => dayEvents.length > 0 && selectDay(day)} disabled={dayEvents.length === 0} className={proposal ? "inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white" : isCurrentMonth && day === todayEt.d ? "inline-flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-xs font-bold text-white" : "inline-flex h-7 w-7 items-center justify-center text-xs font-semibold text-zinc-700 disabled:cursor-default"}>{day}</button>}{day !== null && <div className="mt-1 flex flex-col gap-0.5">{dayEvents.slice(0, 2).map((event) => { const p = event.proposed_by_group === activeGroupId; return <button key={event.id} type="button" onClick={() => selectDay(day)} className={event.status === "cancelled" ? "truncate rounded-lg bg-zinc-100 px-1.5 py-1 text-left text-[11px] text-zinc-400 line-through" : p ? "truncate rounded-lg bg-amber-200 px-1.5 py-1 text-left text-[11px] font-bold text-amber-950" : "truncate rounded-lg bg-rose-50 px-1.5 py-1 text-left text-[11px] font-semibold text-rose-800"} title={event.title}>{p ? "✨ " : ""}{event.title}</button>; })}{dayEvents.length > 2 && <button type="button" onClick={() => selectDay(day)} className="text-left text-[11px] font-semibold text-zinc-400">+{dayEvents.length - 2} more</button>}</div>}</div>; })}</div>
       {filtered.length === 0 && <EmptyState mode={mode} plansHref={plansHref} onShowAll={() => switchMode("all")} activeGroupId={activeGroupId} />}
     </div>
-
-    {/* Flat detail-card list: pairs with the grid (day-selection results on
-        desktop always, or on mobile while zoomed out to the grid). The
-        agenda above already covers this ground on mobile by default. */}
-    <div className={`mt-8 flex-col gap-4 ${view === "grid" ? "flex" : "hidden"} sm:flex`}>
+    <div className="mt-8 flex flex-col gap-4">
       {listItems.map((event) => cards[event.id] ?? null)}
     </div>
+    </>}
   </div>;
 }
