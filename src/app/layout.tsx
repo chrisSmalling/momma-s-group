@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   description: "A private, group-based calendar for local toddler outings.",
   appleWebApp: {
     capable: true,
-    title: "Mommas",
+    title: "Momma's",
     statusBarStyle: "default",
   },
   other: {

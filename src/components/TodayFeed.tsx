@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import EventCard from "@/components/EventCard";
 import ProposalBanner from "@/components/ProposalBanner";
 import type { FeedEvent, EventComment, Place, PlaceTip, RsvpStatus } from "@/types";
@@ -89,6 +89,8 @@ export default function TodayFeed({
 }) {
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [expanded, setExpanded] = useState(false);
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
 
   const filters = useMemo<FeedFilter[]>(() => {
     const base = MOODS.filter((f) => f.id === "all" || bundles.some(f.match));
@@ -130,6 +132,20 @@ export default function TodayFeed({
 
     return [...base, ...extras];
   }, [bundles, hasActiveGroup, activeGroupMemberIds, currentUserId]);
+
+  function focusFilterTab(index: number) {
+    const tab = tabRefs.current[index];
+    tab?.focus();
+    setSelectedFilter(filters[index]?.id ?? "all");
+    setExpanded(false);
+  }
+
+  function handleTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (event.key === "ArrowRight") { event.preventDefault(); focusFilterTab((index + 1) % filters.length); }
+    else if (event.key === "ArrowLeft") { event.preventDefault(); focusFilterTab((index - 1 + filters.length) % filters.length); }
+    else if (event.key === "Home") { event.preventDefault(); focusFilterTab(0); }
+    else if (event.key === "End") { event.preventDefault(); focusFilterTab(filters.length - 1); }
+  }
 
   const activeFilter = filters.find((f) => f.id === selectedFilter) ?? filters[0];
   const visible = bundles.filter(activeFilter.match);
@@ -186,14 +202,19 @@ export default function TodayFeed({
           aria-label="Today filters"
         >
           <div className="flex min-w-max gap-2">
-            {filters.map((filter) => {
+            {filters.map((filter, index) => {
               const active = filter.id === activeFilter.id;
               return (
                 <button
                   key={filter.id}
+                  ref={(el) => { tabRefs.current[index] = el; }}
+                  id={`today-filter-tab-${filter.id}`}
                   type="button"
                   role="tab"
                   aria-selected={active}
+                  aria-controls="today-filter-panel"
+                  tabIndex={active ? 0 : -1}
+                  onKeyDown={(event) => handleTabKeyDown(event, index)}
                   onClick={() => {
                     setSelectedFilter(filter.id);
                     setExpanded(false);
@@ -215,6 +236,7 @@ export default function TodayFeed({
         </span>
       </div>
 
+      <div id="today-filter-panel" role="tabpanel" aria-labelledby={`today-filter-tab-${activeFilter.id}`}>
       {visible.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-6 text-sm text-zinc-600">
           {activeFilter.id === "all"
@@ -227,7 +249,7 @@ export default function TodayFeed({
             {shown.map((b) => (
               <div key={b.event.id}>
                 {b.proposedBy && (
-                  <div className="mb-1 rounded-t-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
+                  <div className="mb-1 rounded-t-xl bg-violet-50 px-3 py-2 text-xs font-bold text-violet-900">
                     📣 Proposed by {b.proposedBy.user_id === currentUserId ? "you" : b.proposedBy.display_name} · Your group
                   </div>
                 )}
@@ -269,6 +291,7 @@ export default function TodayFeed({
           )}
         </>
       )}
+      </div>
     </>
   );
 }

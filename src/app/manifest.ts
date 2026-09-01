@@ -3,7 +3,7 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Momma's Meetup",
-    short_name: "Mommas",
+    short_name: "Momma's",
     description: "A private, group-based calendar for local toddler outings.",
     start_url: "/calendar",
     display: "standalone",
