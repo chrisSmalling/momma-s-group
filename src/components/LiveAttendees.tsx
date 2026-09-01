@@ -22,6 +22,10 @@ export default function LiveAttendees({
   activeGroupMemberIds,
   roster,
   initialAttendees,
+  // The card header already renders this same avatar row whenever someone
+  // was already going at initial render — set false there so this doesn't
+  // repeat it verbatim right below.
+  showGoingAvatars = true,
 }: {
   eventId: string;
   currentUserId: string;
@@ -30,6 +34,7 @@ export default function LiveAttendees({
   activeGroupMemberIds: string[];
   roster: Roster;
   initialAttendees: Attendee[];
+  showGoingAvatars?: boolean;
 }) {
   const [attendees, setAttendees] = useState<Attendee[]>(initialAttendees);
 
@@ -93,12 +98,14 @@ export default function LiveAttendees({
 
   return (
     <div>
-      <GoingAvatars
-        going={going}
-        currentUserId={currentUserId}
-        groupName={activeGroupName}
-        hasActiveGroup={hasActiveGroup}
-      />
+      {showGoingAvatars && (
+        <GoingAvatars
+          going={going}
+          currentUserId={currentUserId}
+          groupName={activeGroupName}
+          hasActiveGroup={hasActiveGroup}
+        />
+      )}
       {maybe.length > 0 && (
         <p className="mt-1.5 text-xs text-zinc-600">
           {maybe.length} {maybe.length === 1 ? "undecided" : "undecided"}

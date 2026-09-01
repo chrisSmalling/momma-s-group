@@ -61,6 +61,7 @@ export default function GoingAvatars({
           <div
             key={person.user_id}
             title={person.display_name}
+            aria-label={person.display_name}
             className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-xs font-semibold text-white shadow-sm"
             style={{ backgroundColor: person.avatar_color }}
           >

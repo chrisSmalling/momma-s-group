@@ -96,6 +96,7 @@ export default function EventCard({ event, currentUserId, currentUserName, curre
       currentNote={currentNote}
       disabled={cancelled}
       duringNap={duringNap}
+      endedAt={event.ends_at}
       header={<>
         <Link href={`/events/${event.id}`} className="group block rounded-xl -m-1 p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500" aria-label={`View details for ${event.title}`}>
           <div className="flex gap-3">
@@ -118,12 +119,13 @@ export default function EventCard({ event, currentUserId, currentUserName, curre
       </>}
     >
       <details className="mt-3 rounded-xl border border-zinc-100 bg-zinc-50/70 px-3"><summary className="flex min-h-11 cursor-pointer items-center justify-between text-sm font-bold text-zinc-700"><span>More about this event</span><span aria-hidden="true" className="text-zinc-400">⌄</span></summary><div className="pb-3">
+        <div className="flex gap-3 pt-1 text-xs font-semibold text-rose-700"><a href={`#event-${event.id}-comments`}>Jump to comments</a><a href={`#event-${event.id}-tips`}>Jump to tips</a></div>
         {bring.length > 0 && <p className="mt-1 text-sm font-semibold text-rose-700">Bring: {bring.join(", ")}</p>}
         {place && <div className="mt-3 flex flex-col gap-1.5"><PracticalityIcons practicalities={place} />{place.parking_notes && <p className="text-xs text-zinc-500"><span className="font-medium text-zinc-600">Parking: </span>{place.parking_notes}</p>}{place.best_time_note && <p className="text-xs text-zinc-500"><span className="font-medium text-zinc-600">Best time: </span>{place.best_time_note}</p>}{place.typical_crowd_note && <p className="text-xs text-zinc-500"><span className="font-medium text-zinc-600">Typical crowd: </span>{place.typical_crowd_note}</p>}</div>}
         <AskGroupButton eventId={event.id} groupId={activeGroupId} groupName={activeGroupName} /><GroupAvailability eventId={event.id} groupId={activeGroupId} />
-        <div className="mt-4"><LiveAttendees eventId={event.id} currentUserId={currentUserId} hasActiveGroup={hasActiveGroup} activeGroupName={activeGroupName} activeGroupMemberIds={activeGroupMemberIds} roster={roster} initialAttendees={attendees} /></div>
-        <details className="mt-4 border-t border-zinc-100 pt-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-zinc-600">Comments {comments.length > 0 ? `(${comments.length})` : ""}</summary><div className="mt-1"><EventComments eventId={event.id} groupId={activeGroupId} currentUserId={currentUserId} currentUserName={currentUserName} initialComments={comments} roster={Object.fromEntries(Object.entries(roster).map(([id, p]) => [id, p.display_name]))} /></div></details>
-        <details className="mt-2 border-t border-zinc-100 pt-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-zinc-600">Tips {tips.length > 0 ? `(${tips.length})` : ""}</summary><div className="mt-1"><TipsSection placeId={event.place_id ?? undefined} eventId={event.place_id ? undefined : event.id} groupId={activeGroupId} groupName={activeGroupName} currentUserId={currentUserId} tips={tips} /></div></details>
+        <div className="mt-4"><LiveAttendees eventId={event.id} currentUserId={currentUserId} hasActiveGroup={hasActiveGroup} activeGroupName={activeGroupName} activeGroupMemberIds={activeGroupMemberIds} roster={roster} initialAttendees={attendees} showGoingAvatars={heroGoing.length === 0} /></div>
+        <div className="mt-4 border-t border-zinc-100 pt-3"><h4 id={`event-${event.id}-comments`} className="py-2 text-sm font-semibold text-zinc-600">Comments {comments.length > 0 ? `(${comments.length})` : ""}</h4><div className="mt-1"><EventComments eventId={event.id} groupId={activeGroupId} currentUserId={currentUserId} currentUserName={currentUserName} initialComments={comments} roster={Object.fromEntries(Object.entries(roster).map(([id, p]) => [id, p.display_name]))} /></div></div>
+        <div className="mt-2 border-t border-zinc-100 pt-3"><h4 id={`event-${event.id}-tips`} className="py-2 text-sm font-semibold text-zinc-600">Tips {tips.length > 0 ? `(${tips.length})` : ""}</h4><div className="mt-1"><TipsSection placeId={event.place_id ?? undefined} eventId={event.place_id ? undefined : event.id} groupId={activeGroupId} groupName={activeGroupName} currentUserId={currentUserId} tips={tips} /></div></div>
       </div></details>
     </EventCardShell>
   );
