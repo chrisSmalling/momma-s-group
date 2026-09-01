@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { deleteAccount } from "./actions";
+import Link from "next/link";
+import DeleteAccountForm from "./DeleteAccountForm";
 
 export const metadata: Metadata = {
   title: "Delete account · Momma's Meetup",
@@ -20,14 +21,13 @@ export default function DeleteAccountPage() {
         <div className="mt-6 rounded-2xl bg-rose-50 p-4 text-sm leading-6 text-rose-900">
           <strong>This cannot be undone.</strong> Make sure you really want to leave before continuing.
         </div>
-        <form action={deleteAccount} className="mt-6">
-          <button
-            type="submit"
-            className="min-h-11 w-full rounded-xl bg-rose-600 px-5 text-sm font-semibold text-white hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
-          >
-            Permanently delete my account
-          </button>
-        </form>
+        <DeleteAccountForm />
+        <Link
+          href="/settings"
+          className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-zinc-200 px-5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+        >
+          Cancel, keep my account
+        </Link>
       </section>
     </main>
   );

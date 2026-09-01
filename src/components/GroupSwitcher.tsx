@@ -30,8 +30,8 @@ export default function GroupSwitcher({
           href={`/calendar?month=${month}&group=${group.id}`}
           className={
             group.id === activeGroupId
-              ? "rounded-full bg-zinc-900 px-3 py-1 font-medium text-white"
-              : "rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:border-zinc-500"
+              ? "inline-flex min-h-11 items-center rounded-full bg-zinc-900 px-3 font-medium text-white"
+              : "inline-flex min-h-11 items-center rounded-full border border-zinc-300 px-3 text-zinc-700 hover:border-zinc-500"
           }
         >
           {group.name}

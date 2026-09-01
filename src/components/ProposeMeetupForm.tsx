@@ -36,6 +36,7 @@ export default function ProposeMeetupForm({
   defaultGroupId?: string;
 }) {
   const [localDateTime, setLocalDateTime] = useState("");
+  const [dateTimeError, setDateTimeError] = useState<string | null>(null);
 
   return (
     <form
@@ -44,6 +45,7 @@ export default function ProposeMeetupForm({
       onSubmit={(event) => {
         if (!localDateTime) {
           event.preventDefault();
+          setDateTimeError("Pick a date and time for the meetup.");
           return;
         }
 
@@ -84,9 +86,12 @@ export default function ProposeMeetupForm({
           type="datetime-local"
           required
           value={localDateTime}
-          onChange={(e) => setLocalDateTime(e.target.value)}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500"
+          onChange={(e) => { setLocalDateTime(e.target.value); if (dateTimeError) setDateTimeError(null); }}
+          aria-invalid={dateTimeError ? true : undefined}
+          aria-describedby={dateTimeError ? "datetime-error" : undefined}
+          className={`rounded-md border px-3 py-2 text-sm text-zinc-900 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100 ${dateTimeError ? "border-rose-500" : "border-zinc-300"}`}
         />
+        {dateTimeError && <p id="datetime-error" role="alert" className="text-xs font-medium text-rose-600">{dateTimeError}</p>}
       </label>
 
       <SubmitButton />

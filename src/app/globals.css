@@ -82,7 +82,13 @@ button, [role="button"] { touch-action: manipulation; }
 }
 
 /* Keep interactive controls comfortable for thumb use without forcing
-   oversized desktop controls. */
+   oversized desktop controls. Mobile-only by design (desktop uses a mouse,
+   not a thumb) — so it does NOT cover: (a) <a>/Link elements, which need
+   an explicit role="button" (real actions) or an explicit min-h-11 (nav
+   links styled as buttons) to get the same guarantee; (b) any element
+   carrying its own explicit min-h-* utility, since that class has higher
+   specificity than this bare-tag rule and silently wins under it — audit
+   every explicit min-h-* below min-h-11 on a real tap target. */
 @media (max-width: 639px) {
   button, [role="button"] { min-height: 44px; }
   input, textarea, select { font-size: 16px; }

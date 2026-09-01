@@ -21,6 +21,22 @@ export async function updateThingsToKnow(formData: FormData) { const groupId = S
 
 export async function joinGroup(formData: FormData) { const code = String(formData.get("code") ?? "").trim().toLowerCase(); if (!code) redirect("/groups?error=Invite%20code%20is%20required"); const supabase = await createClient(); const { data: { user } } = await supabase.auth.getUser(); if (!user) redirect("/login"); const { error } = await supabase.rpc("join_group_by_code", { code }); if (error) redirect(`/groups?error=${encodeURIComponent(error.message)}`); revalidatePath("/groups"); }
 
+// RLS's "leave group" DELETE policy (qual: user_id = auth.uid()) already
+// permits this — it just had no action/UI wired up to it, so there was no
+// way to leave a group from the app at all.
+export async function leaveGroup(groupId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Please sign in first." };
+  const { data, error } = await supabase.from("group_members").delete().eq("group_id", groupId).eq("user_id", user.id).select("group_id");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: "You're not a member of this group." };
+  revalidatePath("/groups");
+  revalidatePath("/today");
+  revalidatePath("/calendar");
+  return { ok: true };
+}
+
 export async function askGroupAboutEvent(groupId: string, eventId: string) { const supabase = await createClient(); const { data: { user } } = await supabase.auth.getUser(); if (!user) return { error: "Please sign in first." }; const { error } = await supabase.rpc("ask_group_about_event", { p_group_id: groupId, p_event_id: eventId, p_question: "Anyone want to do this?" }); if (error) return { error: error.message }; revalidatePath("/today"); return { ok: true }; }
 
 export async function getGroupEventAvailability(groupId: string, eventId: string) {

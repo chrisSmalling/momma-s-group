@@ -93,7 +93,7 @@ export default function LoginPage() {
               <form onSubmit={handleSubmit} className="flex flex-col gap-3">
                 <label className="text-xs font-semibold text-zinc-700" htmlFor="email">Email address</label>
                 <input id="email" type="email" required autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="min-h-11 rounded-xl border border-zinc-300 px-3.5 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-950 focus:ring-2 focus:ring-zinc-950/10" />
-                <button type="submit" disabled={status === "sending"} className="mt-1 min-h-11 rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">{status === "sending" ? "Sending secure link…" : "Send me a sign-in link"}</button>
+                <button type="submit" disabled={status === "sending"} className="mt-1 min-h-11 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">{status === "sending" ? "Sending secure link…" : "Send me a sign-in link"}</button>
               </form>
             </>
           )}

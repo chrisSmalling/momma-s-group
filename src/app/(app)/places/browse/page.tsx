@@ -8,7 +8,7 @@ import { PLACE_CATEGORY_TAGS, getPlaceCategoryCounts } from "@/lib/places/tags";
 
 function chipClass(active: boolean) {
   return active
-    ? "rounded-full bg-zinc-900 px-3 py-2 text-sm font-semibold text-white"
+    ? "rounded-full bg-rose-600 px-3 py-2 text-sm font-semibold text-white"
     : "rounded-full border border-zinc-300 px-3 py-2 text-sm font-semibold text-zinc-700 hover:border-zinc-500";
 }
 
@@ -92,7 +92,7 @@ export default async function BrowsePlacesPage(props: PageProps<"/places/browse"
               placeholder="e.g. gymnastics, splash pad, storytime…"
               className="min-w-0 flex-1 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-base outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
             />
-            <button type="submit" className="rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-bold text-white">Search</button>
+            <button type="submit" className="rounded-2xl bg-rose-600 px-4 py-3 text-sm font-bold text-white hover:bg-rose-700">Search</button>
           </form>
 
           <div className="flex flex-wrap gap-2" role="group" aria-label="Categories">

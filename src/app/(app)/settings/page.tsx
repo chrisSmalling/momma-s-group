@@ -143,7 +143,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
             <label className="flex flex-col gap-1 text-sm text-zinc-600">Nap ends<input type="time" name="nap_end" defaultValue={trimTime(profile?.nap_end)} className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
           </div>
           <label className="flex flex-col gap-1 text-sm text-zinc-600">Child&apos;s age (months)<input type="number" name="child_age_months" min={0} defaultValue={profile?.child_age_months ?? ""} className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500" /></label>
-          <button type="submit" className="self-start rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white">Save</button>
+          <button type="submit" className="self-start rounded-full bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700">Save</button>
         </form>
 
         <h1 className="font-display mb-1 mt-10 text-xl font-bold text-zinc-900">Home address</h1>
@@ -169,11 +169,17 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
           </div>
 
           {profile?.home_address && <p className="text-xs font-medium text-zinc-500">{addressVerified ? "✓ Location verified for routing" : "○ Address saved; location verification pending"}</p>}
-          <button type="submit" className="self-start rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white">Save home address</button>
+          <button type="submit" className="self-start rounded-full bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700">Save home address</button>
         </form>
 
         <h1 className="font-display mb-1 mt-10 text-xl font-bold text-zinc-900">About</h1>
-        <nav aria-label="Legal" className="flex flex-col gap-2 text-sm"><Link href="/privacy" className="text-zinc-600 underline underline-offset-2 hover:text-zinc-900">Privacy policy</Link><Link href="/terms" className="text-zinc-600 underline underline-offset-2 hover:text-zinc-900">Terms of service</Link><Link href="/account/delete" className="text-zinc-600 underline underline-offset-2 hover:text-zinc-900">Delete account</Link></nav>
+        <nav aria-label="Legal" className="flex flex-col gap-2 text-sm"><Link href="/privacy" className="text-zinc-600 underline underline-offset-2 hover:text-zinc-900">Privacy policy</Link><Link href="/terms" className="text-zinc-600 underline underline-offset-2 hover:text-zinc-900">Terms of service</Link></nav>
+
+        <h1 className="font-display mb-1 mt-10 text-xl font-bold text-zinc-900">Account</h1>
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5">
+          <p className="text-xs text-rose-800">Deleting your account is permanent and can&apos;t be undone.</p>
+          <Link href="/account/delete" className="mt-1.5 inline-block text-sm font-bold text-rose-700 underline underline-offset-2 hover:text-rose-800">Delete account</Link>
+        </div>
       </div>
     </div>
   );

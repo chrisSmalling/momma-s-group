@@ -18,12 +18,13 @@ const CATEGORIES = [
 
 function SubmitButton() {
   const { pending } = useFormStatus();
-  return <button type="submit" disabled={pending} className="min-h-12 w-full rounded-2xl bg-zinc-950 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-60">{pending ? "Getting Poppy ready…" : "Finish & show me today"}</button>;
+  return <button type="submit" disabled={pending} className="min-h-12 w-full rounded-2xl bg-rose-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60">{pending ? "Getting Poppy ready…" : "Finish & show me today"}</button>;
 }
 
 export default function ActivationFlow({ error }: { error?: string }) {
   const [step, setStep] = useState(1);
   const [age, setAge] = useState("");
+  const [ageError, setAgeError] = useState<string | null>(null);
   const [childName, setChildName] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -37,7 +38,10 @@ export default function ActivationFlow({ error }: { error?: string }) {
 
   function nextFromAge() {
     const value = Number(age);
-    if (age.trim() && Number.isFinite(value) && value >= 0 && value <= 144) setStep(2);
+    if (!age.trim()) { setAgeError("Enter your child's age in months to continue."); return; }
+    if (!Number.isFinite(value) || value < 0 || value > 144) { setAgeError("Enter an age between 0 and 144 months."); return; }
+    setAgeError(null);
+    setStep(2);
   }
 
   return (
@@ -62,10 +66,10 @@ export default function ActivationFlow({ error }: { error?: string }) {
           <h1 className="mt-2 font-display text-2xl font-bold tracking-tight text-zinc-950">Let’s make Poppy actually know what works for your family.</h1>
           <p className="mt-2 text-sm leading-6 text-zinc-600">Age is the most useful first signal. Everything else can stay flexible.</p>
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <label className="text-sm font-semibold text-zinc-700">Child age <span className="text-rose-600">*</span><div className="mt-1 flex items-center gap-2"><input autoFocus required min={0} max={144} type="number" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} placeholder="24" className="min-h-12 w-full rounded-2xl border border-zinc-300 px-4 text-base outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100" /><span className="text-sm font-medium text-zinc-500">months</span></div></label>
+            <label className="text-sm font-semibold text-zinc-700">Child age <span className="text-rose-600">*</span><div className="mt-1 flex items-center gap-2"><input autoFocus required min={0} max={144} type="number" inputMode="numeric" value={age} onChange={(e) => { setAge(e.target.value); if (ageError) setAgeError(null); }} placeholder="24" aria-invalid={ageError ? true : undefined} aria-describedby={ageError ? "age-error" : undefined} className={`min-h-12 w-full rounded-2xl border px-4 text-base outline-none focus:ring-2 ${ageError ? "border-rose-500 focus:border-rose-500 focus:ring-rose-100" : "border-zinc-300 focus:border-rose-500 focus:ring-rose-100"}`} /><span className="text-sm font-medium text-zinc-500">months</span></div>{ageError && <p id="age-error" role="alert" className="mt-1.5 text-xs font-medium text-rose-600">{ageError}</p>}</label>
             <label className="text-sm font-semibold text-zinc-700">Child’s name <span className="font-normal text-zinc-400">optional</span><input type="text" maxLength={60} value={childName} onChange={(e) => setChildName(e.target.value)} placeholder="Emma" className="mt-1 min-h-12 w-full rounded-2xl border border-zinc-300 px-4 text-base outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100" /></label>
           </div>
-          <button type="button" onClick={nextFromAge} className="mt-6 min-h-12 w-full rounded-2xl bg-zinc-950 px-5 py-3 text-sm font-bold text-white">Next</button>
+          <button type="button" onClick={nextFromAge} className="mt-6 min-h-12 w-full rounded-2xl bg-rose-600 px-5 py-3 text-sm font-bold text-white hover:bg-rose-700">Next</button>
         </section>
       )}
 
@@ -83,7 +87,7 @@ export default function ActivationFlow({ error }: { error?: string }) {
 
           <fieldset className="mt-5"><legend className="text-sm font-bold text-zinc-800">Poppy can prioritize</legend><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{CATEGORIES.map(([value, label]) => <label key={value} className="cursor-pointer"><input type="checkbox" checked={categories.includes(value)} onChange={() => toggle(setCategories, categories, value)} className="peer sr-only" /><span className="flex min-h-11 items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 peer-checked:border-rose-500 peer-checked:bg-rose-50 peer-checked:text-rose-700">{label}</span></label>)}</div></fieldset>
 
-          <div className="mt-6 grid grid-cols-2 gap-2"><button type="button" onClick={() => setStep(1)} className="min-h-12 rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-bold text-zinc-700">Back</button><button type="button" onClick={() => setStep(3)} className="min-h-12 rounded-2xl bg-zinc-950 px-5 py-3 text-sm font-bold text-white">Next</button></div>
+          <div className="mt-6 grid grid-cols-2 gap-2"><button type="button" onClick={() => setStep(1)} className="min-h-12 rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-bold text-zinc-700">Back</button><button type="button" onClick={() => setStep(3)} className="min-h-12 rounded-2xl bg-rose-600 px-5 py-3 text-sm font-bold text-white hover:bg-rose-700">Next</button></div>
         </section>
       )}
 
