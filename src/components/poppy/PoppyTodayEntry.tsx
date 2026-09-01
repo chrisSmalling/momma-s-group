@@ -14,21 +14,18 @@ const CHIPS: { label: string; ask: string }[] = [
 export default function PoppyTodayEntry({ childName }: { childName: string | null }) {
   const question = childName ? `What do you and ${childName} feel like doing?` : "What do you guys want to do today?";
   return (
-    <section aria-labelledby="poppy-today-heading" className="overflow-hidden rounded-3xl border border-rose-100 bg-gradient-to-br from-rose-50 via-white to-amber-50 p-5 shadow-sm">
+    <section aria-labelledby="poppy-today-heading" className="overflow-hidden rounded-2xl border border-rose-100 bg-rose-50/60 px-3 py-2.5">
       <div className="flex items-center gap-2">
-        <span aria-hidden="true" className="text-2xl">🌼</span>
-        <div>
-          <div className="text-xs font-bold uppercase tracking-[0.16em] text-rose-600">Poppy</div>
-          <h2 id="poppy-today-heading" className="font-display text-lg font-bold tracking-tight text-zinc-950">{question}</h2>
-        </div>
+        <span aria-hidden="true" className="shrink-0 text-lg">🌼</span>
+        <h2 id="poppy-today-heading" className="min-w-0 truncate text-sm font-bold text-zinc-900">{question}</h2>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-2 flex gap-1.5 overflow-x-auto">
         {CHIPS.map((chip) => (
           <Link
             key={chip.label}
             href={`/places?ask=${encodeURIComponent(chip.ask)}`}
             prefetch={false}
-            className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:border-rose-300 hover:text-rose-700"
+            className="min-h-9 shrink-0 rounded-full border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-rose-300 hover:text-rose-700"
           >
             {chip.label}
           </Link>
@@ -36,7 +33,7 @@ export default function PoppyTodayEntry({ childName }: { childName: string | nul
         <Link
           href="/places"
           prefetch={false}
-          className="rounded-full bg-rose-600 px-3 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-rose-700"
+          className="inline-flex min-h-9 shrink-0 items-center rounded-full bg-rose-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700"
         >
           Ask Poppy →
         </Link>

@@ -29,7 +29,7 @@ export default function ProposalBanner({ proposals }: { proposals: Proposal[] })
             {proposal.proposerName} proposed <strong>{proposal.title}</strong> for {date}.
             {count > 1 ? ` Your group has ${count} proposals to review.` : ""}
           </p>
-          <Link href={`/events/${proposal.id}`} className="mt-3 inline-flex min-h-10 items-center rounded-full bg-amber-900 px-4 py-2 text-sm font-bold text-white hover:bg-amber-800">
+          <Link href={`/events/${proposal.id}`} className="mt-3 inline-flex min-h-11 items-center rounded-full bg-amber-900 px-4 py-2 text-sm font-bold text-white hover:bg-amber-800">
             Review proposal →
           </Link>
         </div>
