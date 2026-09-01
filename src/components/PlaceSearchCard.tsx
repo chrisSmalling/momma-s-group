@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatHours } from "@/lib/hours";
+import { formatTodayHours } from "@/lib/hours";
 import PracticalityIcons from "@/components/PracticalityIcons";
 import IndoorOutdoorTag from "@/components/IndoorOutdoorTag";
 import AgeFitBadge from "@/components/AgeFitBadge";
@@ -18,7 +18,7 @@ function driveLabel(minutes: number | null): string | null {
 
 export default function PlaceSearchCard({ result }: { result: PlaceSearchResult }) {
   const { place, miles, driveMinutes, goodAgeFit } = result;
-  const hours = formatHours(place.hours);
+  const todayHours = formatTodayHours(place.hours);
 
   return (
     <article className="overflow-hidden rounded-3xl border border-zinc-200/80 bg-white shadow-sm transition-shadow hover:shadow-md">
@@ -39,20 +39,8 @@ export default function PlaceSearchCard({ result }: { result: PlaceSearchResult 
 
         <div className="mt-3"><PracticalityIcons practicalities={place} /></div>
 
-        <div className="mt-3 border-t border-zinc-100 pt-3 text-xs text-zinc-500">
-          {hours.length > 0 ? (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 sm:grid-cols-3">
-              <span className="col-span-full font-semibold text-zinc-500">Hours</span>
-              {hours.map(({ day, range }) => (
-                <div key={day} className="flex justify-between gap-2">
-                  <span className="font-medium text-zinc-600">{day}</span>
-                  <span>{range}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <span className="font-semibold text-zinc-500">Hours unknown</span>
-          )}
+        <div className="mt-3 border-t border-zinc-100 pt-3 text-xs font-semibold text-zinc-500">
+          {todayHours ?? "Hours unknown"}
         </div>
       </Link>
 

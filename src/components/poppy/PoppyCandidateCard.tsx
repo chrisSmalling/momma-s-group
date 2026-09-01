@@ -28,7 +28,7 @@ function TrustBadge({ candidate }: { candidate: RecommendationCandidate }) {
   return <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-semibold text-zinc-500">Verification date unknown</span>;
 }
 
-function PracticalDetails({ candidate }: { candidate: RecommendationCandidate }) {
+function practicalDetailsList(candidate: RecommendationCandidate): string[] {
   const details: string[] = [];
   if (candidate.strollerAccessible === true) details.push("Stroller friendly");
   if (candidate.changingTable === true) details.push("Changing table");
@@ -36,6 +36,16 @@ function PracticalDetails({ candidate }: { candidate: RecommendationCandidate })
   if (candidate.parkingNotes?.trim()) details.push(`Parking: ${candidate.parkingNotes.trim()}`);
   if (candidate.typicalCrowdNote?.trim()) details.push(`Crowd: ${candidate.typicalCrowdNote.trim()}`);
   if (candidate.bestTimeNote?.trim()) details.push(`Best time: ${candidate.bestTimeNote.trim()}`);
+  return details;
+}
+
+function hasPracticalDetails(candidate: RecommendationCandidate): boolean {
+  const communityTips = (candidate.communityTips ?? []).filter(Boolean);
+  return practicalDetailsList(candidate).length > 0 || candidate.whatToBring.length > 0 || communityTips.length > 0;
+}
+
+function PracticalDetails({ candidate }: { candidate: RecommendationCandidate }) {
+  const details = practicalDetailsList(candidate);
   const communityTips = (candidate.communityTips ?? []).filter(Boolean).slice(0, 3);
   if (details.length === 0 && candidate.whatToBring.length === 0 && communityTips.length === 0) return null;
   return (
@@ -80,6 +90,7 @@ export default function PoppyCandidateCard({ candidate, rankLabel, groupId }: { 
   const venue = candidate.address?.trim() || null;
   const description = candidate.description?.trim() || null;
   const why = buildGroundedWhy(candidate);
+  const showMoreDetails = why.length > 0 || hasPracticalDetails(candidate);
   // Only the place->/propose href has a group picker to pre-select; event
   // hrefs go to /events/[id], which doesn't take a group param.
   const href = candidate.type === "place" && groupId ? `${candidate.href}?group=${encodeURIComponent(groupId)}` : candidate.href;
@@ -104,15 +115,22 @@ export default function PoppyCandidateCard({ candidate, rankLabel, groupId }: { 
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <AgeFit candidate={candidate} />
           {candidate.isOutdoor != null && <IndoorOutdoorTag isOutdoor={candidate.isOutdoor} />}
-          {candidate.registrationRequired && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">Registration required</span>}
+          {candidate.registrationRequired && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800">Registration required</span>}
         </div>
-        {why.length > 0 && <WhyPoppy candidate={candidate} />}
-        <PracticalDetails candidate={candidate} />
         <div className="mt-4">
           <Link href={href} className="inline-flex min-h-11 items-center justify-center rounded-full bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2">
             {candidate.type === "place" ? "View & plan a meetup" : "View details"}
           </Link>
         </div>
+        {showMoreDetails && (
+          <details className="mt-3 rounded-xl border border-zinc-100 bg-zinc-50/70 px-3">
+            <summary className="flex min-h-11 cursor-pointer items-center justify-between text-sm font-bold text-zinc-700"><span>More details</span><span aria-hidden="true" className="text-zinc-400">⌄</span></summary>
+            <div className="pb-3">
+              {why.length > 0 && <WhyPoppy candidate={candidate} />}
+              <PracticalDetails candidate={candidate} />
+            </div>
+          </details>
+        )}
       </div>
     </article>
   );

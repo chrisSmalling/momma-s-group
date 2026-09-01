@@ -43,7 +43,7 @@ export default async function ProposeMeetupPage(
       <div className="w-full max-w-md">
         <Nav email={user.email ?? ""} />
 
-        <h1 className="text-xl font-bold text-zinc-900">Propose a meetup</h1>
+        <h1 className="font-display text-2xl font-bold tracking-tight text-zinc-950">Propose a meetup</h1>
         <p className="mb-6 text-sm text-zinc-500">at {place.name}</p>
 
         {paramError && (

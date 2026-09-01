@@ -41,3 +41,14 @@ export function formatHours(hours: PlaceHours | null): { day: string; range: str
     range: formatRange(hours[day] as string),
   }));
 }
+
+// Collapses the full weekly grid down to a single line for today, for
+// results-list contexts where a full grid per card is too much vertical
+// density (see PlaceSearchCard). The detail page keeps the full grid via
+// formatHours above.
+export function formatTodayHours(hours: PlaceHours | null): string | null {
+  if (!hours) return null;
+  const todayKey = DAY_ORDER[(new Date().getDay() + 6) % 7];
+  const range = hours[todayKey];
+  return range ? `Today ${formatRange(range)}` : "Closed today";
+}
