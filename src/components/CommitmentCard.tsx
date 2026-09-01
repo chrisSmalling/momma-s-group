@@ -111,6 +111,7 @@ export default function CommitmentCard({
           <button
             type="button"
             disabled={isPending}
+            aria-pressed={optimisticStatus === "going"}
             onClick={() => handleTap("going")}
             className={
               optimisticStatus === "going"
@@ -123,6 +124,7 @@ export default function CommitmentCard({
           <button
             type="button"
             disabled={isPending}
+            aria-pressed={optimisticStatus === "maybe"}
             onClick={() => handleTap("maybe")}
             className={
               optimisticStatus === "maybe"

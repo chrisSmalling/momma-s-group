@@ -28,6 +28,7 @@ export default function GroupSwitcher({
         <Link
           key={group.id}
           href={`/calendar?month=${month}&group=${group.id}`}
+          aria-current={group.id === activeGroupId ? "true" : undefined}
           className={
             group.id === activeGroupId
               ? "inline-flex min-h-11 items-center rounded-full bg-zinc-900 px-3 font-medium text-white"
