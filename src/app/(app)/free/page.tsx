@@ -205,7 +205,7 @@ export default async function FreePage(props: PageProps<"/free">) {
                         <input type="hidden" name="id" value={w.id} />
                         <button
                           type="submit"
-                          className="inline-flex min-h-11 items-center rounded-full px-3 text-xs font-semibold text-rose-700 underline hover:bg-rose-50"
+                          className="inline-flex min-h-11 items-center rounded-full border border-rose-200 bg-white px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50"
                         >
                           Remove
                         </button>
